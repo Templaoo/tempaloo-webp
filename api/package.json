@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
@@ -14,6 +16,8 @@
   "dependencies": {
     "@fastify/multipart": "^8.3.0",
     "@fastify/rate-limit": "^9.1.0",
+    "@freemius/checkout": "^1.4.1",
+    "@freemius/sdk": "^0.3.0",
     "dotenv": "^16.4.5",
     "fastify": "^4.28.1",
     "pg": "^8.13.0",

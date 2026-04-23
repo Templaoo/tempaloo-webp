@@ -11,7 +11,13 @@ export interface Plan {
     cta: string;
     highlight?: boolean;
     badge?: string;
+    freemiusPlanId?: number;  // numeric id from Freemius Dashboard
 }
+
+// Tempaloo WebP product ID on Freemius (safe to expose — it's public).
+export const FREEMIUS_PRODUCT_ID = 28337;
+// Public key is also safe on the client — it identifies the product in Checkout.
+export const FREEMIUS_PUBLIC_KEY = "pk_259a7f9b6c36048a8ee79c2f9dd0b";
 
 export const PLANS: Plan[] = [
     {
@@ -30,6 +36,7 @@ export const PLANS: Plan[] = [
             "Unused credits roll over (30 days)",
         ],
         cta: "Start free",
+        freemiusPlanId: 46754,
     },
     {
         code: "starter",
@@ -47,6 +54,7 @@ export const PLANS: Plan[] = [
             "Email support (48h)",
         ],
         cta: "Start 7-day trial",
+        freemiusPlanId: 46755,
     },
     {
         code: "growth",
@@ -66,6 +74,7 @@ export const PLANS: Plan[] = [
         cta: "Start 7-day trial",
         highlight: true,
         badge: "Most popular",
+        freemiusPlanId: 46756,
     },
     {
         code: "business",
@@ -83,6 +92,7 @@ export const PLANS: Plan[] = [
             "Chat support (24h)",
         ],
         cta: "Start 7-day trial",
+        freemiusPlanId: 46757,
     },
     {
         code: "unlimited",
@@ -100,6 +110,7 @@ export const PLANS: Plan[] = [
             "White-label reports (soon)",
         ],
         cta: "Talk to sales",
+        freemiusPlanId: 46758,
     },
 ];
 

@@ -10,6 +10,7 @@ import { PricingCard } from "@/components/pricing/PricingCard";
 import { FAQ } from "@/components/pricing/FAQ";
 import { TrustRow } from "@/components/pricing/TrustRow";
 import { CreditComparison } from "@/components/pricing/CreditComparison";
+import { CheckoutButton } from "@/components/pricing/CheckoutButton";
 
 type PlanCode = typeof PLANS[number]["code"];
 
@@ -42,7 +43,8 @@ function ActivateInner() {
         setError(null);
 
         if (plan !== "free") {
-            setError("Paid plans will be available when Freemius checkout is wired up. Start Free for now, or contact us.");
+            // Should not happen — the UI swaps to a CheckoutButton for paid plans,
+            // but if the user hits Enter on the form we no-op gracefully.
             return;
         }
 
@@ -193,23 +195,28 @@ function ActivateInner() {
                                 </p>
                             )}
 
-                            <button
-                                type="submit"
-                                disabled={loading}
-                                className={clsx(
-                                    "w-full h-12 rounded-xl text-sm font-semibold transition",
-                                    plan === "free"
-                                        ? "bg-gradient-to-r from-brand-500 to-purple-500 text-white glow"
-                                        : "bg-white/10 text-white/80 hover:bg-white/15",
-                                    loading && "opacity-60 cursor-not-allowed",
-                                )}
-                            >
-                                {loading
-                                    ? "Generating…"
-                                    : plan === "free"
-                                        ? "Generate free key"
-                                        : "Continue to checkout"}
-                            </button>
+                            {plan === "free" ? (
+                                <button
+                                    type="submit"
+                                    disabled={loading}
+                                    className={clsx(
+                                        "w-full h-12 rounded-xl text-sm font-semibold transition bg-gradient-to-r from-brand-500 to-purple-500 text-white glow",
+                                        loading && "opacity-60 cursor-not-allowed",
+                                    )}
+                                >
+                                    {loading ? "Generating…" : "Generate free key"}
+                                </button>
+                            ) : (
+                                <CheckoutButton
+                                    plan={selectedPlan}
+                                    billing={billing}
+                                    email={email}
+                                    siteUrl={site}
+                                    className="w-full h-12 rounded-xl text-sm font-semibold bg-gradient-to-r from-brand-500 to-purple-500 text-white glow"
+                                >
+                                    Continue to Freemius checkout →
+                                </CheckoutButton>
+                            )}
 
                             <p className="text-center text-xs text-white/50">
                                 By continuing you agree to our Terms and Privacy Policy. 30-day money-back on paid plans.

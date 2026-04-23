@@ -8,9 +8,10 @@ const schema = z.object({
     DATABASE_URL: z.string().url(),
     MAX_IMAGE_BYTES: z.coerce.number().int().positive().default(26_214_400),
     DEFAULT_QUALITY: z.coerce.number().int().min(1).max(100).default(82),
-    FREEMIUS_PLUGIN_ID: z.string().optional(),
+    FREEMIUS_PRODUCT_ID: z.coerce.number().int().positive().optional(),
     FREEMIUS_SECRET_KEY: z.string().optional(),
     FREEMIUS_PUBLIC_KEY: z.string().optional(),
+    FREEMIUS_API_KEY: z.string().optional(),
     SENTRY_DSN: z.string().optional(),
     INTERNAL_API_KEY: z.string().min(16).default("dev-internal-please-change"),
 });
