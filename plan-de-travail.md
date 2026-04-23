@@ -120,11 +120,13 @@ Modèle retenu : **crédits images/mois** (lisible, pas dépendant du trafic, al
 
 | Offre | Quota images/mois | Sites | Formats | Bulk | Support | Prix mensuel | Prix annuel (−20 %) |
 |---|---|---|---|---|---|---|---|
-| **Free** | **150** | 1 | WebP | 50 max | Docs + forum | 0 € | 0 € |
+| **Free** | **250** | 1 | WebP | 50 max | Docs + forum | 0 € | 0 € |
 | **Starter** | 5 000 | 1 | WebP + **AVIF** | Illimité | Email 48 h | **5 €/mois** | 48 €/an (4 €/mois) |
-| **Growth** | 25 000 | 3 | WebP + AVIF + CDN | Illimité | Email 24 h | **12 €/mois** | 115 €/an (9,60 €/mois) |
-| **Business** | 150 000 | 10 | Tout + API directe | Illimité | Chat 24 h | **29 €/mois** | 278 €/an (23 €/mois) |
-| **Unlimited** | ∞ équitable (fair use 500 k) | Illimité | Tout | Illimité | Prioritaire | **59 €/mois** | 566 €/an (47 €/mois) |
+| **Growth** | 25 000 | **5** | WebP + AVIF + CDN | Illimité | Email 24 h | **12 €/mois** | 115 €/an (9,60 €/mois) |
+| **Business** | 150 000 | **Illimité** | Tout + API directe | Illimité | Chat 24 h | **29 €/mois** | 278 €/an (23 €/mois) |
+| **Unlimited** | ∞ équitable (fair use 500 k) | Illimité | Tout + white-label | Illimité | Prioritaire | **59 €/mois** | 566 €/an (47 €/mois) |
+
+**Crédit rollover** : tous les plans incluent un report automatique des crédits non consommés sur 30 jours, plafonné à 1× le quota mensuel. Différenciateur vs Elementor/ShortPixel/Imagify qui ne reportent rien.
 
 **Positionnement** :
 - **Free 150** : plus généreux que ShortPixel (100), sous Imagify (~200). Suffisant pour petits sites.

@@ -9,6 +9,7 @@ import { BillingToggle, type Billing } from "@/components/pricing/BillingToggle"
 import { PricingCard } from "@/components/pricing/PricingCard";
 import { FAQ } from "@/components/pricing/FAQ";
 import { TrustRow } from "@/components/pricing/TrustRow";
+import { CreditComparison } from "@/components/pricing/CreditComparison";
 
 type PlanCode = typeof PLANS[number]["code"];
 
@@ -107,6 +108,11 @@ function ActivateInner() {
             {/* Trust row */}
             <section className="rise rise-delay-3">
                 <TrustRow />
+            </section>
+
+            {/* Killer differentiator: 1 upload = 1 credit */}
+            <section className="rise rise-delay-3">
+                <CreditComparison />
             </section>
 
             {/* Checkout / Activate panel */}

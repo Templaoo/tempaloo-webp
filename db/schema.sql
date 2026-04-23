@@ -29,10 +29,10 @@ CREATE TABLE plans (
 );
 
 INSERT INTO plans (code, name, images_per_month, max_sites, supports_avif, supports_cdn, supports_api_direct, price_monthly_cents, price_annual_cents, fair_use_cap) VALUES
-    ('free',      'Free',      150,       1,  FALSE, FALSE, FALSE,     0,      0, NULL),
+    ('free',      'Free',      250,       1,  FALSE, FALSE, FALSE,     0,      0, NULL),
     ('starter',   'Starter',   5000,      1,  TRUE,  FALSE, FALSE,   500,   4800, NULL),
-    ('growth',    'Growth',    25000,     3,  TRUE,  TRUE,  FALSE,  1200,  11500, NULL),
-    ('business',  'Business',  150000,   10,  TRUE,  TRUE,  TRUE,   2900,  27800, NULL),
+    ('growth',    'Growth',    25000,     5,  TRUE,  TRUE,  FALSE,  1200,  11500, NULL),
+    ('business',  'Business',  150000,   -1,  TRUE,  TRUE,  TRUE,   2900,  27800, NULL),
     ('unlimited', 'Unlimited', -1,       -1,  TRUE,  TRUE,  TRUE,   5900,  56600, 500000);
 
 -- ---------------------------------------------------------------
@@ -164,18 +164,40 @@ CREATE TRIGGER set_updated_at_plans    BEFORE UPDATE ON plans    FOR EACH ROW EX
 CREATE TRIGGER set_updated_at_users    BEFORE UPDATE ON users    FOR EACH ROW EXECUTE FUNCTION trg_set_updated_at();
 CREATE TRIGGER set_updated_at_licenses BEFORE UPDATE ON licenses FOR EACH ROW EXECUTE FUNCTION trg_set_updated_at();
 
--- Atomic quota consume: returns TRUE if consumed, FALSE if over limit.
--- Use inside a single transaction alongside the conversion work.
+-- Effective quota = plan.images_per_month + credit rollover from previous month.
+-- Rollover is capped at 1× plan (so never exceeds 2× plan in a burst month).
+CREATE OR REPLACE FUNCTION effective_quota(p_license_id UUID, p_period DATE)
+RETURNS INTEGER AS $$
+DECLARE
+    v_plan_limit INTEGER;
+    v_prev_used  INTEGER;
+    v_rollover   INTEGER;
+BEGIN
+    SELECT p.images_per_month INTO v_plan_limit
+    FROM licenses l JOIN plans p ON p.id = l.plan_id
+    WHERE l.id = p_license_id AND l.status IN ('active','trialing');
+
+    IF v_plan_limit IS NULL THEN RETURN NULL; END IF;
+    IF v_plan_limit = -1 THEN RETURN -1; END IF;
+
+    SELECT COALESCE(images_used, 0) INTO v_prev_used
+    FROM usage_counters
+    WHERE license_id = p_license_id
+      AND period = (p_period - INTERVAL '1 month')::date;
+
+    v_rollover := LEAST(v_plan_limit, GREATEST(0, v_plan_limit - COALESCE(v_prev_used, 0)));
+    RETURN v_plan_limit + v_rollover;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Atomic quota consume: returns TRUE if consumed, FALSE if over effective limit.
 CREATE OR REPLACE FUNCTION consume_quota(p_license_id UUID, p_period DATE, p_count INTEGER DEFAULT 1)
 RETURNS BOOLEAN AS $$
 DECLARE
     v_limit INTEGER;
     v_new   INTEGER;
 BEGIN
-    SELECT p.images_per_month INTO v_limit
-    FROM licenses l JOIN plans p ON p.id = l.plan_id
-    WHERE l.id = p_license_id AND l.status IN ('active','trialing');
-
+    v_limit := effective_quota(p_license_id, p_period);
     IF v_limit IS NULL THEN
         RETURN FALSE;
     END IF;

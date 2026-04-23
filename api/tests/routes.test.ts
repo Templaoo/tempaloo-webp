@@ -32,7 +32,7 @@ const FREE_LICENSE = {
     license_id: "11111111-1111-1111-1111-111111111111",
     user_id:    "22222222-2222-2222-2222-222222222222",
     plan_code:  "free",
-    images_per_month: 150,
+    images_per_month: 250,
     max_sites: 1,
     supports_avif: false,
     status: "active",
@@ -55,7 +55,14 @@ function setupLicenseLookup(license = FREE_LICENSE) {
         }
         if (t.includes("COALESCE(uc.images_used, 0)")) {
             return {
-                rows: [{ images_used: 0, sites_used: 0, period_start: new Date(), period_end: new Date() }],
+                rows: [{
+                    images_used: 0,
+                    sites_used: 0,
+                    effective_limit: license.images_per_month === -1 ? -1 : license.images_per_month * 2,
+                    prev_used: 0,
+                    period_start: new Date(),
+                    period_end: new Date(),
+                }],
                 rowCount: 1,
             };
         }
@@ -189,6 +196,6 @@ describe("quota", () => {
         expect(res.statusCode).toBe(200);
         const body = res.json();
         expect(body.plan).toBe("free");
-        expect(body.images_limit).toBe(150);
+        expect(body.images_limit).toBe(250);
     });
 });

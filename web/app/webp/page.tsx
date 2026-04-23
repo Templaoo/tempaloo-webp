@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { TrustRow } from "@/components/pricing/TrustRow";
+import { CreditComparison } from "@/components/pricing/CreditComparison";
 
 export const metadata = {
     title: "Tempaloo WebP – Image Optimizer & AVIF Converter for WordPress",
@@ -62,6 +63,10 @@ export default function WebPLanding() {
 
             <section className="rise rise-delay-1">
                 <TrustRow />
+            </section>
+
+            <section className="rise rise-delay-2">
+                <CreditComparison />
             </section>
 
             <section className="grid grid-cols-1 md:grid-cols-3 gap-4 rise rise-delay-2">
