@@ -63,7 +63,7 @@ jobs:
           unzip -l tempaloo-webp-${{ steps.version.outputs.version }}.zip | head -30
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: tempaloo-webp-${{ steps.version.outputs.version }}
           path: tempaloo-webp-${{ steps.version.outputs.version }}.zip
