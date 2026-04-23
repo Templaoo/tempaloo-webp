@@ -19,11 +19,23 @@ export async function openFreemiusCheckout({ plan, billing, email, siteUrl }: Op
     const mod = await import("@freemius/checkout");
     const CheckoutCtor = mod.Checkout as unknown as new (o: unknown) => { open(): void };
 
+    // Match the exact `licenses` value on the pricing row we created in Freemius.
+    // The create-plans script posted pricing with licenses = license_activations
+    // (1 for starter, 5 for growth, 0 for business/unlimited).
+    // Freemius treats 0 as "unlimited" in pricing lookups.
+    const licenses: number = plan.code === "starter"
+        ? 1
+        : plan.code === "growth"
+            ? 5
+            : 0;
+
     const options = {
         product_id: FREEMIUS_PRODUCT_ID,
         public_key: FREEMIUS_PUBLIC_KEY,
         plan_id: plan.freemiusPlanId,
-        billing_cycle: billing, // "monthly" | "annual"
+        licenses,                    // REQUIRED for Freemius to match a pricing row
+        currency: "eur",             // REQUIRED for same reason
+        billing_cycle: billing,      // "monthly" | "annual"
         trial: plan.priceMonthly > 0 ? "paid" : undefined,
         ...(email ? { user_email: email } : {}),
         success() {

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { PLANS, findPlan } from "@/lib/plans";
@@ -10,6 +10,7 @@ import { FAQ } from "@/components/pricing/FAQ";
 import { TrustRow } from "@/components/pricing/TrustRow";
 import { CreditComparison } from "@/components/pricing/CreditComparison";
 import { ActivateModal } from "@/components/pricing/ActivateModal";
+import { openFreemiusCheckout } from "@/lib/freemius-checkout";
 
 type PlanCode = typeof PLANS[number]["code"];
 
@@ -24,11 +25,14 @@ export default function ActivatePage() {
 function ActivateInner() {
     const params = useSearchParams();
     const initialPlan = (params.get("plan") as PlanCode | null) ?? "growth";
+    const initialBilling = (params.get("billing") as Billing | null) ?? "annual";
 
-    const [billing, setBilling] = useState<Billing>("annual");
+    const [billing, setBilling] = useState<Billing>(initialBilling);
     const [selected, setSelected] = useState<PlanCode>(initialPlan);
     const [modalOpen, setModalOpen] = useState(false);
     const [modalPlan, setModalPlan] = useState<PlanCode | null>(null);
+    const [banner, setBanner] = useState<string | null>(null);
+    const checkoutTriggered = useRef(false);
 
     const openModal = (code: PlanCode) => {
         setSelected(code);
@@ -38,9 +42,54 @@ function ActivateInner() {
 
     const activePlan = useMemo(() => (modalPlan ? findPlan(modalPlan) ?? null : null), [modalPlan]);
 
+    // Auto-open Freemius Checkout after returning from Google (?checkout=1).
+    useEffect(() => {
+        if (checkoutTriggered.current) return;
+        const wantCheckout = params.get("checkout") === "1";
+        if (!wantCheckout) return;
+
+        const planCode = (params.get("plan") as PlanCode | null) ?? "growth";
+        const billingCycle = (params.get("billing") as Billing | null) ?? "annual";
+        const plan = findPlan(planCode);
+        if (!plan || plan.priceMonthly === 0) return;
+
+        checkoutTriggered.current = true;
+
+        (async () => {
+            // Best-effort: pull the signed-in user's email for pre-fill.
+            let email: string | undefined;
+            try {
+                const res = await fetch("/api/me", { cache: "no-store" });
+                const data = await res.json();
+                if (data?.user?.email) email = data.user.email;
+            } catch { /* non-blocking */ }
+
+            setBanner(email ? `Opening secure checkout for ${email}…` : "Opening secure checkout…");
+            try {
+                await openFreemiusCheckout({ plan, billing: billingCycle, email });
+            } catch (e) {
+                setBanner(null);
+                alert(e instanceof Error ? e.message : "Could not open checkout");
+            }
+
+            // Clean the URL so a refresh doesn't re-trigger.
+            const clean = new URL(window.location.href);
+            clean.searchParams.delete("checkout");
+            clean.searchParams.delete("neon_auth_session_verifier");
+            window.history.replaceState({}, "", clean.toString());
+        })();
+    }, [params]);
+
     return (
         <main className="mx-auto max-w-6xl px-6 py-12 md:py-20 space-y-16">
             <Header />
+
+            {banner && (
+                <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] rounded-full glass-strong px-5 py-2.5 text-sm text-white shadow-pop flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-brand-400 animate-pulse" />
+                    {banner}
+                </div>
+            )}
 
             {/* Hero */}
             <section className="text-center rise">
