@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(curl -sS -o /dev/null -w \"API %{http_code}\\\\n\" http://localhost:3000/health)",
+      "Bash(curl -sS -o /dev/null -w \"Web %{http_code}\\\\n\" http://localhost:3001/webp/activate)",
+      "Bash(cp c:/Users/otman/Documents/webp/plugin/tempaloo-webp/includes/class-bulk.php 'c:/Users/otman/Local Sites/web/app/public/wp-content/plugins/tempaloo-webp/includes/class-bulk.php')",
+      "Bash(php -l \"c:/Users/otman/Local Sites/web/app/public/wp-content/plugins/tempaloo-webp/includes/class-bulk.php\")"
+    ]
+  }
+}

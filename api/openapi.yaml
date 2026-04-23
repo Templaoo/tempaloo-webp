@@ -1,0 +1,256 @@
+openapi: 3.1.0
+info:
+  title: Tempaloo WebP API
+  version: 0.1.0
+  description: |
+    API de conversion WebP/AVIF pour le plugin WordPress Tempaloo WebP.
+    Auth par clé de licence transmise dans l'en-tête `X-License-Key`.
+servers:
+  - url: https://api.tempaloo.com/v1
+    description: Production
+  - url: http://localhost:3000/v1
+    description: Local
+
+# -------------------------------------------------------------------------
+tags:
+  - name: Convert
+  - name: Quota
+  - name: License
+  - name: Webhooks
+
+# -------------------------------------------------------------------------
+paths:
+
+  /convert:
+    post:
+      tags: [Convert]
+      summary: Convertit une image en WebP (ou AVIF si plan compatible)
+      security: [{ licenseKey: [] }]
+      parameters:
+        - in: header
+          name: X-Site-Url
+          required: true
+          schema: { type: string, format: uri }
+          description: URL canonique du site WP qui émet la requête
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image:       { type: string, format: binary, description: "Fichier image (max 25 Mo)" }
+                format:      { type: string, enum: [webp, avif], default: webp }
+                quality:     { type: integer, minimum: 1, maximum: 100, default: 82 }
+          application/json:
+            schema:
+              type: object
+              required: [image_url]
+              properties:
+                image_url:   { type: string, format: uri, description: "URL publique de l'image à télécharger" }
+                format:      { type: string, enum: [webp, avif], default: webp }
+                quality:     { type: integer, minimum: 1, maximum: 100, default: 82 }
+      responses:
+        '200':
+          description: Binaire de l'image convertie
+          headers:
+            X-Quota-Remaining: { schema: { type: integer } }
+            X-Quota-Limit:     { schema: { type: integer } }
+            X-Quota-Reset:     { schema: { type: string, format: date-time } }
+            X-Input-Bytes:     { schema: { type: integer } }
+            X-Output-Bytes:    { schema: { type: integer } }
+          content:
+            image/webp: { schema: { type: string, format: binary } }
+            image/avif: { schema: { type: string, format: binary } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '402': { $ref: '#/components/responses/QuotaExceeded' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '422': { $ref: '#/components/responses/UnprocessableImage' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '5XX': { $ref: '#/components/responses/InternalError' }
+
+  /quota:
+    get:
+      tags: [Quota]
+      summary: Renvoie l'état du quota mensuel pour la licence
+      security: [{ licenseKey: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QuotaStatus' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /license/verify:
+    post:
+      tags: [License]
+      summary: Vérifie qu'une clé est valide pour un site donné (appelé par le plugin à l'activation)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [license_key, site_url]
+              properties:
+                license_key:    { type: string }
+                site_url:       { type: string, format: uri }
+                wp_version:     { type: string }
+                plugin_version: { type: string }
+      responses:
+        '200':
+          description: Licence valide
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LicenseInfo' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/SiteLimitReached' }
+
+  /license/deactivate:
+    post:
+      tags: [License]
+      summary: Désactive un site (libère un slot de la licence)
+      security: [{ licenseKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [site_url]
+              properties:
+                site_url: { type: string, format: uri }
+      responses:
+        '204': { description: Site désactivé }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: Site non trouvé pour cette licence }
+
+  /license/generate:
+    post:
+      tags: [License]
+      summary: Crée un compte Free et retourne une clé de licence (flux activation Free)
+      description: |
+        Appelé depuis la page `tempaloo.com/webp/activate` quand l'utilisateur
+        choisit le plan Free. Un rate-limit strict par IP est appliqué.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, site_url]
+              properties:
+                email:       { type: string, format: email }
+                site_url:    { type: string, format: uri }
+                captcha:     { type: string, description: "Token Cloudflare Turnstile ou hCaptcha" }
+      responses:
+        '201':
+          description: Licence Free créée
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  license_key: { type: string }
+                  plan:        { type: string, example: free }
+                  return_url:  { type: string, format: uri, description: "Magic link de retour vers le plugin" }
+        '409': { description: Email déjà utilisé (on renvoie la clé par email) }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /webhooks/freemius:
+    post:
+      tags: [Webhooks]
+      summary: Réception des événements Freemius (achat, renouvellement, annulation)
+      description: |
+        Endpoint idempotent. Vérifie la signature HMAC via `X-Freemius-Signature`.
+        Stocke l'événement dans `webhooks_events` avant traitement.
+      parameters:
+        - in: header
+          name: X-Freemius-Signature
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '204': { description: Événement accepté (traitement async) }
+        '401': { description: Signature invalide }
+
+# -------------------------------------------------------------------------
+components:
+
+  securitySchemes:
+    licenseKey:
+      type: apiKey
+      in: header
+      name: X-License-Key
+
+  schemas:
+
+    QuotaStatus:
+      type: object
+      properties:
+        plan:            { type: string, example: starter }
+        images_used:     { type: integer, example: 312 }
+        images_limit:    { type: integer, example: 5000, description: "-1 = unlimited" }
+        images_remaining: { type: integer, example: 4688 }
+        period_start:    { type: string, format: date-time }
+        period_end:      { type: string, format: date-time }
+        sites_used:      { type: integer }
+        sites_limit:     { type: integer }
+
+    LicenseInfo:
+      type: object
+      properties:
+        valid:           { type: boolean }
+        plan:            { type: string }
+        status:          { type: string, enum: [active, trialing, past_due, canceled, expired] }
+        supports_avif:   { type: boolean }
+        images_limit:    { type: integer }
+        sites_limit:     { type: integer }
+        current_period_end: { type: string, format: date-time, nullable: true }
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:    { type: string, example: quota_exceeded }
+            message: { type: string }
+            details: { type: object, additionalProperties: true }
+
+  responses:
+    Unauthorized:
+      description: Clé de licence invalide ou absente
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Forbidden:
+      description: Fonction non disponible pour ce plan (ex. AVIF sur Free)
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    SiteLimitReached:
+      description: Le nombre max de sites pour ce plan est atteint
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    QuotaExceeded:
+      description: Quota mensuel atteint (402 Payment Required)
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    PayloadTooLarge:
+      description: Image > 25 Mo
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    UnprocessableImage:
+      description: Image corrompue ou format non supporté
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    RateLimited:
+      description: Trop de requêtes
+      headers:
+        Retry-After: { schema: { type: integer } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    InternalError:
+      description: Erreur interne
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }

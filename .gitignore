@@ -1,0 +1,30 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+**/node_modules/
+vendor/
+
+# Build artefacts (API, Next.js) — rebuilt in CI
+api/dist/
+web/.next/
+web/out/
+
+# Vite dev caches inside admin-app, BUT keep the shipped plugin build at plugin/tempaloo-webp/build/
+plugin/tempaloo-webp/admin-app/dist/
+plugin/tempaloo-webp/admin-app/.vite/
+
+# Test output & temp
+coverage/
+*.log
+test.webp
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp

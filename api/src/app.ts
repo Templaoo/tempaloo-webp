@@ -1,0 +1,68 @@
+import Fastify, { type FastifyInstance } from "fastify";
+import multipart from "@fastify/multipart";
+import rateLimit from "@fastify/rate-limit";
+import { ZodError } from "zod";
+import { config } from "./config.js";
+import { ApiError } from "./errors.js";
+import accountRoutes from "./routes/account.js";
+import convertRoute from "./routes/convert.js";
+import licenseRoutes from "./routes/license.js";
+import quotaRoute from "./routes/quota.js";
+import webhooksRoute from "./routes/webhooks.js";
+
+export interface BuildAppOptions {
+    logger?: boolean;
+}
+
+export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInstance> {
+    const app = Fastify({
+        logger: opts.logger === false ? false : { level: config.LOG_LEVEL },
+        bodyLimit: config.MAX_IMAGE_BYTES + 1_000_000,
+        trustProxy: true,
+    });
+
+    await app.register(multipart, {
+        limits: { fileSize: config.MAX_IMAGE_BYTES, files: 20 },
+    });
+
+    await app.register(rateLimit, {
+        global: false,
+        max: 120,
+        timeWindow: "1 minute",
+    });
+
+    app.setErrorHandler((err, req, reply) => {
+        if (err instanceof ApiError) {
+            return reply.code(err.status).send({
+                error: { code: err.code, message: err.message, details: err.details },
+            });
+        }
+        if (err instanceof ZodError) {
+            return reply.code(400).send({
+                error: { code: "validation_failed", message: "Invalid request body", details: err.flatten() },
+            });
+        }
+        if (err.validation) {
+            return reply.code(400).send({
+                error: { code: "validation_failed", message: err.message, details: err.validation },
+            });
+        }
+        req.log.error({ err }, "unhandled error");
+        return reply.code(500).send({ error: { code: "internal_error", message: "Internal error" } });
+    });
+
+    app.get("/health", async () => ({ ok: true, env: config.NODE_ENV }));
+
+    await app.register(
+        async (api) => {
+            await api.register(convertRoute);
+            await api.register(quotaRoute);
+            await api.register(licenseRoutes);
+            await api.register(webhooksRoute);
+            await api.register(accountRoutes);
+        },
+        { prefix: "/v1" },
+    );
+
+    return app;
+}
