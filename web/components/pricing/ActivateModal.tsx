@@ -6,7 +6,7 @@ import type { Plan } from "@/lib/plans";
 import type { Billing } from "./BillingToggle";
 import { openFreemiusCheckout } from "@/lib/freemius-checkout";
 
-type Step = "choose" | "email" | "success";
+type Step = "loading" | "choose" | "email" | "success";
 
 export function ActivateModal({
     plan,
@@ -19,22 +19,63 @@ export function ActivateModal({
     open: boolean;
     onClose: () => void;
 }) {
-    const [step, setStep] = useState<Step>("choose");
+    const [step, setStep] = useState<Step>("loading");
     const [email, setEmail] = useState("");
     const [site, setSite] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [licenseKey, setLicenseKey] = useState<string | null>(null);
+    const [sessionEmail, setSessionEmail] = useState<string | null>(null);
     const firstFieldRef = useRef<HTMLInputElement>(null);
 
-    // Reset on open.
+    // Reset + detect existing session on open.
     useEffect(() => {
-        if (open) {
+        if (!open || !plan) return;
+        let cancelled = false;
+
+        setStep("loading");
+        setError(null);
+        setLicenseKey(null);
+        setEmail("");
+        setSite("");
+
+        (async () => {
+            // Check Neon Auth session.
+            let authedEmail: string | null = null;
+            try {
+                const res = await fetch("/api/me", { cache: "no-store" });
+                const data = await res.json();
+                if (data?.user?.email) authedEmail = data.user.email;
+            } catch { /* no-op */ }
+
+            if (cancelled) return;
+            setSessionEmail(authedEmail);
+
+            if (authedEmail) {
+                setEmail(authedEmail);
+                if (plan.priceMonthly > 0) {
+                    // Authed + paid: skip straight to Freemius Checkout.
+                    try {
+                        await openFreemiusCheckout({ plan, billing, email: authedEmail });
+                    } catch (e) {
+                        setError(e instanceof Error ? e.message : "Could not open checkout");
+                        setStep("email");
+                        return;
+                    }
+                    // Close our modal immediately — Freemius overlay takes over.
+                    onClose();
+                    return;
+                }
+                // Authed + free: just ask for the site URL.
+                setStep("email");
+                return;
+            }
+
             setStep("choose");
-            setError(null);
-            setLicenseKey(null);
-        }
-    }, [open, plan?.code]);
+        })();
+
+        return () => { cancelled = true; };
+    }, [open, plan, billing, onClose]);
 
     // Escape to close.
     useEffect(() => {
@@ -175,6 +216,7 @@ export function ActivateModal({
 
                 {/* Body */}
                 <div className="p-6">
+                    {step === "loading" && <LoadingStep />}
                     {step === "choose" && (
                         <ChooseStep
                             onGoogle={onGoogle}
@@ -188,13 +230,14 @@ export function ActivateModal({
                             firstFieldRef={firstFieldRef}
                             email={email}
                             setEmail={setEmail}
+                            emailReadOnly={!!sessionEmail}
                             site={site}
                             setSite={setSite}
                             isPaid={isPaid}
                             loading={loading}
                             error={error}
                             onSubmit={onEmailSubmit}
-                            onBack={() => setStep("choose")}
+                            onBack={sessionEmail ? null : () => setStep("choose")}
                         />
                     )}
                     {step === "success" && licenseKey && (
@@ -254,30 +297,48 @@ function ChooseStep({
     );
 }
 
+function LoadingStep() {
+    return (
+        <div className="flex items-center justify-center py-10" aria-label="Loading">
+            <div className="h-6 w-6 rounded-full border-2 border-white/20 border-t-white animate-spin" />
+        </div>
+    );
+}
+
 function EmailStep({
-    firstFieldRef, email, setEmail, site, setSite, isPaid, loading, error, onSubmit, onBack,
+    firstFieldRef, email, setEmail, emailReadOnly, site, setSite, isPaid, loading, error, onSubmit, onBack,
 }: {
     firstFieldRef: React.RefObject<HTMLInputElement>;
     email: string; setEmail: (v: string) => void;
+    emailReadOnly?: boolean;
     site: string; setSite: (v: string) => void;
     isPaid: boolean; loading: boolean; error: string | null;
     onSubmit: (e: React.FormEvent) => void;
-    onBack: () => void;
+    onBack: (() => void) | null;
 }) {
     return (
         <form onSubmit={onSubmit} className="space-y-3">
-            <label className="block">
-                <span className="block text-xs font-medium text-white/60 mb-1.5">Email</span>
-                <input
-                    ref={firstFieldRef}
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    className="input"
-                />
-            </label>
+            {emailReadOnly ? (
+                <div className="flex items-center justify-between rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-3 py-2.5 text-sm">
+                    <div className="flex items-center gap-2 text-emerald-200 min-w-0">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><polyline points="20 6 9 17 4 12"/></svg>
+                        <span className="truncate">Signed in as <strong className="font-semibold">{email}</strong></span>
+                    </div>
+                </div>
+            ) : (
+                <label className="block">
+                    <span className="block text-xs font-medium text-white/60 mb-1.5">Email</span>
+                    <input
+                        ref={firstFieldRef}
+                        type="email"
+                        required
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="you@example.com"
+                        className="input"
+                    />
+                </label>
+            )}
 
             {!isPaid && (
                 <label className="block">
@@ -309,13 +370,15 @@ function EmailStep({
                     : (isPaid ? "Continue to payment →" : "Generate free key →")}
             </button>
 
-            <button
-                type="button"
-                onClick={onBack}
-                className="w-full text-center text-xs text-white/50 hover:text-white/80 mt-1"
-            >
-                ← Back
-            </button>
+            {onBack && (
+                <button
+                    type="button"
+                    onClick={onBack}
+                    className="w-full text-center text-xs text-white/50 hover:text-white/80 mt-1"
+                >
+                    ← Back
+                </button>
+            )}
 
             <style>{`
                 .input { display: block; width: 100%; height: 44px; border-radius: 10px;
