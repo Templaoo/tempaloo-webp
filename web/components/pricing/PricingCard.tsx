@@ -7,12 +7,13 @@ export function PricingCard({
     plan,
     billing,
     selected,
-    onSelect,
+    onChoose,
 }: {
     plan: Plan;
     billing: Billing;
     selected: boolean;
-    onSelect: () => void;
+    /** Fired when the user wants to start onboarding for this plan. */
+    onChoose: () => void;
 }) {
     const priceNum =
         plan.priceMonthly === 0
@@ -20,7 +21,6 @@ export function PricingCard({
             : billing === "annual"
                 ? plan.priceAnnual / 12
                 : plan.priceMonthly;
-    const priceLabel = plan.priceMonthly === 0 ? "Free" : formatPrice(priceNum);
     const rightSub =
         plan.priceMonthly === 0
             ? "forever"
@@ -29,11 +29,13 @@ export function PricingCard({
                 : "billed monthly";
 
     return (
-        <button
-            type="button"
-            onClick={onSelect}
+        <div
+            role="button"
+            tabIndex={0}
+            onClick={onChoose}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onChoose(); } }}
             className={clsx(
-                "group relative text-left rounded-2xl p-6 transition overflow-hidden",
+                "group relative text-left rounded-2xl p-6 transition overflow-hidden cursor-pointer",
                 plan.highlight
                     ? "glass-strong ring-1 ring-brand-400/50"
                     : "glass hover:border-white/20",
@@ -56,7 +58,7 @@ export function PricingCard({
                     <span className="text-4xl font-bold text-white tracking-tight">Free</span>
                 ) : (
                     <>
-                        <span className="text-4xl font-bold text-white tracking-tight">{priceLabel}</span>
+                        <span className="text-4xl font-bold text-white tracking-tight">{formatPrice(priceNum)}</span>
                         <span className="text-sm text-white/60">/ mo</span>
                     </>
                 )}
@@ -75,19 +77,19 @@ export function PricingCard({
                 ))}
             </ul>
 
-            <div
+            <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onChoose(); }}
                 className={clsx(
-                    "mt-6 inline-flex items-center justify-center w-full h-10 rounded-lg text-sm font-medium transition",
+                    "mt-6 inline-flex items-center justify-center w-full h-10 rounded-lg text-sm font-semibold transition",
                     plan.highlight
                         ? "bg-gradient-to-r from-brand-500 to-purple-500 text-white glow"
-                        : selected
-                            ? "bg-white text-ink-950"
-                            : "bg-white/10 text-white group-hover:bg-white/15",
+                        : "bg-white/10 text-white hover:bg-white/20",
                 )}
             >
-                {selected ? "Selected" : plan.cta}
-            </div>
-        </button>
+                {plan.cta} <span className="ml-1">→</span>
+            </button>
+        </div>
     );
 }
 
