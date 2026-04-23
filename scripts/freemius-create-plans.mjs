@@ -3,24 +3,15 @@
  * via the Developer-scope API.
  *
  * USAGE:
- *   cd scripts
- *   FREEMIUS_DEV_ID=123 \
- *   FREEMIUS_DEV_PUBLIC_KEY=pk_xxx \
- *   FREEMIUS_DEV_SECRET_KEY=sk_xxx \
- *   FREEMIUS_PRODUCT_ID=4567 \
- *   node freemius-create-plans.mjs
+ *   FREEMIUS_DEV_ID=... FREEMIUS_DEV_PUBLIC_KEY=pk_... FREEMIUS_DEV_SECRET_KEY=sk_... \
+ *   FREEMIUS_PRODUCT_ID=... node scripts/freemius-create-plans.mjs
  *
- * CREDENTIALS TO COLLECT
- *   • FREEMIUS_DEV_ID          — Freemius Dashboard → top-right avatar → My Profile → Keys
- *   • FREEMIUS_DEV_PUBLIC_KEY  — same page (pk_…)
- *   • FREEMIUS_DEV_SECRET_KEY  — same page (sk_…, click Reveal)
- *   • FREEMIUS_PRODUCT_ID      — Dashboard → your product → Settings → Keys → "Plugin ID"
- *
- * Safe to re-run: if a plan with the same `name` already exists, we skip the
- * create call and only attempt to (re-)add pricing.
+ * Safe to re-run: plans with an existing `name` are skipped on create, then
+ * pricing is attempted (which is itself idempotent-ish — Freemius rejects
+ * duplicate pricing tiers).
  */
 
-import Freemius from "freemius-node-sdk";
+import { createClient } from "./freemius-api.mjs";
 
 const need = (k) => {
     const v = process.env[k];
@@ -33,102 +24,65 @@ const PUB_KEY    = need("FREEMIUS_DEV_PUBLIC_KEY");
 const SEC_KEY    = need("FREEMIUS_DEV_SECRET_KEY");
 const PRODUCT_ID = Number(need("FREEMIUS_PRODUCT_ID"));
 
-const dev = new Freemius("developer", DEV_ID, PUB_KEY, SEC_KEY);
+const dev = createClient({ scope: "developer", id: DEV_ID, publicKey: PUB_KEY, secretKey: SEC_KEY });
 
-// ─── Plan definitions (source of truth, mirrors web/lib/plans.ts) ────────────
+// ─── Plan definitions (mirrors web/lib/plans.ts) ─────────────────────────────
 
 const PLANS = [
     {
-        name: "free",
-        title: "Free",
+        name: "free", title: "Free",
         description: "250 images per month, renewable forever. No card required.",
-        is_free_plan: true,
-        license_activations: 1,
-        trial_period: 0,
+        is_free_plan: true, license_activations: 1, trial_period: 0,
         pricing: [],
     },
     {
-        name: "starter",
-        title: "Starter",
+        name: "starter", title: "Starter",
         description: "5 000 images/month, for a single blog or portfolio.",
-        license_activations: 1,
-        trial_period: 7,
-        pricing: [
-            { monthly_price: 5 },
-            { annual_price: 48 },
-        ],
+        license_activations: 1, trial_period: 7,
+        pricing: [{ monthly_price: 5, annual_price: 48 }],
     },
     {
-        name: "growth",
-        title: "Growth",
+        name: "growth", title: "Growth",
         description: "25 000 images/month, up to 5 sites. For small agencies.",
-        license_activations: 5,
-        trial_period: 7,
-        is_featured: true,
-        pricing: [
-            { monthly_price: 12 },
-            { annual_price: 115 },
-        ],
+        license_activations: 5, trial_period: 7, is_featured: true,
+        pricing: [{ monthly_price: 12, annual_price: 115 }],
     },
     {
-        name: "business",
-        title: "Business",
+        name: "business", title: "Business",
         description: "150 000 images/month, unlimited sites. For agencies managing many client sites.",
-        license_activations: 0, // 0 = unlimited in Freemius
-        trial_period: 7,
-        pricing: [
-            { monthly_price: 29 },
-            { annual_price: 278 },
-        ],
+        license_activations: 0, trial_period: 7,
+        pricing: [{ monthly_price: 29, annual_price: 278 }],
     },
     {
-        name: "unlimited",
-        title: "Unlimited",
+        name: "unlimited", title: "Unlimited",
         description: "Unlimited images (fair use 500k/mo), unlimited sites. For hosts and platforms.",
-        license_activations: 0,
-        trial_period: 7,
-        pricing: [
-            { monthly_price: 59 },
-            { annual_price: 566 },
-        ],
+        license_activations: 0, trial_period: 7,
+        pricing: [{ monthly_price: 59, annual_price: 566 }],
     },
 ];
-
-// ─── Promise wrapper around the SDK's callback API ───────────────────────────
-// NOTE: developer-scope paths are auto-prefixed with /developers/{dev_id}/
-// by the SDK, so we only pass the product-relative portion.
-
-function api(path, method = "GET", params = {}) {
-    return new Promise((resolve, reject) => {
-        const body = method === "GET" ? [] : params;
-        dev.Api(path, method, body, [], (raw) => {
-            try {
-                const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
-                if (parsed?.error) return reject(new Error(`${method} ${path} → ${parsed.error.message || JSON.stringify(parsed.error)}`));
-                resolve(parsed);
-            } catch (e) {
-                reject(e);
-            }
-        });
-    });
-}
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 async function main() {
     console.log(`\n→ Connecting as developer ${DEV_ID}, product ${PRODUCT_ID}…\n`);
 
-    const listResp = await api(`/products/${PRODUCT_ID}/plans.json`, "GET");
-    const existingByName = new Map(
-        (listResp?.plans ?? []).map((p) => [p.name, p]),
+    // Fetch existing plans so re-runs don't try to recreate them.
+    const listResp = await dev.get(`/plugins/${PRODUCT_ID}/plans.json`);
+    if (!listResp.ok) {
+        console.warn(`  ⚠ Could not list existing plans (${listResp.status}). Proceeding blind.`);
+    }
+    const existing = new Map(
+        (listResp.data?.plans ?? []).map((p) => [p.name, p]),
     );
-    console.log(`  Found ${existingByName.size} existing plan(s): ${[...existingByName.keys()].join(", ") || "(none)"}\n`);
+    console.log(`  Existing plans: ${[...existing.keys()].join(", ") || "(none)"}\n`);
 
     for (const plan of PLANS) {
         console.log(`◆ ${plan.title} (name=${plan.name})`);
 
-        let row = existingByName.get(plan.name);
-        if (!row) {
+        let row = existing.get(plan.name);
+        if (row) {
+            console.log(`  = already exists (id=${row.id})`);
+        } else {
             const body = {
                 name: plan.name,
                 title: plan.title,
@@ -140,40 +94,69 @@ async function main() {
                 is_free_plan: plan.is_free_plan ? true : false,
                 is_hidden: false,
             };
-            row = await api(`/products/${PRODUCT_ID}/plans.json`, "POST", body);
-            console.log(`  ✓ created plan id=${row?.id}`);
-        } else {
-            console.log(`  = already exists (id=${row.id}), skipping create`);
+            const res = await dev.post(`/plugins/${PRODUCT_ID}/plans.json`, body);
+            if (res.ok || res.status === 201) {
+                row = res.data;
+                console.log(`  ✓ created (id=${row.id})`);
+            } else {
+                const msg = res.data?.error?.message ?? JSON.stringify(res.data);
+                console.warn(`  ⚠ create failed (HTTP ${res.status}): ${msg}`);
+                console.log("");
+                continue;
+            }
         }
 
-        const planId = row?.id;
-        if (!planId || plan.pricing.length === 0) {
+        if (!row?.id || plan.pricing.length === 0) {
             console.log("");
             continue;
         }
 
+        // Fetch existing pricing for this plan to avoid duplicate POSTs.
+        const priceListRes = await dev.get(`/plugins/${PRODUCT_ID}/plans/${row.id}/pricing.json`);
+        const existingPricing = priceListRes.data?.pricing ?? [];
+
         for (const price of plan.pricing) {
-            const priceBody = {
-                licenses: plan.license_activations === 0 ? 0 : plan.license_activations,
-                currency: "eur",
-                ...(price.monthly_price != null ? { monthly_price: price.monthly_price } : {}),
-                ...(price.annual_price  != null ? { annual_price:  price.annual_price  } : {}),
-            };
-            try {
-                await api(`/products/${PRODUCT_ID}/plans/${planId}/pricing.json`, "POST", priceBody);
-                const label = price.monthly_price != null ? `${price.monthly_price} €/mo` : `${price.annual_price} €/yr`;
-                console.log(`  + pricing: ${label}`);
-            } catch (e) {
-                console.warn(`  ⚠ pricing ${JSON.stringify(priceBody)} failed: ${e.message}`);
+            const label = `M=${price.monthly_price ?? "-"} A=${price.annual_price ?? "-"} €`;
+
+            // Does this plan already have a pricing row for (licenses, eur)?
+            const lic = plan.license_activations === 0 ? 0 : plan.license_activations;
+            const match = existingPricing.find((p) =>
+                Number(p.licenses) === Number(lic) && String(p.currency).toLowerCase() === "eur"
+            );
+
+            if (match) {
+                // Update it to ensure both monthly + annual are present.
+                const patch = {
+                    ...(price.monthly_price != null ? { monthly_price: price.monthly_price } : {}),
+                    ...(price.annual_price  != null ? { annual_price:  price.annual_price  } : {}),
+                };
+                const res = await dev.put(`/plugins/${PRODUCT_ID}/plans/${row.id}/pricing/${match.id}.json`, patch);
+                if (res.ok) {
+                    console.log(`  ~ pricing updated: ${label}`);
+                } else {
+                    console.warn(`  ⚠ pricing update failed (HTTP ${res.status}): ${JSON.stringify(res.data)}`);
+                }
+            } else {
+                const res = await dev.post(`/plugins/${PRODUCT_ID}/plans/${row.id}/pricing.json`, {
+                    licenses: lic,
+                    currency: "eur",
+                    ...(price.monthly_price != null ? { monthly_price: price.monthly_price } : {}),
+                    ...(price.annual_price  != null ? { annual_price:  price.annual_price  } : {}),
+                });
+                if (res.ok || res.status === 201) {
+                    console.log(`  + pricing created: ${label}`);
+                } else {
+                    console.warn(`  ⚠ pricing create failed (HTTP ${res.status}): ${JSON.stringify(res.data)}`);
+                }
             }
         }
         console.log("");
     }
 
-    console.log("✓ Done. Open your Freemius Dashboard → Product → Plans to verify.\n");
+    console.log("✓ Done. Verify in the Freemius Dashboard → Product → Plans.\n");
 }
 
 main().catch((e) => {
-    console.error("\n✗ Fatal:", e.message || e);
+    console.error("\n✗ Fatal:", e.stack || e.message || e);
     process.exit(1);
 });
