@@ -11,6 +11,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "freemius-node-sdk": "github:Freemius/freemius-node-sdk",
     "pg": "^8.20.0"
   }
 }

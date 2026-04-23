@@ -33,6 +33,30 @@ Sauvegarder. Le produit reçoit un **Plugin ID** numérique (notez-le).
 
 ## 2. Créer les 5 plans
 
+### Option A (recommandée) — via script API
+
+Les 5 plans + tarifs mensuel/annuel + trials sont créés automatiquement. Temps : 20 secondes.
+
+```bash
+cd c:/Users/otman/Documents/webp/scripts
+
+FREEMIUS_DEV_ID=VOTRE_DEV_ID \
+FREEMIUS_DEV_PUBLIC_KEY=pk_VOTRE_CLE \
+FREEMIUS_DEV_SECRET_KEY=sk_VOTRE_CLE \
+FREEMIUS_PRODUCT_ID=VOTRE_PRODUCT_ID \
+node freemius-create-plans.mjs
+```
+
+**Où trouver ces 4 valeurs** :
+- `FREEMIUS_DEV_ID` + `FREEMIUS_DEV_PUBLIC_KEY` + `FREEMIUS_DEV_SECRET_KEY` : Dashboard → avatar haut-droit → **My Profile** → section **Keys**
+- `FREEMIUS_PRODUCT_ID` : votre produit → **Settings** → **Keys** → "Plugin ID"
+
+Le script est **idempotent** : si les plans existent déjà, il saute leur création et n'ajoute que les tarifs manquants.
+
+### Option B — manuellement via l'UI
+
+Si vous préférez garder le contrôle visuel, voici les valeurs exactes plan par plan (les mêmes que le script injecte).
+
 **Chemin** : Products → `Tempaloo WebP` → **Plans** → `+ Add Plan` pour chacun.
 
 > **Convention** : le "Name" est interne Freemius, le "Title" est affiché publiquement dans le Checkout.
