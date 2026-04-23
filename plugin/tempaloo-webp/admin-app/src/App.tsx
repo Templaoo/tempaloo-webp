@@ -4,8 +4,9 @@ import { Badge, Tabs, Toasts } from "./components/ui";
 import Overview from "./pages/Overview";
 import Bulk from "./pages/Bulk";
 import Settings from "./pages/Settings";
+import Upgrade from "./pages/Upgrade";
 
-type Tab = "overview" | "bulk" | "settings";
+type Tab = "overview" | "bulk" | "settings" | "upgrade";
 
 export default function App() {
     const [state, setState] = useState<AppState>(boot.state);
@@ -52,6 +53,7 @@ export default function App() {
                             { value: "overview", label: "Overview", icon: <IconOverview /> },
                             { value: "bulk",     label: "Bulk",     icon: <IconBulk /> },
                             { value: "settings", label: "Settings", icon: <IconSettings /> },
+                            { value: "upgrade",  label: "Upgrade",  icon: <IconUpgrade /> },
                         ]}
                     />
                     {!state.license.valid && (
@@ -74,6 +76,7 @@ export default function App() {
                     {tab === "overview" && <Overview state={state} onState={setState} />}
                     {tab === "bulk"     && <Bulk state={state} />}
                     {tab === "settings" && <Settings state={state} onState={setState} />}
+                    {tab === "upgrade"  && <Upgrade state={state} />}
                 </main>
             </div>
         </div>
@@ -102,6 +105,13 @@ function IconBulk() {
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 12a9 9 0 1 1-6.22-8.56" />
             <polyline points="21 4 21 10 15 10" />
+        </svg>
+    );
+}
+function IconUpgrade() {
+    return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor" fillOpacity="0.15" />
         </svg>
     );
 }

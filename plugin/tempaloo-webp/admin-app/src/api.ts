@@ -69,6 +69,20 @@ export const boot: BootState =
         },
     };
 
+// Freemius product + plan IDs for in-admin checkout (safe to expose — public).
+export const FREEMIUS = {
+    productId: 28337,
+    publicKey: "pk_259a7f9b6c36048a8ee79c2f9dd0b",
+    plans: {
+        starter:   { id: 46755, licenses: 1, monthly: 5,  annual: 48 },
+        growth:    { id: 46756, licenses: 5, monthly: 12, annual: 115 },
+        business:  { id: 46757, licenses: 0, monthly: 29, annual: 278 },
+        unlimited: { id: 46758, licenses: 0, monthly: 59, annual: 566 },
+    },
+} as const;
+
+export type PaidPlanCode = keyof typeof FREEMIUS.plans;
+
 async function restFetch<T>(path: string, init?: RequestInit): Promise<T> {
     const res = await fetch(boot.rest.root + "tempaloo-webp/v1" + path, {
         credentials: "same-origin",
