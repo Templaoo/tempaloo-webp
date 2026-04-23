@@ -1,0 +1,76 @@
+name: Release plugin zip
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.1.0)"
+        required: true
+        type: string
+
+jobs:
+  build-zip:
+    name: Build & attach tempaloo-webp.zip
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: plugin/tempaloo-webp/admin-app/package-lock.json
+
+      - name: Build React admin UI
+        working-directory: plugin/tempaloo-webp/admin-app
+        run: |
+          npm ci
+          npm run build
+
+      - name: Read plugin version
+        id: version
+        run: |
+          v=$(grep -oE 'Version:\s+[0-9]+\.[0-9]+\.[0-9]+' plugin/tempaloo-webp/tempaloo-webp.php | head -1 | awk '{print $2}')
+          if [ -z "$v" ]; then
+            echo "Could not parse version from plugin header" >&2
+            exit 1
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "Plugin version: $v"
+
+      - name: Stage release folder
+        run: |
+          rm -rf dist-release
+          mkdir -p dist-release/tempaloo-webp
+          # Copy only files we want shipped to wordpress.org users.
+          rsync -av \
+            --exclude='admin-app/node_modules' \
+            --exclude='admin-app/.vite' \
+            --exclude='admin-app/dist' \
+            plugin/tempaloo-webp/ dist-release/tempaloo-webp/
+
+      - name: Zip
+        run: |
+          cd dist-release
+          zip -r9 ../tempaloo-webp-${{ steps.version.outputs.version }}.zip tempaloo-webp
+          cd ..
+          ls -lh tempaloo-webp-${{ steps.version.outputs.version }}.zip
+          unzip -l tempaloo-webp-${{ steps.version.outputs.version }}.zip | head -30
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tempaloo-webp-${{ steps.version.outputs.version }}
+          path: tempaloo-webp-${{ steps.version.outputs.version }}.zip
+
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: tempaloo-webp-${{ steps.version.outputs.version }}.zip
+          generate_release_notes: true
