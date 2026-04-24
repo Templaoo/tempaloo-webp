@@ -15,6 +15,7 @@
     "job:unlimited-watch": "tsx src/jobs/unlimited-watch.ts"
   },
   "dependencies": {
+    "@fastify/helmet": "^11.1.1",
     "@fastify/multipart": "^8.3.0",
     "@fastify/rate-limit": "^9.1.0",
     "@freemius/checkout": "^1.4.1",

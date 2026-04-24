@@ -1,8 +1,21 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { timingSafeEqual } from "node:crypto";
 import { config } from "../config.js";
 import { query } from "../db.js";
 import { currentPeriod } from "../auth.js";
+
+/**
+ * Constant-time equality. Prevents timing-oracle attacks on the internal
+ * auth key (purely theoretical at our scale — network jitter dwarfs the
+ * leaked bits — but it costs one import and removes a class of CVEs).
+ */
+function safeEqual(a: string, b: string): boolean {
+    const aBuf = Buffer.from(a, "utf8");
+    const bBuf = Buffer.from(b, "utf8");
+    if (aBuf.length !== bBuf.length) return false;
+    return timingSafeEqual(aBuf, bBuf);
+}
 
 /**
  * Account endpoints. Authenticated by a shared INTERNAL_API_KEY so that only
@@ -13,7 +26,7 @@ export default async function accountRoutes(app: FastifyInstance) {
     app.addHook("onRequest", async (req, reply) => {
         if (!req.url.startsWith("/account") && !req.url.startsWith("/v1/account")) return;
         const key = req.headers["x-internal-key"];
-        if (typeof key !== "string" || key !== config.INTERNAL_API_KEY) {
+        if (typeof key !== "string" || !safeEqual(key, config.INTERNAL_API_KEY)) {
             return reply.code(401).send({ error: { code: "unauthorized", message: "Missing or invalid internal key" } });
         }
     });

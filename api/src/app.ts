@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
+import helmet from "@fastify/helmet";
 import { ZodError } from "zod";
 import { config } from "./config.js";
 import { ApiError } from "./errors.js";
@@ -19,6 +20,16 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
         logger: opts.logger === false ? false : { level: config.LOG_LEVEL },
         bodyLimit: config.MAX_IMAGE_BYTES + 1_000_000,
         trustProxy: true,
+    });
+
+    // Security headers. We serve JSON only, so no CSP is attached here
+    // (the Next.js web app handles its own CSP). `crossOriginResourcePolicy`
+    // stops random pages from embedding our responses; the rest are
+    // Helmet's sensible defaults (X-Content-Type-Options, Referrer-Policy,
+    // Strict-Transport-Security via the Render proxy, …).
+    await app.register(helmet, {
+        contentSecurityPolicy: false,
+        crossOriginResourcePolicy: { policy: "same-origin" },
     });
 
     await app.register(multipart, {

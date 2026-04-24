@@ -10,7 +10,31 @@ const bodySchema = z.object({
     siteHost: z.string().min(1),
 });
 
+/**
+ * Defense in depth on top of SameSite=Lax session cookies:
+ * accept the request only when Origin matches our own site. Blocks a
+ * compromised partner subdomain from piggy-backing on an authenticated
+ * session, even in the unlikely event a CSRF bypass ever lands.
+ */
+function isAllowedOrigin(origin: string | null): boolean {
+    if (!origin) return true; // same-origin fetch (no Origin header) — Next/browser internals
+    try {
+        const host = new URL(origin).host;
+        return (
+            host === "tempaloo.com" ||
+            host.endsWith(".tempaloo.com") ||
+            host === "localhost:3001" ||
+            host.endsWith(".vercel.app")  // preview deployments
+        );
+    } catch {
+        return false;
+    }
+}
+
 export async function POST(req: Request) {
+    if (!isAllowedOrigin(req.headers.get("origin"))) {
+        return NextResponse.json({ error: "bad_origin" }, { status: 403 });
+    }
     const user = await getCurrentUser();
     if (!user?.email) {
         return NextResponse.json({ error: "unauthorized" }, { status: 401 });
