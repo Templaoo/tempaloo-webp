@@ -88,9 +88,8 @@ function Nav({ authedEmail }: { authedEmail?: string | null }) {
     return (
         <nav className="pr3-nav">
             <div className="app-container pr3-nav-inner">
-                <Link href="/webp" className="pr3-nav-logo">
-                    <LogoMark size={22} />
-                    <span>Tempaloo<span className="pr3-nav-sub"> / WebP</span></span>
+                <Link href="/webp" className="pr3-nav-logo" aria-label="Tempaloo home">
+                    <LogoMark size={32} />
                 </Link>
                 <div className="pr3-nav-right">
                     {authedEmail ? (
@@ -245,7 +244,6 @@ const css = `
   letter-spacing: -0.015em;
   color: var(--ink);
 }
-.pr3-nav-sub { color: var(--ink-3); }
 .pr3-nav-right { display: flex; gap: 10px; align-items: center; }
 .pr3-nav-back { font-size: 13.5px; color: var(--ink-3); transition: color .15s; }
 .pr3-nav-back:hover { color: var(--ink); }

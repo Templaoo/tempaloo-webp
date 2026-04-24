@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LogoWordmark } from "@/components/Logo";
+import { LogoMark } from "@/components/Logo";
 
 export const metadata = {
     title: "Tempaloo — WordPress plugins & templates",
@@ -35,8 +35,8 @@ export default function Home() {
     return (
         <main style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
             <header className="app-container" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", height: 60 }}>
-                <Link href="/">
-                    <LogoWordmark />
+                <Link href="/" aria-label="Tempaloo home" style={{ display: "inline-flex", alignItems: "center" }}>
+                    <LogoMark size={32} />
                 </Link>
                 <nav style={{ display: "flex", alignItems: "center", gap: 16, fontSize: 14 }}>
                     <Link href="/webp" style={{ color: "var(--ink-2)" }}>WebP plugin</Link>

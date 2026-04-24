@@ -33,8 +33,7 @@ export function LegalPage({
             <header className={`lp-nav ${scrolled ? "lp-nav-on" : ""}`}>
                 <div className="app-container lp-nav-inner">
                     <Link href="/webp" className="lp-nav-logo" aria-label="Back to Tempaloo home">
-                        <LogoMark size={22} />
-                        <span className="lp-nav-name">Tempaloo</span>
+                        <LogoMark size={32} />
                     </Link>
                     <nav className="lp-nav-right">
                         <Link href="/privacy" className="lp-nav-link">Privacy</Link>
@@ -91,7 +90,6 @@ const css = `
   font-weight: 500; font-size: 14.5px;
   letter-spacing: -0.015em; color: var(--ink);
 }
-.lp-nav-name { color: var(--ink); }
 .lp-nav-right { display: flex; align-items: center; gap: 20px; }
 .lp-nav-link {
   font-size: 13.5px; color: var(--ink-2); transition: color .15s;

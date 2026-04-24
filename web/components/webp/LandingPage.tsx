@@ -317,8 +317,7 @@ function Nav({ theme, scrolled, onToggleTheme }: { theme: Theme; scrolled: boole
 function Logo() {
     return (
         <span className="pr2-logo">
-            <LogoMark size={24} />
-            <span className="pr2-logo-text">Tempaloo<span className="pr2-logo-sub"> / WebP</span></span>
+            <LogoMark size={34} />
         </span>
     );
 }
@@ -1238,9 +1237,7 @@ const css = `
 .pr2-nav-signin { font-size: 14px; color: var(--ink-2); padding: 6px 12px; font-weight: 450; transition: color .15s; }
 .pr2-nav-signin:hover { color: var(--ink); }
 
-.pr2-logo { display: inline-flex; align-items: center; gap: 10px; color: var(--ink); }
-.pr2-logo-text { font-weight: 500; font-size: 14.5px; letter-spacing: -0.015em; color: var(--ink); }
-.pr2-logo-sub { color: var(--ink-3); }
+.pr2-logo { display: inline-flex; align-items: center; color: var(--ink); }
 
 .pr2-pill { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 999px; background: var(--bg); color: var(--ink-2); border: 1px solid var(--line-2); font-size: 12.5px; font-weight: 450; letter-spacing: -0.005em; }
 .pr2-pill-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 3px rgba(23, 201, 100, 0.18); }
