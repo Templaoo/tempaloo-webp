@@ -1097,9 +1097,9 @@ function Footer() {
                     <div>
                         <div className="pr2-footer-col-h">LEGAL</div>
                         <div className="pr2-footer-col">
-                            <a href="#" title="Coming soon">Privacy</a>
-                            <a href="#" title="Coming soon">Terms</a>
-                            <a href="#" title="Coming soon">Refunds</a>
+                            <Link href="/privacy">Privacy</Link>
+                            <Link href="/terms">Terms</Link>
+                            <Link href="/terms">Refunds</Link>
                         </div>
                     </div>
                 </div>
