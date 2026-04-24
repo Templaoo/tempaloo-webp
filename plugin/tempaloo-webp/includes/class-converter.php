@@ -96,6 +96,11 @@ class Tempaloo_WebP_Converter {
             if ( ! $src_path ) { $failed++; continue; }
             $target   = $src_path . '.' . $format;
             $binary   = base64_decode( $f['data'], true );
+            // Writing a WebP sibling next to the original on the same disk —
+            // WP_Filesystem is for remote/credentialed writes and doesn't
+            // apply here. The @ silences a benign E_WARNING on read-only
+            // hosts; we already return a failed++ below if the write fails.
+            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
             if ( false === $binary || ! @file_put_contents( $target, $binary ) ) {
                 $failed++;
                 continue;

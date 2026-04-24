@@ -90,6 +90,9 @@ class Tempaloo_WebP_API_Client {
         $body .= "--{$boundary}{$eol}";
         $body .= 'Content-Disposition: form-data; name="image"; filename="' . basename( $file_path ) . '"' . $eol;
         $body .= 'Content-Type: ' . $this->guess_mime( $file_path ) . $eol . $eol;
+        // Reading a local file (upload path on the user's own server) — WP_Filesystem
+        // is for remote/credentialed writes, it doesn't apply to a straight local read.
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
         $body .= file_get_contents( $file_path ) . $eol;
         $body .= "--{$boundary}--{$eol}";
 
@@ -176,6 +179,8 @@ class Tempaloo_WebP_API_Client {
             $body .= "--{$boundary}{$eol}";
             $body .= 'Content-Disposition: form-data; name="image[]"; filename="' . basename( $p ) . '"' . $eol;
             $body .= 'Content-Type: ' . $this->guess_mime( $p ) . $eol . $eol;
+            // Local read of an attachment path — see note above the other file_get_contents call.
+            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
             $body .= file_get_contents( $p ) . $eol;
         }
         $body .= "--{$boundary}--{$eol}";

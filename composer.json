@@ -1,0 +1,21 @@
+{
+    "name": "tempaloo/dev-tools",
+    "description": "Dev-only tooling (PHP_CodeSniffer + WordPress standards) for the Tempaloo WebP plugin.",
+    "license": "GPL-2.0-or-later",
+    "type": "project",
+    "require-dev": {
+        "squizlabs/php_codesniffer": "^3.10",
+        "wp-coding-standards/wpcs": "^3.1",
+        "phpcompatibility/phpcompatibility-wp": "^2.1",
+        "dealerdirect/phpcodesniffer-composer-installer": "^1.0"
+    },
+    "config": {
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true
+        }
+    },
+    "scripts": {
+        "lint:phpcs": "phpcs --standard=phpcs.xml.dist plugin/tempaloo-webp",
+        "lint:phpcbf": "phpcbf --standard=phpcs.xml.dist plugin/tempaloo-webp"
+    }
+}

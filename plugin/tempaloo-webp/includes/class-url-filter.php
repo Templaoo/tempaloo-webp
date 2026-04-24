@@ -168,7 +168,9 @@ class Tempaloo_WebP_URL_Filter {
         // In admin we always rewrite — WP admin targets modern browsers, and the real
         // image request sent by the browser will include "Accept: image/webp" natively.
         // On the frontend we respect the Accept header for HTML-context fetches.
-        $accept = isset( $_SERVER['HTTP_ACCEPT'] ) ? (string) $_SERVER['HTTP_ACCEPT'] : '';
+        $accept = isset( $_SERVER['HTTP_ACCEPT'] )
+            ? sanitize_text_field( wp_unslash( (string) $_SERVER['HTTP_ACCEPT'] ) )
+            : '';
         $is_admin_ctx = is_admin() || wp_doing_ajax();
         $wants_avif   = ! empty( $s['supports_avif'] ) && ( $is_admin_ctx || false !== stripos( $accept, 'image/avif' ) );
         $wants_webp   = $is_admin_ctx

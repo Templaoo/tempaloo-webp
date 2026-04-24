@@ -189,17 +189,24 @@ class Tempaloo_WebP_Bulk {
         // MIME list is hardcoded (no user input), but going through prepare()
         // keeps WordPress.org's coding-standards review happy and makes the
         // intent explicit.
-        $sql = $wpdb->prepare(
-            "SELECT ID FROM {$wpdb->posts}
-              WHERE post_type = %s AND post_status = %s
-                AND post_mime_type IN ('image/jpeg','image/png','image/gif')
-              ORDER BY ID ASC
-              LIMIT %d",
-            'attachment',
-            'inherit',
-            $limit
+        // Direct query is intentional: we scan the whole attachment table up
+        // to $limit rows. A WP_Query would load every post into memory; get_col
+        // returns just IDs, which is what we need. No cache layer either —
+        // bulk is a one-shot user-initiated action, caching adds no value.
+        //
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+        $ids = $wpdb->get_col(
+            $wpdb->prepare(
+                "SELECT ID FROM {$wpdb->posts}
+                  WHERE post_type = %s AND post_status = %s
+                    AND post_mime_type IN ('image/jpeg','image/png','image/gif')
+                  ORDER BY ID ASC
+                  LIMIT %d",
+                'attachment',
+                'inherit',
+                $limit
+            )
         );
-        $ids = $wpdb->get_col( $sql );
 
         if ( empty( $ids ) ) {
             return [];
