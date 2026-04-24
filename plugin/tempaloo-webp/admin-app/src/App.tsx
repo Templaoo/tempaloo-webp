@@ -278,10 +278,29 @@ export default function App() {
 }
 
 function Logo() {
+    // Canonical Tempaloo brand mark, same SVG paths as the web app's
+    // LogoMark variant="brand". `currentColor` keeps it theme-neutral
+    // (renders black on WP admin's white chrome, dark accent at 35%).
     return (
-        <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center text-white font-bold text-sm shadow-pop">
-            T
-        </div>
+        <svg
+            width="36"
+            height="36"
+            viewBox="390 600 1130 860"
+            xmlns="http://www.w3.org/2000/svg"
+            role="img"
+            aria-label="Tempaloo"
+            className="text-ink-900"
+        >
+            <g fill="currentColor">
+                <path d="m1200 621h288l-3 10-23 62-15 41-26 70-16 43-1 2-246 1-9 3-8 7-5 10-5 18-18 94-10 54-13 71-12 63-13 70-20 107-15 79-1 1-7 1h-187l-12-1 2-14 14-74 12-64 21-111 24-129 24-128 7-37 8-32 11-33 10-23 12-24 12-19 13-17 12-14 17-17 14-11 15-11 15-9 19-10 27-11 15-5 24-6 29-5z" />
+                <path d="m746 621h315l-4 2-22 8-24 12-24 16-11 9-12 11-10 10-3 1-204 1-19 4-19 8-11 7-10 8-11 11-12 16-10 18-8 18 253-1-2 9-10 30-8 29-1 1h-319l6-35 7-28 9-27 8-18 10-20 10-16 10-14 12-14 12-12 11-9 18-12 15-8 22-8 21-5z" />
+            </g>
+            <path
+                d="m1372 689h19l-1 6-19 51-13 34-1 1h-194l-18 2-16 5-14 7-12 9-12 12-9 14-7 15-6 18-6 28-14 74-18 95-23 122-17 90-15 80-2 7h-66l1-9 17-89 46-242 21-110 9-42 8-27 11-28 12-23 11-16 9-11 9-10 8-8 14-11 13-9 16-9 19-9 24-8 22-5 23-3z"
+                fill="currentColor"
+                opacity="0.35"
+            />
+        </svg>
     );
 }
 function IconOverview() {
