@@ -8,6 +8,7 @@ import { ApiError } from "./errors.js";
 import accountRoutes from "./routes/account.js";
 import convertRoute from "./routes/convert.js";
 import licenseRoutes from "./routes/license.js";
+import plansRoute from "./routes/plans.js";
 import quotaRoute from "./routes/quota.js";
 import webhooksRoute from "./routes/webhooks.js";
 
@@ -69,6 +70,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
             await api.register(convertRoute);
             await api.register(quotaRoute);
             await api.register(licenseRoutes);
+            await api.register(plansRoute);
             await api.register(webhooksRoute);
             await api.register(accountRoutes);
         },

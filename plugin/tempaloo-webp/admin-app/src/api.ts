@@ -5,6 +5,7 @@ export interface BootState {
     rest: { root: string; nonce: string };
     ajax: { url: string; nonce: string };
     activateUrl: string;
+    apiBase: string;     // e.g. https://api.tempaloo.com/v1 — used by fetchPlans()
     siteUrl: string;
     state: AppState;
 }
@@ -73,6 +74,7 @@ export const boot: BootState =
         rest: { root: "/wp-json/", nonce: "" },
         ajax: { url: "/wp-admin/admin-ajax.php", nonce: "" },
         activateUrl: "",
+        apiBase: "https://api.tempaloo.com/v1",
         siteUrl: "",
         state: {
             license: { valid: false, key: "", plan: "", supportsAvif: false, imagesLimit: 0, sitesLimit: 0 },
@@ -85,19 +87,42 @@ export const boot: BootState =
         },
     };
 
-// Freemius product + plan IDs for in-admin checkout (safe to expose — public).
+// Freemius product identity (these two IDs never change per product — kept
+// as constants). Plan-level IDs come from the /v1/plans endpoint now.
 export const FREEMIUS = {
     productId: 28337,
     publicKey: "pk_259a7f9b6c36048a8ee79c2f9dd0b",
-    plans: {
-        starter:   { id: 46755, licenses: 1, monthly: 5,  annual: 48 },
-        growth:    { id: 46756, licenses: 5, monthly: 12, annual: 115 },
-        business:  { id: 46757, licenses: 0, monthly: 29, annual: 278 },
-        unlimited: { id: 46758, licenses: 0, monthly: 59, annual: 566 },
-    },
 } as const;
 
-export type PaidPlanCode = keyof typeof FREEMIUS.plans;
+// Shape returned by GET /v1/plans — one entry per code, ordered by sort_order.
+export interface Plan {
+    code: "free" | "starter" | "growth" | "business" | "unlimited";
+    name: string;
+    tagline: string;
+    imagesPerMonth: number;   // -1 = unlimited
+    maxSites: number;         // -1 = unlimited
+    supportsAvif: boolean;
+    supportsCdn: boolean;
+    supportsApiDirect: boolean;
+    priceMonthlyCents: number;
+    priceAnnualCents: number;
+    fairUseCap: number | null;
+    freemiusPlanId: number | null; // null for free
+    bullets: string[];
+    badge: string | null;
+    ctaLabel: string;
+    isFeatured: boolean;
+}
+
+export type PaidPlanCode = Exclude<Plan["code"], "free">;
+
+export async function fetchPlans(): Promise<Plan[]> {
+    const base = boot.apiBase.replace(/\/+$/, "");
+    const res = await fetch(`${base}/plans`, { credentials: "omit" });
+    if (!res.ok) throw new Error(`Plans feed ${res.status}`);
+    const data = (await res.json()) as { plans: Plan[] };
+    return data.plans;
+}
 
 async function restFetch<T>(path: string, init?: RequestInit): Promise<T> {
     const res = await fetch(boot.rest.root + "tempaloo-webp/v1" + path, {

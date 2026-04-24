@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api, boot, formatBytes, type AppState } from "../api";
 import { Badge, Button, Card, CardHeader, Input, QuotaRing, Stat, toast } from "../components/ui";
 
-export default function Overview({ state, onState }: { state: AppState; onState: (s: AppState) => void }) {
+export default function Overview({ state, onState, freeQuota }: { state: AppState; onState: (s: AppState) => void; freeQuota: number | null }) {
     const [key, setKey] = useState(state.license.key);
     const [activating, setActivating] = useState(false);
 
@@ -37,7 +37,11 @@ export default function Overview({ state, onState }: { state: AppState; onState:
                 <Card className="bg-gradient-to-br from-brand-50 to-white border-brand-200">
                     <CardHeader
                         title="Activate Tempaloo WebP"
-                        description="Generate a free key (150 images / month) or paste one you already have."
+                        description={
+                            freeQuota === null
+                                ? "Generate a free key or paste one you already have."
+                                : `Generate a free key (${freeQuota.toLocaleString()} images / month) or paste one you already have.`
+                        }
                         right={<Badge variant="brand">Free plan available</Badge>}
                     />
                     <div className="flex flex-col sm:flex-row gap-2">

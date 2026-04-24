@@ -1,19 +1,22 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { LogoMark } from "@/components/Logo";
 import { trackCtaClick, type TrackPlan } from "@/lib/track";
+import type { Plan as ApiPlan } from "@/lib/plans";
 
 type Theme = "light" | "dark";
 type Billing = "monthly" | "annual";
 
-interface Plan {
-    id: "free" | "starter" | "growth" | "business" | "unlimited";
+// Internal shape used by the pricing cards. Derived from the API Plan
+// (single source of truth) via `toCardPlan` below.
+interface CardPlan {
+    id: ApiPlan["code"];
     name: string;
     tagline: string;
     monthly: number;
-    annual: number;
+    annual: number;        // monthly-equivalent after the annual discount
     annualTotal: number;
     quota: string;
     quotaUnit: string;
@@ -24,54 +27,33 @@ interface Plan {
     cta: string;
 }
 
-const PLANS: Plan[] = [
-    {
-        id: "free", name: "Free",
-        tagline: "Try it. No card required.",
-        monthly: 0, annual: 0, annualTotal: 0,
-        quota: "250", quotaUnit: "/mo",
-        sites: "1 site",
-        features: ["WebP conversion", "1 credit per upload", "Automatic on upload", "Rollover 30 days"],
-        cta: "Start free",
-    },
-    {
-        id: "starter", name: "Starter",
-        tagline: "For a single blog or portfolio.",
-        monthly: 5, annual: 4, annualTotal: 48,
-        quota: "5,000", quotaUnit: "/mo",
-        sites: "1 site",
-        features: ["WebP + AVIF", "Unlimited bulk", "Rollover 30 days", "Email support (48h)"],
-        cta: "Start trial",
-    },
-    {
-        id: "growth", name: "Growth",
-        tagline: "For small agencies with a few sites.",
-        badge: "Popular", highlight: true,
-        monthly: 12, annual: 9.58, annualTotal: 115,
-        quota: "25,000", quotaUnit: "/mo",
-        sites: "5 sites",
-        features: ["WebP + AVIF", "5 sites per license", "Rollover 30 days", "Email support (24h)"],
-        cta: "Start trial",
-    },
-    {
-        id: "business", name: "Business",
-        tagline: "For agencies running many sites.",
-        monthly: 29, annual: 23.17, annualTotal: 278,
-        quota: "150,000", quotaUnit: "/mo",
-        sites: "Unlimited",
-        features: ["Everything in Growth", "Unlimited sites", "Direct API access", "Chat support (24h)"],
-        cta: "Start trial",
-    },
-    {
-        id: "unlimited", name: "Unlimited",
-        tagline: "For hosts, platforms, agencies at scale.",
-        monthly: 59, annual: 47.17, annualTotal: 566,
-        quota: "Unlimited", quotaUnit: "fair use 500k",
-        sites: "Unlimited",
-        features: ["Everything in Business", "Priority SLA", "Dedicated onboarding", "White-label reports (soon)"],
-        cta: "Talk to sales",
-    },
-];
+function toCardPlan(p: ApiPlan): CardPlan {
+    // Format raw numbers into the two-part "5,000 /mo" shape the cards expect.
+    let quota: string;
+    let quotaUnit: string;
+    if (p.imagesLimit === -1) {
+        quota = "Unlimited";
+        quotaUnit = p.fairUseCap ? `fair use ${(p.fairUseCap / 1000).toFixed(0)}k` : "";
+    } else {
+        quota = p.imagesLimit.toLocaleString("en-US");
+        quotaUnit = "/mo";
+    }
+    return {
+        id: p.code,
+        name: p.name,
+        tagline: p.tagline,
+        monthly: p.priceMonthly,
+        annual: p.priceAnnual > 0 ? p.priceAnnual / 12 : 0,
+        annualTotal: p.priceAnnual,
+        quota,
+        quotaUnit,
+        sites: p.sites,
+        badge: p.badge,
+        highlight: p.highlight,
+        features: p.features,
+        cta: p.cta,
+    };
+}
 
 const FAQS = [
     { q: "Do you charge per thumbnail like ShortPixel or Elementor?",
@@ -90,7 +72,7 @@ const FAQS = [
       a: "Yes, on Starter and above. AVIF produces ~20% smaller files than WebP at equivalent quality and is supported by every major modern browser." },
 ];
 
-const activateHref = (plan: Plan["id"], billing: Billing) => `/webp/activate?plan=${plan}&billing=${billing}`;
+const activateHref = (plan: CardPlan["id"], billing: Billing) => `/webp/activate?plan=${plan}&billing=${billing}`;
 
 function usePrefersReducedMotion(): boolean {
     const [reduced, setReduced] = useState(false);
@@ -162,11 +144,15 @@ function Reveal({ children, delay = 0, className = "" }: { children: ReactNode; 
     );
 }
 
-export function LandingPage() {
+export function LandingPage({ plans }: { plans: ApiPlan[] }) {
     const [theme, setThemeState] = useState<Theme>("dark");
     const [billing, setBilling] = useState<Billing>("annual");
     const [faqOpen, setFaqOpen] = useState<number>(0);
     const [scrolled, setScrolled] = useState(false);
+
+    // Convert the API shape to card shape once per render. useMemo because the
+    // conversion is referenced by multiple sections (Pricing, StickyMobileCTA).
+    const cardPlans = useMemo(() => plans.map(toCardPlan), [plans]);
 
     useEffect(() => {
         const stored = (typeof window !== "undefined" && localStorage.getItem("tempaloo-theme")) as Theme | null;
@@ -202,7 +188,7 @@ export function LandingPage() {
             <Reveal><Security /></Reveal>
             <Reveal><ThumbnailTrap /></Reveal>
             <Reveal><Comparison /></Reveal>
-            <Reveal><Pricing billing={billing} onBillingChange={setBilling} /></Reveal>
+            <Reveal><Pricing plans={cardPlans} billing={billing} onBillingChange={setBilling} /></Reveal>
             <Reveal><FAQ openIdx={faqOpen} onToggle={(i) => setFaqOpen(faqOpen === i ? -1 : i)} /></Reveal>
             <FinalCTA />
             <Footer />
@@ -963,8 +949,18 @@ function ThumbnailTrap() {
     );
 }
 
-function Pricing({ billing, onBillingChange }: { billing: Billing; onBillingChange: (b: Billing) => void }) {
-    const [free, starter, growth, business, unlimited] = PLANS;
+function Pricing({ plans, billing, onBillingChange }: { plans: CardPlan[]; billing: Billing; onBillingChange: (b: Billing) => void }) {
+    // Find plans by code so the layout doesn't depend on array order. If a
+    // code is missing from the feed (e.g., plan deprecated) the section
+    // simply omits that card instead of crashing.
+    const byCode = new Map(plans.map(p => [p.id, p]));
+    const starter = byCode.get("starter");
+    const growth = byCode.get("growth");
+    const business = byCode.get("business");
+    const free = byCode.get("free");
+    const unlimited = byCode.get("unlimited");
+    const featured = [starter, growth, business].filter((p): p is CardPlan => Boolean(p));
+    const small = [free, unlimited].filter((p): p is CardPlan => Boolean(p));
 
     return (
         <section id="pricing" className="pr2-pricing">
@@ -979,12 +975,12 @@ function Pricing({ billing, onBillingChange }: { billing: Billing; onBillingChan
                 </div>
 
                 <div className="pr2-pricing-featured">
-                    {[starter, growth, business].map((p) => (
+                    {featured.map((p) => (
                         <PlanCard key={p.id} plan={p} billing={billing} />
                     ))}
                 </div>
                 <div className="pr2-pricing-rows">
-                    {[free, unlimited].map((p) => (
+                    {small.map((p) => (
                         <SmallPlanRow key={p.id} plan={p} billing={billing} />
                     ))}
                 </div>
@@ -1008,7 +1004,7 @@ function BillingToggle({ value, onChange }: { value: Billing; onChange: (b: Bill
     );
 }
 
-function PlanCard({ plan, billing }: { plan: Plan; billing: Billing }) {
+function PlanCard({ plan, billing }: { plan: CardPlan; billing: Billing }) {
     const monthly = billing === "monthly" ? plan.monthly : plan.annual;
     const isFree = plan.id === "free";
 
@@ -1064,7 +1060,7 @@ function PlanCard({ plan, billing }: { plan: Plan; billing: Billing }) {
     );
 }
 
-function SmallPlanRow({ plan, billing }: { plan: Plan; billing: Billing }) {
+function SmallPlanRow({ plan, billing }: { plan: CardPlan; billing: Billing }) {
     const monthly = billing === "monthly" ? plan.monthly : plan.annual;
     const isFree = plan.id === "free";
     return (

@@ -75,6 +75,9 @@ class Tempaloo_WebP_Settings {
                     ],
                     TEMPALOO_WEBP_ACTIVATE_URL
                 ),
+                // Exposed so the React admin can fetch the public plans feed
+                // (GET /v1/plans) directly instead of hardcoding pricing.
+                'apiBase' => esc_url_raw( TEMPALOO_WEBP_API_BASE ),
                 'siteUrl' => home_url(),
                 'state'   => $state,
             ] ) . ';',

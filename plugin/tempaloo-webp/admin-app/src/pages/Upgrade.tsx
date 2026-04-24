@@ -1,76 +1,54 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import clsx from "clsx";
-import { FREEMIUS, type AppState, type PaidPlanCode } from "../api";
+import { FREEMIUS, fetchPlans, type AppState, type PaidPlanCode, type Plan } from "../api";
 import { Badge, Button, Card, CardHeader, Progress, toast } from "../components/ui";
 
 type Billing = "monthly" | "annual";
 
-interface TierDef {
-    code: PaidPlanCode;
-    name: string;
-    tagline: string;
-    images: string;
-    sites: string;
-    bullets: string[];
-    badge?: string;
-}
-
-const TIERS: TierDef[] = [
-    {
-        code: "starter",
-        name: "Starter",
-        tagline: "Single blog or portfolio",
-        images: "5 000 / month",
-        sites: "1 site",
-        bullets: ["WebP + AVIF", "Unlimited bulk", "Credit rollover 30 days", "Email support (48h)"],
-    },
-    {
-        code: "growth",
-        name: "Growth",
-        tagline: "Small agency, a few sites",
-        images: "25 000 / month",
-        sites: "5 sites",
-        bullets: ["Everything in Starter", "5 sites / license", "Priority queue", "Email support (24h)"],
-        badge: "Most popular",
-    },
-    {
-        code: "business",
-        name: "Business",
-        tagline: "Agency running many sites",
-        images: "150 000 / month",
-        sites: "Unlimited sites",
-        bullets: ["Everything in Growth", "Unlimited sites", "Direct API access", "Chat support"],
-    },
-    {
-        code: "unlimited",
-        name: "Unlimited",
-        tagline: "Hosts, platforms, scale",
-        images: "Unlimited",
-        sites: "Unlimited",
-        bullets: ["Everything in Business", "Priority SLA", "Dedicated onboarding", "White-label (soon)"],
-    },
-];
-
+/**
+ * Upgrade tab — pricing card grid. Plans are now fetched from GET /v1/plans
+ * (the public plans feed), so copy and prices can't drift from the DB /
+ * landing page. The fallback skeleton shows while the feed loads; if it fails
+ * we surface a toast so the user isn't stuck staring at a blank grid.
+ */
 export default function Upgrade({ state }: { state: AppState }) {
     const [billing, setBilling] = useState<Billing>("annual");
     const [opening, setOpening] = useState<PaidPlanCode | null>(null);
+    const [plans, setPlans] = useState<Plan[] | null>(null);
+    const [loadError, setLoadError] = useState<string | null>(null);
+
+    useEffect(() => {
+        let alive = true;
+        fetchPlans()
+            .then((all) => { if (alive) setPlans(all); })
+            .catch((e: unknown) => {
+                if (!alive) return;
+                const msg = e instanceof Error ? e.message : "Could not load plans";
+                setLoadError(msg);
+                toast("error", msg);
+            });
+        return () => { alive = false; };
+    }, []);
+
+    const paidPlans = (plans ?? []).filter((p): p is Plan & { freemiusPlanId: number } =>
+        p.code !== "free" && p.freemiusPlanId !== null);
 
     const usagePct = computeUsagePct(state);
     const daysToReset = daysUntilMonthReset();
     const currentCode = state.license.valid ? state.license.plan : "free";
 
-    const openCheckout = async (code: PaidPlanCode) => {
-        setOpening(code);
+    const openCheckout = async (p: Plan & { freemiusPlanId: number }) => {
+        setOpening(p.code as PaidPlanCode);
         try {
             const mod = await import("@freemius/checkout");
             const Ctor = mod.Checkout as unknown as new (o: unknown) => { open(): void };
-            const planCfg = FREEMIUS.plans[code];
 
             const options = {
                 product_id: FREEMIUS.productId,
                 public_key: FREEMIUS.publicKey,
-                plan_id: planCfg.id,
-                licenses: planCfg.licenses,
+                plan_id: p.freemiusPlanId,
+                // maxSites: -1 (unlimited) → 0 tells Freemius "site-less license".
+                licenses: p.maxSites === -1 ? 0 : p.maxSites,
                 currency: "eur",
                 billing_cycle: billing,
                 trial: "paid",
@@ -137,61 +115,70 @@ export default function Upgrade({ state }: { state: AppState }) {
             </div>
 
             {/* Tier grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-                {TIERS.map((t) => {
-                    const cfg = FREEMIUS.plans[t.code];
-                    const price = billing === "annual" ? cfg.annual / 12 : cfg.monthly;
-                    const isCurrent = currentCode === t.code;
-                    return (
-                        <div
-                            key={t.code}
-                            className={clsx(
-                                "rounded-xl border p-5 flex flex-col",
-                                t.badge ? "border-brand-500 ring-2 ring-brand-100 relative" : "border-ink-200",
-                                isCurrent && "bg-ink-50",
-                            )}
-                        >
-                            {t.badge && (
-                                <span className="absolute -top-2.5 left-4 rounded-full bg-gradient-to-r from-brand-500 to-purple-500 text-white text-[10px] font-bold uppercase tracking-wider px-2 py-0.5">
-                                    {t.badge}
-                                </span>
-                            )}
-                            <div className="flex items-baseline justify-between">
-                                <h3 className="text-base font-semibold text-ink-900">{t.name}</h3>
-                                {isCurrent && <Badge variant="success">Current</Badge>}
-                            </div>
-                            <p className="mt-1 text-xs text-ink-500">{t.tagline}</p>
-                            <div className="mt-4">
-                                <div className="flex items-baseline gap-1">
-                                    <span className="text-2xl font-bold text-ink-900">€{price % 1 === 0 ? price : price.toFixed(2)}</span>
-                                    <span className="text-xs text-ink-500">/mo</span>
-                                </div>
-                                <div className="text-[11px] text-ink-500">
-                                    {billing === "annual" ? `€${cfg.annual} billed yearly` : "billed monthly"}
-                                </div>
-                            </div>
-                            <div className="mt-3 text-sm font-medium text-ink-900">{t.images}</div>
-                            <div className="text-xs text-ink-500">{t.sites}</div>
-                            <ul className="mt-3 space-y-1.5 text-xs text-ink-700 flex-1">
-                                {t.bullets.map((b) => (
-                                    <li key={b} className="flex items-start gap-1.5">
-                                        <span className="mt-1 h-1 w-1 rounded-full bg-brand-500" /> {b}
-                                    </li>
-                                ))}
-                            </ul>
-                            <Button
-                                onClick={() => openCheckout(t.code)}
-                                loading={opening === t.code}
-                                variant={t.badge ? "primary" : "secondary"}
-                                className="mt-4 w-full"
-                                disabled={isCurrent}
+            {plans === null && !loadError ? (
+                <TierSkeleton />
+            ) : loadError ? (
+                <div className="text-center text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-4 py-3">
+                    Couldn't load plans: {loadError}. <button onClick={() => window.location.reload()} className="underline">Reload</button>.
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                    {paidPlans.map((p) => {
+                        const priceMonthly = p.priceMonthlyCents / 100;
+                        const priceAnnualPerMonth = p.priceAnnualCents / 12 / 100;
+                        const price = billing === "annual" ? priceAnnualPerMonth : priceMonthly;
+                        const isCurrent = currentCode === p.code;
+                        return (
+                            <div
+                                key={p.code}
+                                className={clsx(
+                                    "rounded-xl border p-5 flex flex-col",
+                                    p.badge ? "border-brand-500 ring-2 ring-brand-100 relative" : "border-ink-200",
+                                    isCurrent && "bg-ink-50",
+                                )}
                             >
-                                {isCurrent ? "Current plan" : "Try 7 days free →"}
-                            </Button>
-                        </div>
-                    );
-                })}
-            </div>
+                                {p.badge && (
+                                    <span className="absolute -top-2.5 left-4 rounded-full bg-gradient-to-r from-brand-500 to-purple-500 text-white text-[10px] font-bold uppercase tracking-wider px-2 py-0.5">
+                                        {p.badge}
+                                    </span>
+                                )}
+                                <div className="flex items-baseline justify-between">
+                                    <h3 className="text-base font-semibold text-ink-900">{p.name}</h3>
+                                    {isCurrent && <Badge variant="success">Current</Badge>}
+                                </div>
+                                <p className="mt-1 text-xs text-ink-500">{p.tagline}</p>
+                                <div className="mt-4">
+                                    <div className="flex items-baseline gap-1">
+                                        <span className="text-2xl font-bold text-ink-900">€{price % 1 === 0 ? price : price.toFixed(2)}</span>
+                                        <span className="text-xs text-ink-500">/mo</span>
+                                    </div>
+                                    <div className="text-[11px] text-ink-500">
+                                        {billing === "annual" ? `€${(p.priceAnnualCents / 100).toFixed(0)} billed yearly` : "billed monthly"}
+                                    </div>
+                                </div>
+                                <div className="mt-3 text-sm font-medium text-ink-900">{formatImages(p)}</div>
+                                <div className="text-xs text-ink-500">{formatSites(p)}</div>
+                                <ul className="mt-3 space-y-1.5 text-xs text-ink-700 flex-1">
+                                    {p.bullets.map((b) => (
+                                        <li key={b} className="flex items-start gap-1.5">
+                                            <span className="mt-1 h-1 w-1 rounded-full bg-brand-500" /> {b}
+                                        </li>
+                                    ))}
+                                </ul>
+                                <Button
+                                    onClick={() => openCheckout(p)}
+                                    loading={opening === p.code}
+                                    variant={p.badge ? "primary" : "secondary"}
+                                    className="mt-4 w-full"
+                                    disabled={isCurrent}
+                                >
+                                    {isCurrent ? "Current plan" : "Try 7 days free →"}
+                                </Button>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
 
             {/* Trust badges */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-center text-xs">
@@ -203,6 +190,28 @@ export default function Upgrade({ state }: { state: AppState }) {
             <p className="text-center text-[11px] text-ink-500">
                 Payments securely handled by Freemius · Instant upgrade, no manual migration · Your original images stay untouched.
             </p>
+        </div>
+    );
+}
+
+function formatImages(p: Plan): string {
+    if (p.imagesPerMonth === -1) {
+        return p.fairUseCap ? `Unlimited (fair use ${(p.fairUseCap / 1000).toFixed(0)}k)` : "Unlimited";
+    }
+    return `${p.imagesPerMonth.toLocaleString()} / month`;
+}
+
+function formatSites(p: Plan): string {
+    if (p.maxSites === -1) return "Unlimited sites";
+    return p.maxSites === 1 ? "1 site" : `${p.maxSites} sites`;
+}
+
+function TierSkeleton() {
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="rounded-xl border border-ink-200 p-5 h-[360px] bg-ink-50/50 animate-pulse" />
+            ))}
         </div>
     );
 }

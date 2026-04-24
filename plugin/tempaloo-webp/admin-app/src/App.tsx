@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { api, boot, type AppState } from "./api";
+import { useEffect, useMemo, useState } from "react";
+import { api, boot, fetchPlans, type AppState, type Plan } from "./api";
 import { Badge, Tabs, Toasts, toast } from "./components/ui";
 import Overview from "./pages/Overview";
 import Bulk from "./pages/Bulk";
@@ -155,6 +155,20 @@ export default function App() {
     const [state, setState] = useState<AppState>(boot.state);
     const [tab, setTab] = useState<Tab>("overview");
     const [retrying, setRetrying] = useState(false);
+    // Cache plans at the root so every child (Overview banner, Upgrade grid)
+    // gets the same copy without re-fetching. If the feed fails we fall back
+    // to null everywhere — each component handles that gracefully.
+    const [plans, setPlans] = useState<Plan[] | null>(null);
+
+    useEffect(() => {
+        let alive = true;
+        fetchPlans()
+            .then((all) => { if (alive) setPlans(all); })
+            .catch(() => { /* silent — each consumer shows its own fallback */ });
+        return () => { alive = false; };
+    }, []);
+
+    const freeQuota = plans?.find(p => p.code === "free")?.imagesPerMonth ?? null;
 
     const runRetry = async () => {
         setRetrying(true);
@@ -220,7 +234,11 @@ export default function App() {
                     {!state.license.valid && (
                         <div className="mt-6 rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 p-4 text-white">
                             <div className="text-xs uppercase tracking-wider opacity-80">Free plan</div>
-                            <div className="mt-1 text-sm font-semibold leading-tight">150 images per month — no credit card.</div>
+                            <div className="mt-1 text-sm font-semibold leading-tight">
+                                {freeQuota === null
+                                    ? "Free plan — no credit card."
+                                    : `${freeQuota.toLocaleString()} images per month — no credit card.`}
+                            </div>
                             <a
                                 href={boot.activateUrl}
                                 target="_blank"
@@ -249,7 +267,7 @@ export default function App() {
                     />
                     <RetryQueueBanner state={state} onRunRetry={runRetry} busy={retrying} />
                     <QuotaBanner state={state} onUpgrade={() => setTab("upgrade")} />
-                    {tab === "overview" && <Overview state={state} onState={setState} />}
+                    {tab === "overview" && <Overview state={state} onState={setState} freeQuota={freeQuota} />}
                     {tab === "bulk"     && <Bulk state={state} onUpgrade={() => setTab("upgrade")} />}
                     {tab === "settings" && <Settings state={state} onState={setState} />}
                     {tab === "upgrade"  && <Upgrade state={state} />}

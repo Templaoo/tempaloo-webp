@@ -12,7 +12,9 @@
     "build": "tsc -p .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "job:unlimited-watch": "tsx src/jobs/unlimited-watch.ts"
+    "job:unlimited-watch": "tsx src/jobs/unlimited-watch.ts",
+    "migrate": "node scripts/migrate.mjs",
+    "reset:dev": "node scripts/reset-dev.mjs"
   },
   "dependencies": {
     "@fastify/helmet": "^11.1.1",
@@ -29,6 +31,7 @@
   "devDependencies": {
     "@types/node": "^22.7.0",
     "@types/pg": "^8.11.10",
+    "mysql2": "^3.11.0",
     "tsx": "^4.19.0",
     "typescript": "^5.6.2",
     "vitest": "^2.1.0"

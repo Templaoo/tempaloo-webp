@@ -23,17 +23,28 @@ CREATE TABLE plans (
     price_monthly_cents  INTEGER NOT NULL DEFAULT 0,    -- EUR cents
     price_annual_cents   INTEGER NOT NULL DEFAULT 0,    -- EUR cents
     fair_use_cap         INTEGER,                       -- for Unlimited
+    -- Marketing + Freemius fields (added in 003_plans_marketing.sql) so that
+    -- the landing page, plugin admin, and checkout overlay all read the same
+    -- source of truth instead of hardcoding copy.
+    freemius_plan_id     BIGINT UNIQUE,                 -- Freemius plan id per code (NULL for free)
+    tagline              TEXT NOT NULL DEFAULT '',
+    bullets              TEXT[] NOT NULL DEFAULT '{}',
+    badge                TEXT,                          -- e.g. 'Popular' on the Growth card
+    cta_label            TEXT NOT NULL DEFAULT 'Get started',
+    is_featured          BOOLEAN NOT NULL DEFAULT FALSE,
+    sort_order           SMALLINT NOT NULL DEFAULT 0,
+    is_public            BOOLEAN NOT NULL DEFAULT TRUE,
     is_active            BOOLEAN NOT NULL DEFAULT TRUE,
     created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-INSERT INTO plans (code, name, images_per_month, max_sites, supports_avif, supports_cdn, supports_api_direct, price_monthly_cents, price_annual_cents, fair_use_cap) VALUES
-    ('free',      'Free',      250,       1,  FALSE, FALSE, FALSE,     0,      0, NULL),
-    ('starter',   'Starter',   5000,      1,  TRUE,  FALSE, FALSE,   500,   4800, NULL),
-    ('growth',    'Growth',    25000,     5,  TRUE,  TRUE,  FALSE,  1200,  11500, NULL),
-    ('business',  'Business',  150000,   -1,  TRUE,  TRUE,  TRUE,   2900,  27800, NULL),
-    ('unlimited', 'Unlimited', -1,       -1,  TRUE,  TRUE,  TRUE,   5900,  56600, 500000);
+INSERT INTO plans (code, name, images_per_month, max_sites, supports_avif, supports_cdn, supports_api_direct, price_monthly_cents, price_annual_cents, fair_use_cap, freemius_plan_id, tagline, bullets, badge, cta_label, is_featured, sort_order) VALUES
+    ('free',      'Free',      250,       1,  FALSE, FALSE, FALSE,     0,      0, NULL,   NULL,  'Try it. No card required.',                 ARRAY['WebP conversion','1 credit per upload','Automatic on upload','Rollover 30 days'],  NULL,      'Start free',    FALSE, 1),
+    ('starter',   'Starter',   5000,      1,  TRUE,  FALSE, FALSE,   500,   4800, NULL,  46755,  'For a single blog or portfolio.',            ARRAY['WebP + AVIF','Unlimited bulk','Rollover 30 days','Email support (48h)'],            NULL,      'Start trial',   FALSE, 2),
+    ('growth',    'Growth',    25000,     5,  TRUE,  TRUE,  FALSE,  1200,  11500, NULL,  46756,  'For small agencies with a few sites.',       ARRAY['WebP + AVIF','5 sites per license','Rollover 30 days','Email support (24h)'],       'Popular', 'Start trial',   TRUE,  3),
+    ('business',  'Business',  150000,   -1,  TRUE,  TRUE,  TRUE,   2900,  27800, NULL,  46757,  'For agencies running many sites.',           ARRAY['Everything in Growth','Unlimited sites','Direct API access','Chat support (24h)'],  NULL,      'Start trial',   FALSE, 4),
+    ('unlimited', 'Unlimited', -1,       -1,  TRUE,  TRUE,  TRUE,   5900,  56600, 500000, 46758, 'For hosts, platforms, agencies at scale.',   ARRAY['Everything in Business','Priority SLA','Dedicated onboarding','White-label (soon)'], NULL,      'Talk to sales', FALSE, 5);
 
 -- ---------------------------------------------------------------
 -- users — customers (linked to Freemius user)

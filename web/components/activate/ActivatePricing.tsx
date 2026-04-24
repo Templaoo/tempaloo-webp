@@ -2,13 +2,14 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import { PLANS, type Plan } from "@/lib/plans";
+import { type Plan } from "@/lib/plans";
 import type { Billing } from "@/components/pricing/BillingToggle";
 import { LogoMark } from "@/components/Logo";
 
 type PlanCode = Plan["code"];
 
 interface Props {
+    plans: Plan[];
     billing: Billing;
     onBillingChange: (b: Billing) => void;
     onChoose: (code: PlanCode) => void;
@@ -16,7 +17,7 @@ interface Props {
     authedEmail?: string | null;
 }
 
-export function ActivatePricing({ billing, onBillingChange, onChoose, initialPlan, authedEmail }: Props) {
+export function ActivatePricing({ plans, billing, onBillingChange, onChoose, initialPlan, authedEmail }: Props) {
     useEffect(() => {
         const stored = typeof window !== "undefined" ? localStorage.getItem("tempaloo-theme") : null;
         if (stored === "light" || stored === "dark") {
@@ -51,7 +52,7 @@ export function ActivatePricing({ billing, onBillingChange, onChoose, initialPla
             <section className="pr3-grid-section">
                 <div className="app-container">
                     <div className="pr3-grid">
-                        {PLANS.map((p) => (
+                        {plans.map((p) => (
                             <PricingCard
                                 key={p.code}
                                 plan={p}
