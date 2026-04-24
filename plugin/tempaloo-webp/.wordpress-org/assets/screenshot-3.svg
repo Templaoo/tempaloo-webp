@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Screenshot 3: Media library with WEBP badges -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+  <rect width="1280" height="720" fill="#F5F5F5"/>
+  <rect x="0" y="0" width="1280" height="44" fill="#E8E8E8"/>
+  <circle cx="24" cy="22" r="6" fill="#FF5F57"/>
+  <circle cx="48" cy="22" r="6" fill="#FEBC2E"/>
+  <circle cx="72" cy="22" r="6" fill="#28C840"/>
+  <text x="640" y="28" text-anchor="middle" fill="#666"
+        font-family="ui-monospace, monospace" font-size="12">
+    wp-admin / upload.php
+  </text>
+
+  <!-- Page title + toolbar -->
+  <g transform="translate(60 90)">
+    <text fill="#0A0A0A"
+          font-family="ui-sans-serif, system-ui, sans-serif"
+          font-size="24" font-weight="400">Media Library</text>
+
+    <g transform="translate(800 -4)">
+      <rect width="200" height="34" rx="4" fill="#FFFFFF" stroke="#CCC"/>
+      <text x="14" y="22" fill="#999"
+            font-family="ui-sans-serif, system-ui, sans-serif" font-size="13">
+        Search media…
+      </text>
+      <rect x="210" y="0" width="150" height="34" rx="4" fill="#0A0A0A"/>
+      <text x="285" y="22" text-anchor="middle" fill="#FAFAFA"
+            font-family="ui-sans-serif, system-ui, sans-serif"
+            font-size="13" font-weight="500">Add New</text>
+    </g>
+  </g>
+
+  <!-- Legend / filter -->
+  <g transform="translate(60 150)">
+    <rect width="160" height="30" rx="15" fill="#E8F7EE" stroke="#BEE6CD"/>
+    <circle cx="14" cy="15" r="4" fill="#17C964"/>
+    <text x="28" y="20" fill="#0E7934"
+          font-family="ui-sans-serif, system-ui, sans-serif"
+          font-size="12" font-weight="500">
+      Tempaloo: 72/84 done
+    </text>
+
+    <text x="180" y="20" fill="#999"
+          font-family="ui-sans-serif, system-ui, sans-serif" font-size="12">
+      ·  12 pending auto-convert
+    </text>
+  </g>
+
+  <!-- Grid of images (4 cols × 3 rows) -->
+  <g transform="translate(60 210)">
+    <!-- Image tile helper: 280x150 with WEBP badge overlay -->
+    <!-- Row 1 -->
+    <g transform="translate(0 0)">
+      <rect width="280" height="150" rx="6" fill="#FDBA74"/>
+      <rect x="20" y="40" width="240" height="90" rx="4" fill="#EA580C" opacity="0.5"/>
+      <circle cx="220" cy="50" r="20" fill="#FDE68A"/>
+      <g transform="translate(8 8)">
+        <rect width="54" height="20" rx="4" fill="#0A0A0A"/>
+        <text x="27" y="14" text-anchor="middle" fill="#FAFAFA"
+              font-family="ui-monospace, monospace" font-size="10" font-weight="600">WEBP</text>
+      </g>
+    </g>
+    <g transform="translate(300 0)">
+      <rect width="280" height="150" rx="6" fill="#86EFAC"/>
+      <rect x="40" y="20" width="200" height="110" rx="4" fill="#16A34A" opacity="0.4"/>
+      <g transform="translate(8 8)">
+        <rect width="54" height="20" rx="4" fill="#0A0A0A"/>
+        <text x="27" y="14" text-anchor="middle" fill="#FAFAFA"
+              font-family="ui-monospace, monospace" font-size="10" font-weight="600">WEBP</text>
+      </g>
+    </g>
+    <g transform="translate(600 0)">
+      <rect width="280" height="150" rx="6" fill="#93C5FD"/>
+      <rect x="20" y="40" width="240" height="90" rx="4" fill="#2563EB" opacity="0.4"/>
+      <rect x="20" y="20" width="100" height="20" rx="3" fill="#FFFFFF" opacity="0.7"/>
+      <g transform="translate(8 8)">
+        <rect width="54" height="20" rx="4" fill="#0A0A0A"/>
+        <text x="27" y="14" text-anchor="middle" fill="#FAFAFA"
+              font-family="ui-monospace, monospace" font-size="10" font-weight="600">WEBP</text>
+      </g>
+    </g>
+    <g transform="translate(900 0)">
+      <rect width="280" height="150" rx="6" fill="#F5F5F5" stroke="#E0E0E0"/>
+      <!-- No badge: this one is not yet converted -->
+      <rect x="80" y="50" width="120" height="50" rx="4" fill="#CCC"/>
+      <text x="140" y="80" text-anchor="middle" fill="#999"
+            font-family="ui-monospace, monospace" font-size="11">
+        queued
+      </text>
+      <circle cx="268" cy="14" r="8" fill="#F5A524">
+        <animate attributeName="opacity" values="1;0.4;1" dur="2s" repeatCount="indefinite"/>
+      </circle>
+    </g>
+
+    <!-- Row 2 -->
+    <g transform="translate(0 170)">
+      <rect width="280" height="150" rx="6" fill="#FBCFE8"/>
+      <rect x="20" y="20" width="240" height="110" rx="4" fill="#DB2777" opacity="0.4"/>
+      <g transform="translate(8 8)">
+        <rect width="54" height="20" rx="4" fill="#0A0A0A"/>
+        <text x="27" y="14" text-anchor="middle" fill="#FAFAFA"
+              font-family="ui-monospace, monospace" font-size="10" font-weight="600">WEBP</text>
+      </g>
+    </g>
+    <g transform="translate(300 170)">
+      <rect width="280" height="150" rx="6" fill="#C4B5FD"/>
+      <rect x="40" y="40" width="200" height="90" rx="4" fill="#7C3AED" opacity="0.4"/>
+      <g transform="translate(8 8)">
+        <rect width="54" height="20" rx="4" fill="#0A0A0A"/>
+        <text x="27" y="14" text-anchor="middle" fill="#FAFAFA"
+              font-family="ui-monospace, monospace" font-size="10" font-weight="600">WEBP</text>
+      </g>
+    </g>
+    <g transform="translate(600 170)">
+      <rect width="280" height="150" rx="6" fill="#FEE2B0"/>
+      <rect x="20" y="40" width="240" height="90" rx="4" fill="#D97706" opacity="0.4"/>
+      <g transform="translate(8 8)">
+        <rect width="54" height="20" rx="4" fill="#0A0A0A"/>
+        <text x="27" y="14" text-anchor="middle" fill="#FAFAFA"
+              font-family="ui-monospace, monospace" font-size="10" font-weight="600">WEBP</text>
+      </g>
+    </g>
+    <g transform="translate(900 170)">
+      <rect width="280" height="150" rx="6" fill="#A7F3D0"/>
+      <rect x="20" y="40" width="240" height="90" rx="4" fill="#059669" opacity="0.4"/>
+      <g transform="translate(8 8)">
+        <rect width="74" height="20" rx="4" fill="#0A0A0A"/>
+        <text x="37" y="14" text-anchor="middle" fill="#FAFAFA"
+              font-family="ui-monospace, monospace" font-size="10" font-weight="600">AVIF</text>
+      </g>
+    </g>
+
+    <!-- Row 3 -->
+    <g transform="translate(0 340)">
+      <rect width="280" height="150" rx="6" fill="#BAE6FD"/>
+      <rect x="20" y="20" width="240" height="110" rx="4" fill="#0284C7" opacity="0.4"/>
+      <g transform="translate(8 8)">
+        <rect width="54" height="20" rx="4" fill="#0A0A0A"/>
+        <text x="27" y="14" text-anchor="middle" fill="#FAFAFA"
+              font-family="ui-monospace, monospace" font-size="10" font-weight="600">WEBP</text>
+      </g>
+    </g>
+    <g transform="translate(300 340)">
+      <rect width="280" height="150" rx="6" fill="#FECACA"/>
+      <rect x="40" y="40" width="200" height="90" rx="4" fill="#DC2626" opacity="0.4"/>
+      <g transform="translate(8 8)">
+        <rect width="54" height="20" rx="4" fill="#0A0A0A"/>
+        <text x="27" y="14" text-anchor="middle" fill="#FAFAFA"
+              font-family="ui-monospace, monospace" font-size="10" font-weight="600">WEBP</text>
+      </g>
+    </g>
+    <g transform="translate(600 340)">
+      <rect width="280" height="150" rx="6" fill="#E5E7EB" stroke="#D4D4D4"/>
+      <text x="140" y="80" text-anchor="middle" fill="#999"
+            font-family="ui-sans-serif, system-ui, sans-serif" font-size="12">
+        Unsupported format
+      </text>
+    </g>
+    <g transform="translate(900 340)">
+      <rect width="280" height="150" rx="6" fill="#F3E8FF"/>
+      <rect x="40" y="40" width="200" height="90" rx="4" fill="#9333EA" opacity="0.4"/>
+      <g transform="translate(8 8)">
+        <rect width="54" height="20" rx="4" fill="#0A0A0A"/>
+        <text x="27" y="14" text-anchor="middle" fill="#FAFAFA"
+              font-family="ui-monospace, monospace" font-size="10" font-weight="600">WEBP</text>
+      </g>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Screenshot 2: Bulk conversion in progress -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+  <rect width="1280" height="720" fill="#F5F5F5"/>
+  <rect x="0" y="0" width="1280" height="44" fill="#E8E8E8"/>
+  <circle cx="24" cy="22" r="6" fill="#FF5F57"/>
+  <circle cx="48" cy="22" r="6" fill="#FEBC2E"/>
+  <circle cx="72" cy="22" r="6" fill="#28C840"/>
+  <text x="640" y="28" text-anchor="middle" fill="#666"
+        font-family="ui-monospace, monospace" font-size="12">
+    wp-admin / tempaloo-webp / bulk
+  </text>
+
+  <!-- Title -->
+  <text x="60" y="120" fill="#0A0A0A"
+        font-family="ui-sans-serif, system-ui, sans-serif"
+        font-size="24" font-weight="600" letter-spacing="-0.5">
+    Bulk conversion
+  </text>
+  <text x="60" y="150" fill="#666"
+        font-family="ui-sans-serif, system-ui, sans-serif" font-size="13">
+    Convert images already in your media library. 1 credit per image — all sizes included.
+  </text>
+
+  <!-- Action buttons -->
+  <g transform="translate(60 180)">
+    <rect x="0" y="0" width="120" height="40" rx="8" fill="#FFFFFF" stroke="#E0E0E0"/>
+    <text x="60" y="26" text-anchor="middle" fill="#0A0A0A"
+          font-family="ui-sans-serif, system-ui, sans-serif"
+          font-size="13" font-weight="500">Scan library</text>
+
+    <rect x="130" y="0" width="150" height="40" rx="8" fill="#0A0A0A"/>
+    <text x="205" y="26" text-anchor="middle" fill="#FAFAFA"
+          font-family="ui-sans-serif, system-ui, sans-serif"
+          font-size="13" font-weight="500">Start conversion</text>
+
+    <rect x="290" y="0" width="90" height="40" rx="8" fill="none" stroke="#E0E0E0"/>
+    <text x="335" y="26" text-anchor="middle" fill="#666"
+          font-family="ui-sans-serif, system-ui, sans-serif"
+          font-size="13">Cancel</text>
+  </g>
+
+  <!-- Progress block -->
+  <g transform="translate(60 260)">
+    <rect width="1160" height="100" rx="12" fill="#FFFFFF" stroke="#E8E8E8"/>
+
+    <!-- Progress bar -->
+    <text x="24" y="36" fill="#0A0A0A"
+          font-family="ui-monospace, monospace" font-size="13" font-weight="500">
+      Converting 142 / 347
+    </text>
+    <text x="1136" y="36" text-anchor="end" fill="#17C964"
+          font-family="ui-monospace, monospace" font-size="13" font-weight="500">
+      41%
+    </text>
+
+    <rect x="24" y="52" width="1112" height="10" rx="5" fill="#EAEAEA"/>
+    <rect x="24" y="52" width="456" height="10" rx="5" fill="#0A0A0A"/>
+
+    <text x="24" y="84" fill="#666"
+          font-family="ui-sans-serif, system-ui, sans-serif" font-size="12">
+      138 succeeded  ·  4 retrying  ·  est. 2 min remaining
+    </text>
+  </g>
+
+  <!-- Recent activity list -->
+  <g transform="translate(60 400)">
+    <text x="0" y="0" fill="#999"
+          font-family="ui-monospace, monospace" font-size="11" letter-spacing="0.5">
+      RECENT CONVERSIONS
+    </text>
+    <rect x="0" y="16" width="1160" height="280" rx="12" fill="#FFFFFF" stroke="#E8E8E8"/>
+
+    <!-- rows -->
+    <g transform="translate(24 48)">
+      <!-- Row 1 -->
+      <g transform="translate(0 0)">
+        <rect width="40" height="40" rx="6" fill="#E8E8E8"/>
+        <rect x="4" y="4" width="32" height="32" rx="3" fill="#C4C4C4"/>
+        <text x="56" y="18" fill="#0A0A0A"
+              font-family="ui-sans-serif, system-ui, sans-serif"
+              font-size="14" font-weight="500">sunset-portfolio.jpg</text>
+        <text x="56" y="34" fill="#666"
+              font-family="ui-monospace, monospace" font-size="11">
+          1.84 MB → 412 KB  ·  6 sizes bundled
+        </text>
+        <g transform="translate(1040 12)">
+          <rect width="56" height="22" rx="4" fill="#0A0A0A"/>
+          <text x="28" y="15" text-anchor="middle" fill="#FAFAFA"
+                font-family="ui-monospace, monospace" font-size="11" font-weight="600">WEBP</text>
+        </g>
+      </g>
+
+      <line x1="0" y1="58" x2="1112" y2="58" stroke="#F5F5F5"/>
+
+      <!-- Row 2 -->
+      <g transform="translate(0 72)">
+        <rect width="40" height="40" rx="6" fill="#FED7AA"/>
+        <text x="56" y="18" fill="#0A0A0A"
+              font-family="ui-sans-serif, system-ui, sans-serif"
+              font-size="14" font-weight="500">product-hero.png</text>
+        <text x="56" y="34" fill="#666"
+              font-family="ui-monospace, monospace" font-size="11">
+          2.41 MB → 518 KB  ·  8 sizes bundled
+        </text>
+        <g transform="translate(1040 12)">
+          <rect width="56" height="22" rx="4" fill="#0A0A0A"/>
+          <text x="28" y="15" text-anchor="middle" fill="#FAFAFA"
+                font-family="ui-monospace, monospace" font-size="11" font-weight="600">WEBP</text>
+        </g>
+      </g>
+
+      <line x1="0" y1="130" x2="1112" y2="130" stroke="#F5F5F5"/>
+
+      <!-- Row 3 -->
+      <g transform="translate(0 144)">
+        <rect width="40" height="40" rx="6" fill="#BFDBFE"/>
+        <text x="56" y="18" fill="#0A0A0A"
+              font-family="ui-sans-serif, system-ui, sans-serif"
+              font-size="14" font-weight="500">team-photo.jpg</text>
+        <text x="56" y="34" fill="#666"
+              font-family="ui-monospace, monospace" font-size="11">
+          Converting… 3/8 sizes
+        </text>
+        <g transform="translate(1040 12)">
+          <rect width="56" height="22" rx="4" fill="#E8E8E8"/>
+          <text x="28" y="15" text-anchor="middle" fill="#666"
+                font-family="ui-monospace, monospace" font-size="11" font-weight="600">…</text>
+        </g>
+        <circle cx="1120" cy="23" r="6" fill="#17C964" opacity="0.6">
+          <animate attributeName="opacity" values="0.6;1;0.6" dur="1.5s" repeatCount="indefinite"/>
+        </circle>
+      </g>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Rounded-square brand background (matches iOS icon radius ≈ 22%) -->
+  <rect width="256" height="256" rx="56" ry="56" fill="#0A0A0A"/>
+
+  <!-- Subtle diagonal accent: a faint gradient stripe for depth -->
+  <defs>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FAFAFA" stop-opacity="0.06"/>
+      <stop offset="1" stop-color="#FAFAFA" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="56" ry="56" fill="url(#accent)"/>
+
+  <!-- Slash-T mark, scaled from the 24px grid in components/Logo.tsx -->
+  <!-- Original path: M4 7 L7 4 L20 4 L20 9 L14 9 L14 20 L10 20 L10 9 L4 9 Z -->
+  <g transform="translate(128 128) scale(6.67) translate(-12 -12)">
+    <path d="M4 7 L7 4 L20 4 L20 9 L14 9 L14 20 L10 20 L10 9 L4 9 Z" fill="#FAFAFA"/>
+  </g>
+</svg>

@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Screenshot 4: Settings panel -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+  <rect width="1280" height="720" fill="#F5F5F5"/>
+  <rect x="0" y="0" width="1280" height="44" fill="#E8E8E8"/>
+  <circle cx="24" cy="22" r="6" fill="#FF5F57"/>
+  <circle cx="48" cy="22" r="6" fill="#FEBC2E"/>
+  <circle cx="72" cy="22" r="6" fill="#28C840"/>
+  <text x="640" y="28" text-anchor="middle" fill="#666"
+        font-family="ui-monospace, monospace" font-size="12">
+    wp-admin / tempaloo-webp / settings
+  </text>
+
+  <!-- Sidebar tabs -->
+  <g transform="translate(60 90)">
+    <rect width="200" height="560" rx="12" fill="#FFFFFF" stroke="#E8E8E8"/>
+
+    <g transform="translate(12 16)">
+      <text x="4" y="16" fill="#999"
+            font-family="ui-monospace, monospace" font-size="10" letter-spacing="0.5">PLUGIN</text>
+    </g>
+
+    <!-- Overview (not selected) -->
+    <g transform="translate(12 48)">
+      <rect width="176" height="36" rx="6" fill="transparent"/>
+      <text x="16" y="23" fill="#666"
+            font-family="ui-sans-serif, system-ui, sans-serif" font-size="13">Overview</text>
+    </g>
+    <!-- Bulk (not selected) -->
+    <g transform="translate(12 92)">
+      <rect width="176" height="36" rx="6" fill="transparent"/>
+      <text x="16" y="23" fill="#666"
+            font-family="ui-sans-serif, system-ui, sans-serif" font-size="13">Bulk</text>
+    </g>
+    <!-- Settings (selected) -->
+    <g transform="translate(12 136)">
+      <rect width="176" height="36" rx="6" fill="#0A0A0A"/>
+      <text x="16" y="23" fill="#FAFAFA"
+            font-family="ui-sans-serif, system-ui, sans-serif"
+            font-size="13" font-weight="500">Settings</text>
+    </g>
+    <!-- Upgrade -->
+    <g transform="translate(12 180)">
+      <rect width="176" height="36" rx="6" fill="transparent"/>
+      <text x="16" y="23" fill="#666"
+            font-family="ui-sans-serif, system-ui, sans-serif" font-size="13">Upgrade</text>
+    </g>
+  </g>
+
+  <!-- Settings content -->
+  <g transform="translate(290 90)">
+    <text x="0" y="0" fill="#999"
+          font-family="ui-monospace, monospace" font-size="11" letter-spacing="0.5">
+      SETTINGS
+    </text>
+    <text x="0" y="36" fill="#0A0A0A"
+          font-family="ui-sans-serif, system-ui, sans-serif"
+          font-size="24" font-weight="600" letter-spacing="-0.5">
+      Conversion preferences
+    </text>
+    <text x="0" y="62" fill="#666"
+          font-family="ui-sans-serif, system-ui, sans-serif" font-size="13">
+      Tune quality, output format and when the plugin runs.
+    </text>
+
+    <!-- Quality slider -->
+    <g transform="translate(0 110)">
+      <rect width="900" height="110" rx="12" fill="#FFFFFF" stroke="#E8E8E8"/>
+      <text x="24" y="32" fill="#0A0A0A"
+            font-family="ui-sans-serif, system-ui, sans-serif"
+            font-size="14" font-weight="500">Quality</text>
+      <text x="24" y="52" fill="#666"
+            font-family="ui-sans-serif, system-ui, sans-serif" font-size="12">
+        Higher values preserve more detail but produce larger files. Default: 82.
+      </text>
+      <!-- Slider track -->
+      <rect x="24" y="74" width="780" height="6" rx="3" fill="#EAEAEA"/>
+      <rect x="24" y="74" width="640" height="6" rx="3" fill="#0A0A0A"/>
+      <circle cx="664" cy="77" r="10" fill="#FFFFFF" stroke="#0A0A0A" stroke-width="2"/>
+      <text x="856" y="82" fill="#0A0A0A" text-anchor="end"
+            font-family="ui-monospace, monospace" font-size="16" font-weight="600">82</text>
+    </g>
+
+    <!-- Output format -->
+    <g transform="translate(0 245)">
+      <rect width="900" height="90" rx="12" fill="#FFFFFF" stroke="#E8E8E8"/>
+      <text x="24" y="32" fill="#0A0A0A"
+            font-family="ui-sans-serif, system-ui, sans-serif"
+            font-size="14" font-weight="500">Output format</text>
+      <g transform="translate(24 52)">
+        <!-- WebP selected -->
+        <rect width="110" height="28" rx="14" fill="#0A0A0A"/>
+        <text x="55" y="19" text-anchor="middle" fill="#FAFAFA"
+              font-family="ui-sans-serif, system-ui, sans-serif"
+              font-size="12" font-weight="500">WebP</text>
+        <!-- AVIF disabled -->
+        <rect x="120" y="0" width="110" height="28" rx="14" fill="transparent" stroke="#E0E0E0"/>
+        <text x="175" y="19" text-anchor="middle" fill="#999"
+              font-family="ui-sans-serif, system-ui, sans-serif" font-size="12">
+          AVIF (paid)
+        </text>
+      </g>
+    </g>
+
+    <!-- Toggles -->
+    <g transform="translate(0 360)">
+      <rect width="900" height="180" rx="12" fill="#FFFFFF" stroke="#E8E8E8"/>
+
+      <!-- Toggle 1: Auto-convert -->
+      <g transform="translate(24 24)">
+        <text y="14" fill="#0A0A0A"
+              font-family="ui-sans-serif, system-ui, sans-serif"
+              font-size="14" font-weight="500">Auto-convert new uploads</text>
+        <text y="34" fill="#666"
+              font-family="ui-sans-serif, system-ui, sans-serif" font-size="12">
+          Every new image in the media library is converted immediately.
+        </text>
+        <g transform="translate(800 6)">
+          <rect width="48" height="28" rx="14" fill="#0A0A0A"/>
+          <circle cx="34" cy="14" r="10" fill="#FFFFFF"/>
+        </g>
+      </g>
+
+      <line x1="24" y1="76" x2="876" y2="76" stroke="#F5F5F5"/>
+
+      <!-- Toggle 2: Serve WebP -->
+      <g transform="translate(24 96)">
+        <text y="14" fill="#0A0A0A"
+              font-family="ui-sans-serif, system-ui, sans-serif"
+              font-size="14" font-weight="500">Serve WebP/AVIF to supported browsers</text>
+        <text y="34" fill="#666"
+              font-family="ui-sans-serif, system-ui, sans-serif" font-size="12">
+          Browsers that don&apos;t support modern formats fall back to the original.
+        </text>
+        <g transform="translate(800 6)">
+          <rect width="48" height="28" rx="14" fill="#0A0A0A"/>
+          <circle cx="34" cy="14" r="10" fill="#FFFFFF"/>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>
