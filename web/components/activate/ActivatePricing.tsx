@@ -256,9 +256,9 @@ const css = `
 }
 .pr3-hero-inner { max-width: 720px; margin: 0 auto; }
 .pr3-hero-h1 {
-  font-size: clamp(40px, 6vw, 68px);
-  line-height: 1.02; letter-spacing: -0.04em; font-weight: 600;
-  margin: 12px 0 16px; color: var(--ink);
+  font-size: clamp(30px, 6vw, 68px);
+  line-height: 1.06; letter-spacing: -0.04em; font-weight: 600;
+  margin: 12px 0 16px; color: var(--ink); text-wrap: balance;
 }
 .pr3-hero-h1-accent { color: var(--ink-3); font-weight: 400; }
 .pr3-hero-lead {

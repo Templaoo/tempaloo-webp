@@ -212,31 +212,119 @@ export function LandingPage() {
 }
 
 function Nav({ theme, scrolled, onToggleTheme }: { theme: Theme; scrolled: boolean; onToggleTheme: () => void }) {
+    const [menuOpen, setMenuOpen] = useState(false);
+
+    /**
+     * iOS-safe scroll lock: plain `overflow: hidden` on body doesn't stop
+     * the page from scrolling on Safari because the scroller is <html>.
+     * Pinning the body at `position: fixed; top: -scrollY` freezes the
+     * document, and we restore the scroll position on close so the user
+     * lands exactly where they were.
+     */
+    useEffect(() => {
+        if (!menuOpen) return;
+        const scrollY = window.scrollY;
+        const body = document.body;
+        const prev = {
+            position: body.style.position,
+            top: body.style.top,
+            left: body.style.left,
+            right: body.style.right,
+            width: body.style.width,
+        };
+        body.style.position = "fixed";
+        body.style.top = `-${scrollY}px`;
+        body.style.left = "0";
+        body.style.right = "0";
+        body.style.width = "100%";
+
+        const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setMenuOpen(false); };
+        window.addEventListener("keydown", onKey);
+        return () => {
+            body.style.position = prev.position;
+            body.style.top = prev.top;
+            body.style.left = prev.left;
+            body.style.right = prev.right;
+            body.style.width = prev.width;
+            window.scrollTo(0, scrollY);
+            window.removeEventListener("keydown", onKey);
+        };
+    }, [menuOpen]);
+
+    const close = () => setMenuOpen(false);
+
     return (
-        <nav className={`pr2-nav ${scrolled ? "pr2-nav-scrolled" : ""}`}>
-            <div className="pr2-container pr2-nav-inner">
-                <div className="pr2-nav-left">
-                    <Link href="/webp" className="pr2-nav-logo" aria-label="Tempaloo WebP home"><Logo /></Link>
-                    <div className="pr2-nav-links">
-                        <a href="#pricing">Pricing</a>
-                        <a href="#faq">FAQ</a>
-                        <a href="#" title="Coming soon">Docs</a>
-                        <a href="#" title="Coming soon">Changelog</a>
+        <>
+            <nav className={`pr2-nav ${scrolled ? "pr2-nav-scrolled" : ""}`}>
+                <div className="pr2-container pr2-nav-inner">
+                    <div className="pr2-nav-left">
+                        <Link href="/webp" className="pr2-nav-logo" aria-label="Tempaloo WebP home"><Logo /></Link>
+                        <div className="pr2-nav-links">
+                            <a href="#pricing">Pricing</a>
+                            <a href="#faq">FAQ</a>
+                            <a href="#" title="Coming soon">Docs</a>
+                            <a href="#" title="Coming soon">Changelog</a>
+                        </div>
+                    </div>
+                    <div className="pr2-nav-right">
+                        <button onClick={onToggleTheme} className="pr2-btn pr2-btn-ghost pr2-icon-btn" aria-label="Toggle theme">
+                            {theme === "dark" ? (
+                                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="3" /><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1.1 1.1M11.9 11.9L13 13M3 13l1.1-1.1M11.9 4.1L13 3" /></svg>
+                            ) : (
+                                <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M13.5 10.2A5.5 5.5 0 0 1 5.8 2.5 5.5 5.5 0 1 0 13.5 10.2z" /></svg>
+                            )}
+                        </button>
+                        <Link href="/webp/activate" className="pr2-nav-signin">Sign in</Link>
+                        <Link href="/webp/activate?plan=free" className="pr2-btn pr2-btn-primary pr2-btn-sm pr2-nav-cta" onClick={() => trackCtaClick("nav", "free")}>
+                            <span className="pr2-nav-cta-label">Get started</span> <ArrowIcon />
+                        </Link>
+                        <button
+                            type="button"
+                            className="pr2-btn pr2-btn-ghost pr2-icon-btn pr2-nav-burger"
+                            aria-label={menuOpen ? "Close menu" : "Open menu"}
+                            aria-expanded={menuOpen}
+                            aria-controls="pr2-mobile-menu"
+                            onClick={() => setMenuOpen(v => !v)}
+                        >
+                            {menuOpen ? (
+                                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M3 3 L13 13 M13 3 L3 13" /></svg>
+                            ) : (
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M2.5 4.5 H13.5 M2.5 8 H13.5 M2.5 11.5 H13.5" /></svg>
+                            )}
+                        </button>
                     </div>
                 </div>
-                <div className="pr2-nav-right">
-                    <button onClick={onToggleTheme} className="pr2-btn pr2-btn-ghost pr2-icon-btn" aria-label="Toggle theme">
-                        {theme === "dark" ? (
-                            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="3" /><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1.1 1.1M11.9 11.9L13 13M3 13l1.1-1.1M11.9 4.1L13 3" /></svg>
-                        ) : (
-                            <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M13.5 10.2A5.5 5.5 0 0 1 5.8 2.5 5.5 5.5 0 1 0 13.5 10.2z" /></svg>
-                        )}
-                    </button>
-                    <Link href="/webp/activate" className="pr2-nav-signin">Sign in</Link>
-                    <Link href="/webp/activate?plan=free" className="pr2-btn pr2-btn-primary pr2-btn-sm" onClick={() => trackCtaClick("nav", "free")}>Get started <ArrowIcon /></Link>
+            </nav>
+
+            {/* Rendered as a sibling of <nav>, not a child — a position:fixed
+                drawer inside a position:sticky ancestor misbehaves on mobile
+                Safari (it can scroll with the sticky). Hoisting it out of the
+                sticky context guarantees the drawer stays pinned to the
+                viewport. */}
+            <div
+                id="pr2-mobile-menu"
+                className={`pr2-mobile-menu ${menuOpen ? "pr2-mobile-menu-open" : ""}`}
+                role="dialog"
+                aria-modal="true"
+                aria-hidden={!menuOpen}
+            >
+                <button type="button" className="pr2-mobile-scrim" aria-label="Close menu" tabIndex={menuOpen ? 0 : -1} onClick={close} />
+                <div className="pr2-mobile-panel" onClick={(e) => e.stopPropagation()}>
+                    <nav className="pr2-mobile-links" aria-label="Mobile">
+                        <a href="#pricing" onClick={close}>Pricing</a>
+                        <a href="#faq" onClick={close}>FAQ</a>
+                        <a href="#" onClick={close} title="Coming soon">Docs <span className="pr2-mobile-soon">soon</span></a>
+                        <a href="#" onClick={close} title="Coming soon">Changelog <span className="pr2-mobile-soon">soon</span></a>
+                    </nav>
+                    <div className="pr2-mobile-ctas">
+                        <Link href="/webp/activate" className="pr2-btn pr2-btn-ghost" onClick={close}>Sign in</Link>
+                        <Link href="/webp/activate?plan=free" className="pr2-btn pr2-btn-primary" onClick={() => { trackCtaClick("nav_mobile", "free"); close(); }}>
+                            Get started <ArrowIcon />
+                        </Link>
+                    </div>
                 </div>
             </div>
-        </nav>
+        </>
     );
 }
 
@@ -1115,8 +1203,8 @@ const css = `
   color: var(--ink);
 }
 
-.pr2-container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
-.pr2-container-sm { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+.pr2-container { max-width: 1200px; margin: 0 auto; padding: 0 clamp(16px, 3vw, 24px); }
+.pr2-container-sm { max-width: 880px; margin: 0 auto; padding: 0 clamp(16px, 3vw, 24px); }
 
 .pr2-h-display { font-family: var(--font-geist-sans), sans-serif; letter-spacing: -0.035em; font-weight: 600; }
 .pr2-font-serif { font-family: var(--font-serif), serif; font-weight: 400; letter-spacing: -0.01em; font-style: italic; }
@@ -1163,7 +1251,7 @@ const css = `
 
 .pr2-hero { padding: 80px 0 96px; position: relative; overflow: hidden; }
 .pr2-hero-inner { position: relative; text-align: center; }
-.pr2-hero-h1 { font-size: clamp(44px, 7.2vw, 88px); line-height: 1.02; letter-spacing: -0.04em; font-weight: 600; margin: 28px auto 22px; max-width: 820px; color: var(--ink); }
+.pr2-hero-h1 { font-size: clamp(32px, 7.2vw, 88px); line-height: 1.04; letter-spacing: -0.04em; font-weight: 600; margin: 28px auto 22px; max-width: 820px; color: var(--ink); text-wrap: balance; }
 .pr2-hero-h1-accent { color: var(--ink-3); font-weight: 400; }
 .pr2-hero-lead { font-size: 18px; line-height: 1.55; color: var(--ink-2); max-width: 560px; margin: 0 auto 36px; text-wrap: balance; letter-spacing: -0.01em; }
 .pr2-hero-ctas { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 24px; }
@@ -1214,6 +1302,18 @@ const css = `
 @media (max-width: 760px) {
   .pr2-demo-grid { grid-template-columns: 1fr; }
   .pr2-demo-left { border-right: none; border-bottom: 1px solid var(--line); }
+  .pr2-demo-left, .pr2-demo-right { padding: 16px; }
+}
+@media (max-width: 520px) {
+  /* Collapse the demo's 4-col row grid into label + compact stats so nothing
+     overflows the container at ~320px viewport. */
+  .pr2-demo-row { grid-template-columns: 1fr auto auto; gap: 8px; padding: 7px 8px; font-size: 12px; }
+  .pr2-demo-row-bar { display: none; }
+  .pr2-demo-row-label { font-size: 11.5px; }
+  .pr2-demo-right-head { gap: 8px; }
+  .pr2-demo-section-label { font-size: 10px; }
+  .pr2-demo-totals-row { gap: 12px; }
+  .pr2-demo-filename, .pr2-demo-filemeta { font-size: 11.5px; }
 }
 
 .pr2-statsbar { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
@@ -1226,7 +1326,7 @@ const css = `
 .pr2-trap { padding: 120px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--bg-2); }
 .pr2-section-head { max-width: 640px; margin: 0 auto 48px; text-align: center; }
 .pr2-eyebrow { font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: 11px; font-weight: 400; letter-spacing: 0.02em; color: var(--ink-3); }
-.pr2-section-h { font-size: clamp(36px, 4.8vw, 60px); font-weight: 600; letter-spacing: -0.04em; margin: 10px 0 14px; line-height: 1.05; color: var(--ink); }
+.pr2-section-h { font-size: clamp(26px, 4.8vw, 60px); font-weight: 600; letter-spacing: -0.04em; margin: 10px 0 14px; line-height: 1.08; color: var(--ink); text-wrap: balance; }
 .pr2-section-h-accent { color: var(--ink-3); }
 .pr2-section-lead { font-size: 16px; color: var(--ink-2); line-height: 1.55; letter-spacing: -0.01em; }
 .pr2-trap-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 960px; margin: 0 auto; }
@@ -1304,7 +1404,7 @@ const css = `
 
 .pr2-final { padding: 112px 0; background: var(--ink); color: var(--bg); position: relative; overflow: hidden; }
 .pr2-final-inner { position: relative; text-align: center; }
-.pr2-final-h { font-size: clamp(40px, 5.2vw, 68px); font-weight: 600; letter-spacing: -0.04em; margin: 0 0 20px; line-height: 1.04; color: var(--bg); }
+.pr2-final-h { font-size: clamp(28px, 5.2vw, 68px); font-weight: 600; letter-spacing: -0.04em; margin: 0 0 20px; line-height: 1.06; color: var(--bg); text-wrap: balance; }
 .pr2-final-h-accent { color: var(--ink-3); font-weight: 400; }
 .pr2-final-lead { font-size: 17px; color: rgba(237, 237, 237, 0.6); max-width: 500px; margin: 0 auto 30px; letter-spacing: -0.01em; }
 .pr2-root[data-theme="dark"] .pr2-final-lead { color: rgba(10, 10, 10, 0.6); }
@@ -1621,8 +1721,84 @@ const css = `
 .pr2-sticky-copy strong { font-weight: 600; }
 .pr2-sticky-sub { color: var(--ink-3); font-size: 11.5px; }
 
+/* Mobile nav: burger appears below 720px; sign-in label hides below 520px;
+   the "Get started" text collapses below 420px, leaving just the arrow. */
+.pr2-nav-burger { display: none; }
 @media (max-width: 720px) {
   .pr2-nav-links { display: none; }
+  .pr2-nav-burger { display: inline-flex; }
+}
+@media (max-width: 520px) {
+  .pr2-nav-signin { display: none; }
+  .pr2-nav-left { gap: 16px; }
+}
+@media (max-width: 420px) {
+  .pr2-nav-cta-label { display: none; }
+  .pr2-nav-cta { padding: 0 12px; }
+}
+
+/* Mobile drawer — lives outside the sticky <nav> so the fixed positioning
+   is always relative to the viewport, not a containing block. */
+.pr2-mobile-menu {
+  position: fixed; inset: 0;
+  z-index: 80;
+  pointer-events: none;
+}
+.pr2-mobile-menu-open { pointer-events: auto; }
+.pr2-mobile-menu[aria-hidden="true"] .pr2-mobile-panel { transform: translateX(100%); }
+.pr2-mobile-menu[aria-hidden="true"] .pr2-mobile-scrim { opacity: 0; }
+.pr2-mobile-scrim {
+  position: absolute; inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  border: none;
+  cursor: pointer;
+  opacity: 1;
+  transition: opacity .2s ease;
+  /* Don't let a scrim touch pass through to the page underneath. */
+  touch-action: none;
+}
+.pr2-mobile-panel {
+  position: absolute; top: 0; right: 0; bottom: 0;
+  width: min(320px, 86vw);
+  background: var(--bg);
+  border-left: 1px solid var(--line-2);
+  padding: calc(72px + env(safe-area-inset-top)) 24px calc(32px + env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; gap: 24px;
+  transition: transform .25s cubic-bezier(.2,.7,.3,1);
+  box-shadow: -16px 0 48px -16px rgba(0,0,0,0.3);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain; /* panel scroll does not bleed to document */
+}
+.pr2-mobile-links { display: flex; flex-direction: column; gap: 2px; }
+.pr2-mobile-links a {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 12px;
+  font-size: 17px; font-weight: 500;
+  color: var(--ink);
+  letter-spacing: -0.015em;
+  border-radius: 8px;
+  transition: background .12s;
+}
+.pr2-mobile-links a:hover { background: var(--bg-2); }
+.pr2-mobile-soon {
+  font-size: 10.5px; font-weight: 500;
+  padding: 2px 7px; border-radius: 999px;
+  background: var(--bg-2); color: var(--ink-3);
+  letter-spacing: 0.02em; text-transform: uppercase;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+}
+.pr2-mobile-ctas {
+  display: flex; flex-direction: column; gap: 10px;
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.pr2-mobile-ctas .pr2-btn { width: 100%; height: 44px; font-size: 15px; }
+@media (min-width: 721px) {
+  /* Above the breakpoint the drawer must stay inert even if state flipped
+     — e.g. during a viewport resize mid-open. */
+  .pr2-mobile-menu { display: none; }
 }
 
 /* Pricing: below 820px force a single-column stack so the
@@ -1635,13 +1811,15 @@ const css = `
 
 /* Very small phones (iPhone SE 1st gen, 320-420 wide). */
 @media (max-width: 440px) {
-  .pr2-hero { padding: 56px 0 72px; }
-  .pr2-hero-h1 { font-size: clamp(34px, 8.5vw, 56px); }
-  .pr2-final { padding: 72px 0; }
-  .pr2-final-h { font-size: clamp(32px, 8vw, 48px); }
-  .pr2-how, .pr2-compat, .pr2-pricing, .pr2-faq, .pr2-trap {
-    padding-top: 72px; padding-bottom: 72px;
+  .pr2-hero { padding: 48px 0 64px; }
+  .pr2-hero-lead { font-size: 16px; }
+  .pr2-hero-viz { margin-top: 48px; }
+  .pr2-final { padding: 64px 0; }
+  .pr2-how, .pr2-compat, .pr2-pricing, .pr2-faq, .pr2-trap, .pr2-uc, .pr2-sec, .pr2-cmp {
+    padding-top: 64px; padding-bottom: 64px;
   }
+  .pr2-hero-ctas .pr2-btn { flex: 1 1 100%; }
+  .pr2-trust-chips { gap: 10px 14px; font-size: 12px; }
 }
 
 /* Landscape phones: hide the heavy demo, keep the CTA-first experience. */

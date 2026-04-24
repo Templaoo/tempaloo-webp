@@ -27,7 +27,7 @@ import { track as vercelTrack } from "@vercel/analytics";
  */
 
 export type TrackLocation =
-    | "nav" | "hero" | "hero_install_copy"
+    | "nav" | "nav_mobile" | "hero" | "hero_install_copy"
     | "pricing" | "sticky_mobile" | "final_cta"
     | "uc_card" | "stats" | "faq";
 

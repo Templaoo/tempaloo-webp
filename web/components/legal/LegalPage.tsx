@@ -105,18 +105,19 @@ const css = `
 .lp-article {
   max-width: 760px;
   margin: 0 auto;
-  padding: 64px 24px 96px;
+  padding: 64px clamp(16px, 3vw, 24px) 96px;
 }
 
 .lp-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 1px solid var(--line); }
 .lp-h1 {
   font-family: var(--font-geist-sans), sans-serif;
-  font-size: clamp(36px, 5vw, 52px);
+  font-size: clamp(28px, 5vw, 52px);
   letter-spacing: -0.035em;
   font-weight: 600;
-  line-height: 1.05;
+  line-height: 1.08;
   margin: 12px 0 10px;
   color: var(--ink);
+  text-wrap: balance;
 }
 .lp-effective { margin: 0; font-size: 13px; color: var(--ink-3); }
 .lp-effective time { color: var(--ink-2); font-variant-numeric: tabular-nums; }

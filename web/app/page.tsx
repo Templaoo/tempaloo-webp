@@ -47,11 +47,11 @@ export default function Home() {
                 </nav>
             </header>
 
-            <section className="app-container rise" style={{ padding: "96px 24px 64px", textAlign: "center", flex: "1 0 auto" }}>
+            <section className="app-container rise" style={{ padding: "96px 0 64px", textAlign: "center", flex: "1 0 auto" }}>
                 <span className="eyebrow" style={{ display: "inline-block", marginBottom: 16 }}>
                     WORDPRESS TOOLS, DONE RIGHT
                 </span>
-                <h1 className="h-display" style={{ fontSize: "clamp(48px, 7vw, 84px)", letterSpacing: "-0.04em", lineHeight: 1.02, margin: 0, fontWeight: 600 }}>
+                <h1 className="h-display" style={{ fontSize: "clamp(32px, 7vw, 84px)", letterSpacing: "-0.04em", lineHeight: 1.04, margin: 0, fontWeight: 600, textWrap: "balance" }}>
                     Tools for builders.{" "}
                     <span className="font-serif" style={{ color: "var(--ink-3)", fontWeight: 400 }}>
                         Priced<br />like a friend.
@@ -70,7 +70,7 @@ export default function Home() {
                 </div>
             </section>
 
-            <section id="products" className="app-container rise rise-delay-1" style={{ padding: "40px 24px 96px" }}>
+            <section id="products" className="app-container rise rise-delay-1" style={{ padding: "40px 0 96px" }}>
                 <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 24 }}>
                     <h2 className="h-display" style={{ fontSize: 24, fontWeight: 600, letterSpacing: "-0.03em", margin: 0 }}>
                         Products

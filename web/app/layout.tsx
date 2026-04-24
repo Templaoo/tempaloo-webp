@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { Instrument_Serif } from "next/font/google";
@@ -22,6 +22,14 @@ export const metadata: Metadata = {
     icons: {
         icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
     },
+};
+
+// `viewport-fit=cover` makes the sticky CTA/safe-area-inset math correct on
+// iPhones with a home indicator.
+export const viewport: Viewport = {
+    width: "device-width",
+    initialScale: 1,
+    viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
