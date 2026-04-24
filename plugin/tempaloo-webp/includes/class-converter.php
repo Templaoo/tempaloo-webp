@@ -21,7 +21,20 @@ class Tempaloo_WebP_Converter {
         }
 
         $result = self::convert_all_sizes( $attachment_id, $metadata, $s );
+
+        // Conversion failed for an infra reason → enqueue for cron retry.
+        // Quota / auth failures stay out of the queue (need user action).
+        if ( $result['converted'] === 0 && self::is_retryable( $result['error_code'] ?? '' ) ) {
+            Tempaloo_WebP_Retry_Queue::enqueue( $attachment_id, $result['error_code'] );
+        }
+
         return $result['metadata'];
+    }
+
+    private static function is_retryable( $code ) {
+        if ( '' === $code ) return false;
+        $non_retryable = [ 'quota_exceeded', 'unauthorized', 'forbidden', 'site_limit_reached', 'missing_file', 'unprocessable_image' ];
+        return ! in_array( $code, $non_retryable, true );
     }
 
     /**

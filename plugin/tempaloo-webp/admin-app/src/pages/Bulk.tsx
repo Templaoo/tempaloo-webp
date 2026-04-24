@@ -18,9 +18,10 @@ function normalizeStatus(partial: Partial<BulkStatus> | null | undefined): BulkS
     };
 }
 
-export default function Bulk({ state }: { state: AppState }) {
+export default function Bulk({ state, onUpgrade }: { state: AppState; onUpgrade?: () => void }) {
     const [pending, setPending] = useState<number | null>(null);
     const [status, setStatus] = useState<BulkStatus>(EMPTY_STATUS);
+    const [resuming, setResuming] = useState(false);
     const runningRef = useRef(false);
 
     useEffect(() => {
@@ -78,6 +79,20 @@ export default function Bulk({ state }: { state: AppState }) {
         setStatus(normalizeStatus({ status: "canceled" }));
     };
 
+    const resume = async () => {
+        setResuming(true);
+        try {
+            const s = await bulk.resume();
+            setStatus(normalizeStatus(s));
+            runningRef.current = true;
+            setTimeout(loop, 150);
+        } catch (e) {
+            toast("error", e instanceof Error ? e.message : "Could not resume");
+        } finally {
+            setResuming(false);
+        }
+    };
+
     return (
         <div className="grid gap-6">
             <Card>
@@ -116,6 +131,39 @@ export default function Bulk({ state }: { state: AppState }) {
                             value={pct}
                             label={`${status.processed} / ${status.total} · ${status.succeeded} ok · ${status.failed} failed`}
                         />
+                    </div>
+                )}
+
+                {status.status === "paused_quota" && (
+                    <div className="mt-5 rounded-lg border border-amber-300 bg-amber-50 p-4">
+                        <div className="flex items-start gap-3">
+                            <div className="shrink-0 mt-0.5 text-amber-700">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                                    <rect x="6" y="4" width="4" height="16" rx="1" />
+                                    <rect x="14" y="4" width="4" height="16" rx="1" />
+                                </svg>
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <h4 className="text-sm font-semibold text-amber-900">Paused — monthly quota reached</h4>
+                                <p className="mt-1 text-sm text-amber-900/80">
+                                    {status.total - status.processed} of {status.total} images still to convert.
+                                    Upgrade for instant access, or click Resume after the monthly reset.
+                                </p>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                    {onUpgrade && (
+                                        <button
+                                            onClick={onUpgrade}
+                                            className="inline-flex items-center h-9 px-4 rounded-lg bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 transition shadow-sm"
+                                        >
+                                            Upgrade plan
+                                        </button>
+                                    )}
+                                    <Button variant="secondary" onClick={resume} loading={resuming}>
+                                        Resume
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 )}
 

@@ -27,6 +27,19 @@ export interface AppState {
         periodStart: string;
         periodEnd: string;
     };
+    quotaExceededAt: number | null;
+    apiHealth: {
+        ok: boolean;
+        failedAt: number;
+        code: string;
+        message: string;
+        attempts: number;
+    };
+    retryQueue: {
+        pending: number;
+        dueNow: number;
+        nextRetryAt: number;
+    };
     settings: {
         quality: number;
         outputFormat: "webp" | "avif";
@@ -64,6 +77,9 @@ export const boot: BootState =
         state: {
             license: { valid: false, key: "", plan: "", supportsAvif: false, imagesLimit: 0, sitesLimit: 0 },
             quota: null,
+            quotaExceededAt: null,
+            apiHealth: { ok: true, failedAt: 0, code: "", message: "", attempts: 0 },
+            retryQueue: { pending: 0, dueNow: 0, nextRetryAt: 0 },
             settings: { quality: 82, outputFormat: "webp", autoConvert: true, serveWebp: true },
             savings: null,
         },
@@ -107,6 +123,10 @@ export const api = {
         restFetch<AppState>("/activate", { method: "POST", body: JSON.stringify({ license_key: licenseKey }) }),
     saveSettings: (patch: Partial<AppState["settings"]>) =>
         restFetch<AppState>("/settings", { method: "POST", body: JSON.stringify(patch) }),
+    runRetry: () =>
+        restFetch<{ ran: number; succeeded: number; failed: number; state: AppState }>(
+            "/retry/run", { method: "POST", body: "{}" }
+        ),
 };
 
 // Bulk operations still use admin-ajax (existing backend, keeps parity).
@@ -132,6 +152,7 @@ export const bulk = {
     tick: () => ajax<BulkStatus>("bulk_tick"),
     cancel: () => ajax<BulkStatus>("bulk_cancel"),
     status: () => ajax<BulkStatus>("bulk_status"),
+    resume: () => ajax<BulkStatus>("bulk_resume"),
 };
 
 export function formatBytes(n: number): string {

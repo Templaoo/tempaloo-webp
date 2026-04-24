@@ -60,5 +60,6 @@ final class Tempaloo_WebP_Plugin {
         ( new Tempaloo_WebP_URL_Filter() )->register();
         ( new Tempaloo_WebP_Bulk() )->register();
         ( new Tempaloo_WebP_REST() )->register();
+        ( new Tempaloo_WebP_Retry_Queue() )->register();
     }
 }

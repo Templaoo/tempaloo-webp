@@ -1,6 +1,6 @@
-import { useState } from "react";
-import { boot, type AppState } from "./api";
-import { Badge, Tabs, Toasts } from "./components/ui";
+import { useMemo, useState } from "react";
+import { api, boot, type AppState } from "./api";
+import { Badge, Tabs, Toasts, toast } from "./components/ui";
 import Overview from "./pages/Overview";
 import Bulk from "./pages/Bulk";
 import Settings from "./pages/Settings";
@@ -8,9 +8,169 @@ import Upgrade from "./pages/Upgrade";
 
 type Tab = "overview" | "bulk" | "settings" | "upgrade";
 
+function daysUntil(iso: string): number | null {
+    if (!iso) return null;
+    const end = new Date(iso).getTime();
+    if (!Number.isFinite(end)) return null;
+    return Math.max(0, Math.ceil((end - Date.now()) / 86_400_000));
+}
+
+function RetryQueueBanner({ state, onRunRetry, busy }: { state: AppState; onRunRetry: () => void; busy: boolean }) {
+    const { pending, dueNow, nextRetryAt } = state.retryQueue;
+    if (pending === 0) return null;
+
+    const next = nextRetryAt
+        ? Math.max(0, Math.ceil((nextRetryAt * 1000 - Date.now()) / 60000))
+        : 0;
+    const nextLabel = dueNow > 0
+        ? "Some are due now"
+        : next <= 1 ? "Next retry in <1 min" : `Next retry in ~${next} min`;
+
+    return (
+        <div className="mb-5 rounded-xl border border-sky-300 bg-gradient-to-br from-sky-50 to-sky-100/70 p-4 shadow-card">
+            <div className="flex items-start gap-4">
+                <div className="shrink-0 h-10 w-10 rounded-lg bg-sky-200 flex items-center justify-center text-sky-900">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <path d="M21 12a9 9 0 1 1-3-6.7" />
+                        <polyline points="21 4 21 10 15 10" />
+                    </svg>
+                </div>
+                <div className="min-w-0 flex-1">
+                    <h3 className="text-sm font-semibold text-sky-900">
+                        {pending} image{pending > 1 ? "s" : ""} queued for retry
+                    </h3>
+                    <p className="mt-1 text-sm text-sky-900/80">
+                        These earlier uploads couldn't reach the API and will retry automatically. {nextLabel}.
+                    </p>
+                </div>
+                <button
+                    onClick={onRunRetry}
+                    disabled={busy}
+                    className="shrink-0 inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-sky-600 text-white text-sm font-medium hover:bg-sky-700 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                    {busy ? "Retrying…" : "Retry now"}
+                </button>
+            </div>
+        </div>
+    );
+}
+
+function ApiStatusChip({ ok }: { ok: boolean }) {
+    return (
+        <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                ok ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-50 text-rose-700 border border-rose-200"
+            }`}
+            title={ok ? "API healthy" : "API unreachable"}
+        >
+            <span className={`h-1.5 w-1.5 rounded-full ${ok ? "bg-emerald-500" : "bg-rose-500 animate-pulse"}`} />
+            API {ok ? "live" : "down"}
+        </span>
+    );
+}
+
+function ApiHealthBanner({ state, onRetry }: { state: AppState; onRetry: () => void }) {
+    const h = state.apiHealth;
+    if (h.ok || !h.failedAt) return null;
+
+    const minsAgo = Math.max(0, Math.floor((Date.now() / 1000 - h.failedAt) / 60));
+    const sinceLabel = minsAgo < 1 ? "just now" : minsAgo === 1 ? "1 min ago" : `${minsAgo} min ago`;
+
+    return (
+        <div className="mb-5 rounded-xl border border-rose-300 bg-gradient-to-br from-rose-50 to-rose-100/70 p-4 shadow-card">
+            <div className="flex items-start gap-4">
+                <div className="shrink-0 h-10 w-10 rounded-lg bg-rose-200 flex items-center justify-center text-rose-900">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <path d="M3 12a9 9 0 1 0 9-9" />
+                        <path d="M3 4v5h5" />
+                        <line x1="12" y1="8" x2="12" y2="13" />
+                        <line x1="12" y1="17" x2="12.01" y2="17" />
+                    </svg>
+                </div>
+                <div className="min-w-0 flex-1">
+                    <h3 className="text-sm font-semibold text-rose-900">Tempaloo API unreachable</h3>
+                    <p className="mt-1 text-sm text-rose-900/80">
+                        New uploads are stored as-is — no conversion until the API responds.
+                        Last attempt failed {sinceLabel} ({h.code || "network error"}).
+                        We'll auto-retry on the next upload.
+                    </p>
+                </div>
+                <button
+                    onClick={onRetry}
+                    className="shrink-0 inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-rose-600 text-white text-sm font-medium hover:bg-rose-700 transition shadow-sm"
+                >
+                    Retry now
+                </button>
+            </div>
+        </div>
+    );
+}
+
+function QuotaBanner({ state, onUpgrade }: { state: AppState; onUpgrade: () => void }) {
+    const days = useMemo(() => daysUntil(state.quota?.periodEnd ?? ""), [state.quota?.periodEnd]);
+    if (!state.quotaExceededAt || state.quota === null) return null;
+    if (state.quota.imagesRemaining > 0) return null;
+
+    const resetLabel = days === null
+        ? "at the start of next month"
+        : days <= 1 ? "in less than a day" : `in ${days} days`;
+    const planLabel = state.license.plan ? state.license.plan[0]!.toUpperCase() + state.license.plan.slice(1) : "Free";
+
+    return (
+        <div className="mb-5 rounded-xl border border-amber-300 bg-gradient-to-br from-amber-50 to-amber-100/70 p-4 shadow-card">
+            <div className="flex items-start gap-4">
+                <div className="shrink-0 h-10 w-10 rounded-lg bg-amber-200 flex items-center justify-center text-amber-900">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                        <line x1="12" y1="9" x2="12" y2="13" />
+                        <line x1="12" y1="17" x2="12.01" y2="17" />
+                    </svg>
+                </div>
+                <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-sm font-semibold text-amber-900">Monthly quota reached</h3>
+                        <Badge variant="warn">{planLabel} plan</Badge>
+                    </div>
+                    <p className="mt-1 text-sm text-amber-900/80">
+                        New uploads are served as-is (no conversion) until your quota resets {resetLabel}.
+                        Upgrade for instant access to more credits — your converted images are unaffected.
+                    </p>
+                </div>
+                <button
+                    onClick={onUpgrade}
+                    className="shrink-0 inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 transition shadow-sm"
+                >
+                    Upgrade
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                        <polyline points="12 5 19 12 12 19" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+    );
+}
+
 export default function App() {
     const [state, setState] = useState<AppState>(boot.state);
     const [tab, setTab] = useState<Tab>("overview");
+    const [retrying, setRetrying] = useState(false);
+
+    const runRetry = async () => {
+        setRetrying(true);
+        try {
+            const res = await api.runRetry();
+            setState(res.state);
+            const msg = res.ran === 0
+                ? "Nothing to retry"
+                : `${res.succeeded} converted · ${res.failed} still failing`;
+            toast(res.failed === 0 && res.ran > 0 ? "success" : "info", msg);
+        } catch (e) {
+            toast("error", e instanceof Error ? e.message : "Retry failed");
+        } finally {
+            setRetrying(false);
+        }
+    };
 
     const plan = state.license.valid ? state.license.plan : "free";
     const planLabel = plan ? plan[0]!.toUpperCase() + plan.slice(1) : "Free";
@@ -29,6 +189,7 @@ export default function App() {
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
+                    <ApiStatusChip ok={state.apiHealth.ok} />
                     <Badge variant={state.license.valid ? "brand" : "neutral"}>
                         {state.license.valid ? `${planLabel} plan` : "No license"}
                     </Badge>
@@ -73,8 +234,23 @@ export default function App() {
                 </aside>
 
                 <main className="min-w-0">
+                    <ApiHealthBanner
+                        state={state}
+                        onRetry={async () => {
+                            try {
+                                const next = await api.refreshState();
+                                setState(next);
+                                toast(next.apiHealth.ok ? "success" : "error",
+                                    next.apiHealth.ok ? "API is back" : "Still unreachable");
+                            } catch (e) {
+                                toast("error", e instanceof Error ? e.message : "Refresh failed");
+                            }
+                        }}
+                    />
+                    <RetryQueueBanner state={state} onRunRetry={runRetry} busy={retrying} />
+                    <QuotaBanner state={state} onUpgrade={() => setTab("upgrade")} />
                     {tab === "overview" && <Overview state={state} onState={setState} />}
-                    {tab === "bulk"     && <Bulk state={state} />}
+                    {tab === "bulk"     && <Bulk state={state} onUpgrade={() => setTab("upgrade")} />}
                     {tab === "settings" && <Settings state={state} onState={setState} />}
                     {tab === "upgrade"  && <Upgrade state={state} />}
                 </main>

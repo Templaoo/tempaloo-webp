@@ -3,6 +3,8 @@ defined( 'ABSPATH' ) || exit;
 
 class Tempaloo_WebP_API_Client {
 
+    const HEALTH_OPTION = 'tempaloo_webp_api_health';
+
     private $base;
     private $license_key;
 
@@ -10,6 +12,35 @@ class Tempaloo_WebP_API_Client {
         $this->base        = rtrim( TEMPALOO_WEBP_API_BASE, '/' );
         $this->license_key = (string) $license_key;
     }
+
+    /**
+     * Records the outcome of an API call so the admin UI can surface
+     * "API unreachable" without each caller having to remember.
+     *
+     * - On any network error / 5xx: stores { failed_at, code, message, attempts }.
+     * - On 2xx: clears the option entirely.
+     * - On 4xx (auth, quota, validation): treated as healthy — those are
+     *   application-level signals, not infra outages.
+     */
+    public static function record_health( $ok, $code = null, $message = '' ) {
+        if ( $ok ) {
+            delete_option( self::HEALTH_OPTION );
+            return;
+        }
+        $cur = get_option( self::HEALTH_OPTION );
+        $attempts = is_array( $cur ) && isset( $cur['attempts'] ) ? (int) $cur['attempts'] + 1 : 1;
+        update_option(
+            self::HEALTH_OPTION,
+            [
+                'failed_at' => time(),
+                'code'      => (string) $code,
+                'message'   => substr( (string) $message, 0, 240 ),
+                'attempts'  => $attempts,
+            ],
+            false
+        );
+    }
+
 
     public function verify_license( $site_url ) {
         $resp = wp_remote_post(
@@ -76,13 +107,16 @@ class Tempaloo_WebP_API_Client {
         );
 
         if ( is_wp_error( $resp ) ) {
+            self::record_health( false, 'http_error', $resp->get_error_message() );
             return [ 'ok' => false, 'error' => [ 'code' => 'http_error', 'message' => $resp->get_error_message() ] ];
         }
-        $code = wp_remote_retrieve_response_code( $resp );
-        if ( 200 !== (int) $code ) {
+        $code = (int) wp_remote_retrieve_response_code( $resp );
+        if ( 200 !== $code ) {
             $data = json_decode( wp_remote_retrieve_body( $resp ), true );
+            self::record_health( $code < 500, 'status_' . $code, 'Conversion failed' );
             return [ 'ok' => false, 'error' => isset( $data['error'] ) ? $data['error'] : [ 'code' => 'status_' . $code, 'message' => 'Conversion failed' ] ];
         }
+        self::record_health( true );
         return [
             'ok'            => true,
             'body'          => wp_remote_retrieve_body( $resp ),
@@ -95,12 +129,20 @@ class Tempaloo_WebP_API_Client {
 
     private function parse_json( $resp ) {
         if ( is_wp_error( $resp ) ) {
+            self::record_health( false, 'http_error', $resp->get_error_message() );
             return [ 'ok' => false, 'error' => [ 'code' => 'http_error', 'message' => $resp->get_error_message() ] ];
         }
         $code = (int) wp_remote_retrieve_response_code( $resp );
         $body = json_decode( wp_remote_retrieve_body( $resp ), true );
         if ( $code >= 200 && $code < 300 ) {
+            self::record_health( true );
             return [ 'ok' => true, 'data' => $body ];
+        }
+        if ( $code >= 500 ) {
+            self::record_health( false, 'status_' . $code, 'Server error' );
+        } else {
+            // 4xx = app-level (auth/quota/validation). The API is healthy.
+            self::record_health( true );
         }
         return [
             'ok'    => false,
@@ -148,16 +190,19 @@ class Tempaloo_WebP_API_Client {
         );
 
         if ( is_wp_error( $resp ) ) {
+            self::record_health( false, 'http_error', $resp->get_error_message() );
             return [ 'ok' => false, 'error' => [ 'code' => 'http_error', 'message' => $resp->get_error_message() ] ];
         }
         $code = (int) wp_remote_retrieve_response_code( $resp );
         $data = json_decode( wp_remote_retrieve_body( $resp ), true );
         if ( 200 !== $code ) {
+            self::record_health( $code < 500, 'status_' . $code, 'Batch failed' );
             return [
                 'ok'    => false,
                 'error' => isset( $data['error'] ) ? $data['error'] : [ 'code' => 'status_' . $code, 'message' => 'Batch failed' ],
             ];
         }
+        self::record_health( true );
         return [
             'ok'    => true,
             'files' => isset( $data['files'] ) ? $data['files'] : [],

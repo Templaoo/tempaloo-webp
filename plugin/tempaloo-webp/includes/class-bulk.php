@@ -20,6 +20,7 @@ class Tempaloo_WebP_Bulk {
         add_action( 'wp_ajax_tempaloo_webp_bulk_tick',    [ $this, 'ajax_tick' ] );
         add_action( 'wp_ajax_tempaloo_webp_bulk_cancel',  [ $this, 'ajax_cancel' ] );
         add_action( 'wp_ajax_tempaloo_webp_bulk_status',  [ $this, 'ajax_status' ] );
+        add_action( 'wp_ajax_tempaloo_webp_bulk_resume',  [ $this, 'ajax_resume' ] );
     }
 
     public function ajax_scan() {
@@ -78,6 +79,11 @@ class Tempaloo_WebP_Bulk {
                     $state['status'] = 'paused_quota';
                     break;
                 }
+                // Infra failure during bulk → enqueue for background retry.
+                if ( in_array( $res['code'], [ 'http_error', 'no_output' ], true )
+                  || ( is_string( $res['code'] ) && 0 === strpos( $res['code'], 'status_5' ) ) ) {
+                    Tempaloo_WebP_Retry_Queue::enqueue( (int) $attachment_id, $res['code'] );
+                }
             }
         }
 
@@ -108,6 +114,41 @@ class Tempaloo_WebP_Bulk {
         $state = get_option( self::STATE_OPTION );
         // Always return the full public shape so the React client can rely on every key.
         wp_send_json_success( $this->public_state( is_array( $state ) ? $state : [] ) );
+    }
+
+    /**
+     * Resume a job that was paused on quota_exceeded. We probe the API once
+     * to confirm the user actually has credits again — avoids replaying the
+     * loop just to hit 402 again on the very next attachment.
+     */
+    public function ajax_resume() {
+        $this->check_caps();
+        $state = get_option( self::STATE_OPTION );
+        if ( ! is_array( $state ) || 'paused_quota' !== ( $state['status'] ?? '' ) || empty( $state['remaining'] ) ) {
+            wp_send_json_error( [ 'message' => 'No paused job to resume' ], 409 );
+        }
+        $s = Tempaloo_WebP_Plugin::get_settings();
+        if ( empty( $s['license_valid'] ) ) {
+            wp_send_json_error( [ 'message' => __( 'Activate a license first.', 'tempaloo-webp' ) ], 400 );
+        }
+
+        $client = new Tempaloo_WebP_API_Client( $s['license_key'] );
+        $q = $client->get_quota();
+        $remaining = ( ! empty( $q['ok'] ) && isset( $q['data']['images_remaining'] ) )
+            ? (int) $q['data']['images_remaining']
+            : 0;
+        if ( $remaining <= 0 ) {
+            wp_send_json_error( [
+                'message' => __( 'Still out of credits. Upgrade your plan or wait for the monthly reset.', 'tempaloo-webp' ),
+                'code'    => 'quota_exceeded',
+            ], 402 );
+        }
+
+        // Credits available again — clear the global flag and flip back to running.
+        delete_option( 'tempaloo_webp_quota_exceeded_at' );
+        $state['status'] = 'running';
+        update_option( self::STATE_OPTION, $state, false );
+        wp_send_json_success( $this->public_state( $state ) );
     }
 
     private function public_state( array $state ) {

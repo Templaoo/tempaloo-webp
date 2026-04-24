@@ -26,6 +26,16 @@ class Tempaloo_WebP_REST {
             'callback'            => [ $this, 'post_settings' ],
             'permission_callback' => [ $this, 'perm_manage' ],
         ] );
+        register_rest_route( self::NS, '/retry/run', [
+            'methods'             => 'POST',
+            'callback'            => [ $this, 'post_retry' ],
+            'permission_callback' => [ $this, 'perm_manage' ],
+        ] );
+    }
+
+    public function post_retry() {
+        $r = Tempaloo_WebP_Retry_Queue::process_all();
+        return rest_ensure_response( array_merge( [ 'state' => $this->state_response()->get_data() ], $r ) );
     }
 
     public function perm_manage() {
@@ -106,6 +116,25 @@ class Tempaloo_WebP_REST {
             }
         }
 
+        // Self-clear the "quota exceeded" flag if the API confirms credits
+        // are available again (rollover, upgrade, or new period).
+        $exceeded_at = (int) get_option( 'tempaloo_webp_quota_exceeded_at', 0 );
+        if ( $exceeded_at > 0 && $quota && $quota['imagesRemaining'] > 0 ) {
+            delete_option( 'tempaloo_webp_quota_exceeded_at' );
+            $exceeded_at = 0;
+        }
+
+        $health = get_option( Tempaloo_WebP_API_Client::HEALTH_OPTION );
+        $api_health = is_array( $health )
+            ? [
+                'ok'        => false,
+                'failedAt'  => (int) ( $health['failed_at'] ?? 0 ),
+                'code'      => (string) ( $health['code'] ?? '' ),
+                'message'   => (string) ( $health['message'] ?? '' ),
+                'attempts'  => (int) ( $health['attempts'] ?? 0 ),
+              ]
+            : [ 'ok' => true, 'failedAt' => 0, 'code' => '', 'message' => '', 'attempts' => 0 ];
+
         return rest_ensure_response( [
             'license'  => [
                 'valid'         => ! empty( $s['license_valid'] ),
@@ -115,7 +144,10 @@ class Tempaloo_WebP_REST {
                 'imagesLimit'   => (int) $s['images_limit'],
                 'sitesLimit'    => (int) $s['sites_limit'],
             ],
-            'quota'    => $quota,
+            'quota'           => $quota,
+            'quotaExceededAt' => $exceeded_at > 0 ? $exceeded_at : null,
+            'apiHealth'       => $api_health,
+            'retryQueue'      => Tempaloo_WebP_Retry_Queue::stats(),
             'settings' => [
                 'quality'      => (int) $s['quality'],
                 'outputFormat' => (string) $s['output_format'],

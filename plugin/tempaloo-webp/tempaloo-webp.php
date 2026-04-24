@@ -33,9 +33,12 @@ require_once TEMPALOO_WEBP_DIR . 'includes/class-converter.php';
 require_once TEMPALOO_WEBP_DIR . 'includes/class-url-filter.php';
 require_once TEMPALOO_WEBP_DIR . 'includes/class-bulk.php';
 require_once TEMPALOO_WEBP_DIR . 'includes/class-rest.php';
+require_once TEMPALOO_WEBP_DIR . 'includes/class-retry-queue.php';
 
 register_activation_hook( __FILE__, [ 'Tempaloo_WebP_Plugin', 'on_activate' ] );
+register_activation_hook( __FILE__, [ 'Tempaloo_WebP_Retry_Queue', 'on_activate' ] );
 register_deactivation_hook( __FILE__, [ 'Tempaloo_WebP_Plugin', 'on_deactivate' ] );
+register_deactivation_hook( __FILE__, [ 'Tempaloo_WebP_Retry_Queue', 'on_deactivate' ] );
 
 add_action( 'plugins_loaded', static function () {
     Tempaloo_WebP_Plugin::instance()->boot();
