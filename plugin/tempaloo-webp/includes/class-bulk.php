@@ -55,7 +55,7 @@ class Tempaloo_WebP_Bulk {
         $this->check_caps();
         $state = get_option( self::STATE_OPTION );
         if ( ! is_array( $state ) || 'running' !== ( $state['status'] ?? '' ) ) {
-            wp_send_json_error( [ 'message' => 'No running job' ], 409 );
+            wp_send_json_error( [ 'message' => __( 'No running job.', 'tempaloo-webp' ) ], 409 );
         }
 
         $s = Tempaloo_WebP_Plugin::get_settings();
@@ -130,7 +130,7 @@ class Tempaloo_WebP_Bulk {
         $state  = get_option( self::STATE_OPTION );
         $status = is_array( $state ) ? ( $state['status'] ?? '' ) : '';
         if ( ! in_array( $status, [ 'paused_quota', 'paused_daily_limit' ], true ) || empty( $state['remaining'] ) ) {
-            wp_send_json_error( [ 'message' => 'No paused job to resume' ], 409 );
+            wp_send_json_error( [ 'message' => __( 'No paused job to resume.', 'tempaloo-webp' ) ], 409 );
         }
         $s = Tempaloo_WebP_Plugin::get_settings();
         if ( empty( $s['license_valid'] ) ) {
@@ -174,7 +174,7 @@ class Tempaloo_WebP_Bulk {
 
     private function check_caps() {
         if ( ! current_user_can( 'manage_options' ) ) {
-            wp_send_json_error( [ 'message' => 'Forbidden' ], 403 );
+            wp_send_json_error( [ 'message' => __( 'Forbidden.', 'tempaloo-webp' ) ], 403 );
         }
         check_ajax_referer( self::NONCE, 'nonce' );
     }

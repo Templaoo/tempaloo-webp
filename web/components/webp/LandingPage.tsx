@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { LogoMark } from "@/components/Logo";
-import { trackCtaClick, type TrackLocation, type TrackPlan } from "@/lib/track";
+import { trackCtaClick, type TrackPlan } from "@/lib/track";
 
 type Theme = "light" | "dark";
 type Billing = "monthly" | "annual";
