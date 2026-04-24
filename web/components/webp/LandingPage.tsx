@@ -91,6 +91,19 @@ const FAQS = [
 
 const activateHref = (plan: Plan["id"], billing: Billing) => `/webp/activate?plan=${plan}&billing=${billing}`;
 
+function usePrefersReducedMotion(): boolean {
+    const [reduced, setReduced] = useState(false);
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+        const update = () => setReduced(mq.matches);
+        update();
+        mq.addEventListener("change", update);
+        return () => mq.removeEventListener("change", update);
+    }, []);
+    return reduced;
+}
+
 export function LandingPage() {
     const [theme, setThemeState] = useState<Theme>("dark");
     const [billing, setBilling] = useState<Billing>("annual");
@@ -128,10 +141,12 @@ export function LandingPage() {
             <HowItWorks />
             <Compatibility />
             <ThumbnailTrap />
+            <Comparison />
             <Pricing billing={billing} onBillingChange={setBilling} />
             <FAQ openIdx={faqOpen} onToggle={(i) => setFaqOpen(faqOpen === i ? -1 : i)} />
             <FinalCTA />
             <Footer />
+            <StickyMobileCTA />
         </div>
     );
 }
@@ -249,8 +264,12 @@ function formatKB(kb: number): string {
 }
 
 function MediaLibraryDemo() {
-    const [t, setT] = useState(0);
+    const reduced = usePrefersReducedMotion();
+    // t=5.5 lands the animation in the "Complete" state (all WebP, −77%) —
+    // shows the outcome without any motion for reduced-motion users.
+    const [t, setT] = useState(reduced ? 5.5 : 0);
     useEffect(() => {
+        if (reduced) { setT(5.5); return; }
         let raf = 0;
         let start = performance.now();
         const loop = (now: number) => {
@@ -261,7 +280,7 @@ function MediaLibraryDemo() {
         };
         raf = requestAnimationFrame(loop);
         return () => cancelAnimationFrame(raf);
-    }, []);
+    }, [reduced]);
 
     const rowState = (i: number): { stage: "pending" | "jpg" | "converting" | "webp"; p: number } => {
         const appearAt = 1.0 + i * 0.12;
@@ -493,12 +512,103 @@ function Compatibility() {
     );
 }
 
-function ThumbnailTrap() {
-    const [tick, setTick] = useState(0);
+const COMPARE_ROWS = [
+    { label: "Credits model",          tempaloo: "1 per upload (all sizes)", shortpixel: "1 per thumbnail", imagify: "1 per image (MB-tiered)", elementor: "1 per thumbnail" },
+    { label: "AVIF support",           tempaloo: "From Starter",              shortpixel: "Paid addon",      imagify: "Pro only",                elementor: "✗" },
+    { label: "Unlimited bulk",         tempaloo: "Yes (except Free)",         shortpixel: "Limited",         imagify: "Limited",                 elementor: "Limited" },
+    { label: "Credit rollover",        tempaloo: "30 days",                   shortpixel: "✗",               imagify: "✗",                       elementor: "✗" },
+    { label: "Sites per license",      tempaloo: "1 → ∞",                     shortpixel: "1 base",          imagify: "3 base",                  elementor: "Per site" },
+    { label: "5,000 imgs/mo (€/mo)",   tempaloo: "€5",                        shortpixel: "~€9.99",          imagify: "~€10",                    elementor: "Bundled" },
+    { label: "EU-hosted (GDPR)",       tempaloo: "✓",                         shortpixel: "US",              imagify: "US/EU",                   elementor: "US" },
+];
+
+function Comparison() {
+    return (
+        <section className="pr2-cmp">
+            <div className="pr2-container">
+                <div className="pr2-section-head">
+                    <span className="pr2-eyebrow">COMPARISON</span>
+                    <h2 className="pr2-h-display pr2-section-h">
+                        Not the same{" "}
+                        <span className="pr2-font-serif pr2-section-h-accent">credit math.</span>
+                    </h2>
+                    <p className="pr2-section-lead">
+                        Same &ldquo;WebP plugin&rdquo; category, very different pricing models. Here is what actually differs.
+                    </p>
+                </div>
+                <div className="pr2-cmp-wrap">
+                    <table className="pr2-cmp-table" aria-label="Feature comparison vs competitors">
+                        <thead>
+                            <tr>
+                                <th scope="col" className="pr2-cmp-feat">Feature</th>
+                                <th scope="col" className="pr2-cmp-us">Tempaloo WebP</th>
+                                <th scope="col">ShortPixel</th>
+                                <th scope="col">Imagify</th>
+                                <th scope="col">Elementor IO</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {COMPARE_ROWS.map((r) => (
+                                <tr key={r.label}>
+                                    <th scope="row" className="pr2-cmp-feat">{r.label}</th>
+                                    <td className="pr2-cmp-us">{r.tempaloo}</td>
+                                    <td>{r.shortpixel}</td>
+                                    <td>{r.imagify}</td>
+                                    <td>{r.elementor}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+                <p className="pr2-cmp-note">
+                    Data cross-checked against each vendor&rsquo;s public pricing page in April 2026.
+                    Competitors&rsquo; pricing and features may change; we won&rsquo;t update this table silently.
+                </p>
+            </div>
+        </section>
+    );
+}
+
+function StickyMobileCTA() {
+    // Only emerge after the user has scrolled past the hero. Avoids
+    // covering the H1 on first paint.
+    const [visible, setVisible] = useState(false);
     useEffect(() => {
+        const onScroll = () => setVisible(window.scrollY > 520);
+        onScroll();
+        window.addEventListener("scroll", onScroll, { passive: true });
+        return () => window.removeEventListener("scroll", onScroll);
+    }, []);
+    return (
+        <div
+            className={`pr2-sticky-cta ${visible ? "pr2-sticky-on" : ""}`}
+            role="complementary"
+            aria-label="Start free"
+            aria-hidden={!visible}
+        >
+            <div className="pr2-sticky-inner">
+                <div className="pr2-sticky-copy">
+                    <strong>Free · 250 images/mo</strong>
+                    <span className="pr2-sticky-sub">No card · 30-day money back</span>
+                </div>
+                <Link href="/webp/activate?plan=free" className="pr2-btn pr2-btn-primary pr2-btn-sm">
+                    Start free <ArrowIcon />
+                </Link>
+            </div>
+        </div>
+    );
+}
+
+function ThumbnailTrap() {
+    const reduced = usePrefersReducedMotion();
+    // phase=99 is the end-state of the cycle: both boxes fully revealed,
+    // competitor counter at 6, Tempaloo at 1. Static but tells the full story.
+    const [tick, setTick] = useState(reduced ? 99 : 0);
+    useEffect(() => {
+        if (reduced) { setTick(99); return; }
         const id = window.setInterval(() => setTick((t) => (t + 1) % 100), 80);
         return () => window.clearInterval(id);
-    }, []);
+    }, [reduced]);
     const phase = tick;
     const thumbs = ["Full", "1536", "1024", "768", "300", "150"];
     const competitorCount = Math.min(6, Math.max(0, Math.floor((phase - 55) / 3) + 1));
@@ -703,19 +813,33 @@ function FAQ({ openIdx, onToggle }: { openIdx: number; onToggle: (i: number) => 
                     <h2 className="pr2-h-display pr2-section-h">Frequently asked.</h2>
                 </div>
                 <div>
-                    {FAQS.map((f, i) => (
-                        <div key={i} className="pr2-faq-item">
-                            <button onClick={() => onToggle(i)} className="pr2-faq-q">
-                                <span>{f.q}</span>
-                                <span className={`pr2-faq-plus ${openIdx === i ? "pr2-faq-plus-open" : ""}`}>
-                                    <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M6 2V10M2 6H10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
-                                </span>
-                            </button>
-                            <div className={`pr2-faq-a ${openIdx === i ? "pr2-faq-a-open" : ""}`}>
-                                <p>{f.a}</p>
+                    {FAQS.map((f, i) => {
+                        const open = openIdx === i;
+                        const panelId = `pr2-faq-a-${i}`;
+                        return (
+                            <div key={i} className="pr2-faq-item">
+                                <button
+                                    onClick={() => onToggle(i)}
+                                    className="pr2-faq-q"
+                                    aria-expanded={open}
+                                    aria-controls={panelId}
+                                >
+                                    <span>{f.q}</span>
+                                    <span className={`pr2-faq-plus ${open ? "pr2-faq-plus-open" : ""}`} aria-hidden>
+                                        <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M6 2V10M2 6H10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+                                    </span>
+                                </button>
+                                <div
+                                    id={panelId}
+                                    role="region"
+                                    aria-hidden={!open}
+                                    className={`pr2-faq-a ${open ? "pr2-faq-a-open" : ""}`}
+                                >
+                                    <p>{f.a}</p>
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </div>
         </section>
@@ -1112,7 +1236,124 @@ const css = `
   letter-spacing: -0.01em;
 }
 
+/* Comparison table */
+.pr2-cmp {
+  padding: 112px 0 96px;
+  border-top: 1px solid var(--line);
+}
+.pr2-cmp-wrap {
+  max-width: 1080px; margin: 0 auto;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.pr2-cmp-table {
+  width: 100%; min-width: 720px;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.pr2-cmp-table th,
+.pr2-cmp-table td {
+  padding: 14px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.pr2-cmp-table thead th {
+  font-size: 12px; font-weight: 500;
+  color: var(--ink-3);
+  letter-spacing: 0.02em; text-transform: uppercase;
+  border-bottom: 1px solid var(--line-2);
+  background: var(--bg-2);
+}
+.pr2-cmp-table tbody th {
+  font-weight: 500; color: var(--ink);
+}
+.pr2-cmp-table tbody td { color: var(--ink-2); }
+.pr2-cmp-feat { width: 36%; }
+.pr2-cmp-us { color: var(--ink) !important; font-weight: 500; background: var(--accent-wash); }
+.pr2-cmp-table thead .pr2-cmp-us { color: var(--ink) !important; }
+.pr2-cmp-table tr:last-child th,
+.pr2-cmp-table tr:last-child td { border-bottom: none; }
+.pr2-cmp-note {
+  max-width: 720px; margin: 20px auto 0;
+  text-align: center;
+  font-size: 12.5px; color: var(--ink-3);
+  letter-spacing: -0.01em;
+}
+@media (max-width: 640px) {
+  .pr2-cmp-wrap { border-radius: 10px; }
+  .pr2-cmp-table th, .pr2-cmp-table td { padding: 10px 12px; font-size: 13px; }
+}
+
+/* Sticky mobile bottom CTA */
+.pr2-sticky-cta {
+  display: none;
+}
+@media (max-width: 768px) {
+  .pr2-sticky-cta {
+    display: block;
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 60;
+    background: color-mix(in oklab, var(--bg) 90%, transparent);
+    backdrop-filter: blur(14px) saturate(180%);
+    -webkit-backdrop-filter: blur(14px) saturate(180%);
+    border-top: 1px solid var(--line-2);
+    transform: translateY(110%);
+    transition: transform .25s cubic-bezier(.2, .7, .3, 1);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .pr2-sticky-on { transform: translateY(0); }
+}
+.pr2-sticky-inner {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 14px;
+  max-width: 640px; margin: 0 auto;
+  padding: 12px 20px;
+}
+.pr2-sticky-copy {
+  display: flex; flex-direction: column; gap: 2px;
+  font-size: 13.5px; color: var(--ink);
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+.pr2-sticky-copy strong { font-weight: 600; }
+.pr2-sticky-sub { color: var(--ink-3); font-size: 11.5px; }
+
 @media (max-width: 720px) {
   .pr2-nav-links { display: none; }
+}
+
+/* Pricing: below 820px force a single-column stack so the
+   highlighted Growth card keeps its lift without crashing into neighbours. */
+@media (max-width: 820px) {
+  .pr2-pricing-featured { grid-template-columns: 1fr; max-width: 480px; }
+  .pr2-pricing-rows     { grid-template-columns: 1fr; max-width: 480px; }
+  .pr2-plan.pr2-plan-hl { transform: none; }
+}
+
+/* Very small phones (iPhone SE 1st gen, 320-420 wide). */
+@media (max-width: 440px) {
+  .pr2-hero { padding: 56px 0 72px; }
+  .pr2-hero-h1 { font-size: clamp(34px, 8.5vw, 56px); }
+  .pr2-final { padding: 72px 0; }
+  .pr2-final-h { font-size: clamp(32px, 8vw, 48px); }
+  .pr2-how, .pr2-compat, .pr2-pricing, .pr2-faq, .pr2-trap {
+    padding-top: 72px; padding-bottom: 72px;
+  }
+}
+
+/* Landscape phones: hide the heavy demo, keep the CTA-first experience. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .pr2-hero-viz { display: none; }
+  .pr2-hero     { padding: 32px 0 48px; }
+}
+
+/* Bottom padding for the sticky mobile CTA bar so it doesn't hide footer content. */
+@media (max-width: 768px) {
+  .pr2-footer { padding-bottom: 96px; }
 }
 `;

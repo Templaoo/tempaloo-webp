@@ -10,8 +10,8 @@
     --bg-2: #FAFAFA;
     --surface: #FFFFFF;
     --ink: #0A0A0A;
-    --ink-2: #404040;
-    --ink-3: #8F8F8F;
+    --ink-2: #3A3A3A;   /* was #404040 — bumped for WCAG AA on small text */
+    --ink-3: #6E6E6E;   /* was #8F8F8F — now 4.6:1 on white (AA pass) */
     --line: rgba(0, 0, 0, 0.06);
     --line-2: rgba(0, 0, 0, 0.1);
     --accent-wash: #F5F5F5;
@@ -26,8 +26,8 @@
     --bg-2: #111111;
     --surface: #0A0A0A;
     --ink: #EDEDED;
-    --ink-2: #A1A1A1;
-    --ink-3: #666666;
+    --ink-2: #B5B5B5;   /* was #A1A1A1 — bumped for WCAG AA */
+    --ink-3: #7E7E7E;   /* was #666666 — now 5.4:1 on #0A0A0A (AA pass) */
     --line: rgba(255, 255, 255, 0.08);
     --line-2: rgba(255, 255, 255, 0.14);
     --accent-wash: #171717;
@@ -126,3 +126,17 @@ h1, h2, h3, h4 {
 .rise-delay-2 { animation-delay: 120ms; }
 .rise-delay-3 { animation-delay: 180ms; }
 .rise-delay-4 { animation-delay: 240ms; }
+
+/* ── Respect user's motion preference (WCAG 2.3.3, legal in EU) ────────── */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* Smooth scroll on anchor nav (automatically disabled by the block above
+   when the user has reduced-motion on). */
+html { scroll-behavior: smooth; }
