@@ -263,3 +263,48 @@ L'UI Freemius change parfois. Si vous voyez un champ qui n'est pas dans ce doc, 
 ---
 
 **Quand tout est fait** → copiez-moi les 5 valeurs, et on passe au câblage.
+
+---
+
+## 9. Règles produit (validées 2026-04-24)
+
+Référence canonique des règles métier. À implémenter côté API + plugin + dashboard.
+
+### 9.1 Activations (sites par licence)
+- Free / Starter : **1 site**
+- Growth : **5 sites**
+- Business / Unlimited : **illimité**
+
+Implémentation : champ `License Activations` du plan Freemius. Tentative d'activation au-delà → refus avec message "Deactivate one of your sites first" et lien vers le dashboard. Le dashboard liste tous les sites actifs avec un bouton **Deactivate**. Quota partagé entre tous les sites de la licence.
+
+### 9.2 Reset du quota
+- **Calendaire**, le **1er du mois à 00:00 UTC**.
+- Cron API quotidien qui réinitialise les compteurs au passage de mois.
+- Combiné au **rollover 30 jours** : crédits non consommés du mois M restent valides pendant 30 jours après le reset, plafonnés à 1× le quota du plan.
+
+### 9.3 Dépassement de quota
+- **Hard stop, pas de surcharge financière**.
+- Quota atteint → l'API renvoie `QUOTA_EXCEEDED`, le plugin sert l'**image originale** (jamais de site cassé).
+- Plugin affiche un **banner amber** : "Quota reached. Resets in X days. Upgrade for instant access."
+- Bulk : pause automatique + bouton **Resume after upgrade** (ou attendre le reset).
+
+### 9.4 Taille max par image
+- **25 Mo** pour tous les plans (pas de différenciation).
+- Au-delà : API renvoie `IMAGE_TOO_LARGE`, le plugin loggue l'erreur sans bloquer l'upload WordPress.
+
+### 9.5 Fair use Unlimited
+- **Soft cap 500 000 images / mois**.
+- Pas de coupure automatique.
+- Au-delà : alerte interne → email manuel "trafic légitime ou plan custom ?".
+- Droit de throttle réservé en cas d'abus évident (crawler, revente wholesale).
+- À documenter dans les CGU.
+
+### 9.6 Erreurs API standardisées
+| Code | HTTP | Quand |
+|---|---|---|
+| `QUOTA_EXCEEDED` | 402 | Quota mensuel + rollover atteints |
+| `IMAGE_TOO_LARGE` | 413 | Image > 25 Mo |
+| `LICENSE_INVALID` | 401 | Clé API absente ou invalide |
+| `LICENSE_INACTIVE` | 403 | Licence valide mais site non activé |
+| `SITE_LIMIT_REACHED` | 403 | Tentative d'activation au-delà du quota de sites |
+

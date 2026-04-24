@@ -140,14 +140,12 @@ Modèle retenu : **crédits images/mois** (lisible, pas dépendant du trafic, al
 - [x] **Quota par image (attachement)** (pas par taille) — 1 crédit = 1 upload, toutes ses tailles incluses (original + thumbnails WP). **Différenciateur fort vs ShortPixel/Imagify qui facturent par taille**. Validé 2026-04-23.
 - [x] **Annuel = -20 %** (standard du marché).
 - [x] **Grille tarifaire validée** (2026-04-23).
-- [ ] **Licence liée au nombre de sites** selon le palier (1 / 3 / 10 / illimité). Un site change de licence via désactivation dans l'UI.
-- [ ] **Dépassement** :
-  - Option A (recommandée) : **blocage dur** (conversion suspendue jusqu'au reset ou upgrade) — simple, prévisible.
-  - Option B : overage à 0,001 €/image, plafond paramétrable par le client.
+- [x] **Licence liée au nombre de sites** : Free/Starter = 1, Growth = 5, Business/Unlimited = ∞. **Hard limit à l'activation** (Freemius `license_activations`), self-service via dashboard pour désactiver un site. Quota partagé entre tous les sites de la licence. Validé 2026-04-24.
+- [x] **Dépassement quota** : **blocage dur, pas de surcharge**. Quota atteint → nouvelles images servies en original (site jamais cassé), banner amber "Quota reached, resets in X days. Upgrade for instant access.". Bulk pause + bouton resume. Le rollover 30j absorbe les pics. Validé 2026-04-24.
+- [x] **Taille max par image** : **25 Mo, identique tous plans**. Erreur API `IMAGE_TOO_LARGE` au-delà. Pas de variation par palier. Validé 2026-04-24.
+- [x] **Reset du quota** : **calendaire, 1er du mois UTC**. Combiné au rollover 30j. Aligné Stripe/Vercel/ShortPixel. Validé 2026-04-24.
+- [x] **Fair use Unlimited** : **soft cap 500k/mois**. Pas de coupure auto. Au-delà → email "trafic légitime ou plan custom ?". Droit de throttle si abus évident (crawler, revente). À documenter dans CGU. Validé 2026-04-24.
 - [ ] **One-time credits** (façon ShortPixel) : pack 30 k = 19 € à étudier pour les sites à volume irrégulier (post-MVP).
-- [ ] **Fair use Unlimited** : seuil à 500 k ou ajustable ? Au-delà → conversation commerciale.
-- [ ] **Taille max par image** : 25 Mo (à fixer).
-- [ ] **Reset du quota** : calendaire 1er du mois ou glissant 30 jours ?
 
 ### 4.4 Branding & hébergement (décidé 2026-04-23)
 
