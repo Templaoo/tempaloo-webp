@@ -13,13 +13,37 @@ const optionsSchema = z.object({
 
 const MAX_BATCH_FILES = 20;
 
+// Per-license rate limit for /convert/*. The global @fastify/rate-limit is
+// per-IP (app.ts), which does not protect against:
+//   · one Unlimited-plan user DoS-ing the API with a rogue script
+//   · one IP rotating through many proxies to multiply calls
+// This cap sits ON TOP of the IP limiter. Values tuned to stay well above
+// any realistic bulk workload (50 thumbnails × 20 batches/min = 1000
+// conversions/min for a single site, which is a lot).
+const CONVERT_RATE_PER_LICENSE = {
+    max: 60,               // 60 batches / minute / license
+    timeWindow: "1 minute" as const,
+};
+
 export default async function convertRoute(app: FastifyInstance) {
     /**
      * Batch endpoint: receive N variants of one attachment, consume 1 credit,
      * return all converted binaries (base64 JSON). This is how the WordPress
      * plugin converts an upload with all its generated thumbnails.
      */
-    app.post("/convert/batch", async (req, reply) => {
+    app.post("/convert/batch", {
+        config: {
+            rateLimit: {
+                ...CONVERT_RATE_PER_LICENSE,
+                // Fall back to IP when there's no license header (the IP
+                // limiter will 401 them shortly after anyway).
+                keyGenerator: (req) => {
+                    const key = req.headers["x-license-key"];
+                    return typeof key === "string" && key.length >= 32 ? `lic:${key}` : `ip:${req.ip}`;
+                },
+            },
+        },
+    }, async (req, reply) => {
         const license = await authMiddleware(req);
 
         const ct = req.headers["content-type"] ?? "";
@@ -137,7 +161,17 @@ export default async function convertRoute(app: FastifyInstance) {
         });
     });
 
-    app.post("/convert", async (req, reply) => {
+    app.post("/convert", {
+        config: {
+            rateLimit: {
+                ...CONVERT_RATE_PER_LICENSE,
+                keyGenerator: (req) => {
+                    const key = req.headers["x-license-key"];
+                    return typeof key === "string" && key.length >= 32 ? `lic:${key}` : `ip:${req.ip}`;
+                },
+            },
+        },
+    }, async (req, reply) => {
         const license = await authMiddleware(req);
 
         // Parse multipart (image file) or JSON (image_url)
