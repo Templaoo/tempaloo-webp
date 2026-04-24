@@ -125,6 +125,8 @@ export function LandingPage() {
             <Nav theme={theme} scrolled={scrolled} onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")} />
             <Hero />
             <StatsBar />
+            <HowItWorks />
+            <Compatibility />
             <ThumbnailTrap />
             <Pricing billing={billing} onBillingChange={setBilling} />
             <FAQ openIdx={faqOpen} onToggle={(i) => setFaqOpen(faqOpen === i ? -1 : i)} />
@@ -185,27 +187,40 @@ function CheckIcon({ size = 12 }: { size?: number }) {
 }
 
 function Hero() {
+    const [copied, setCopied] = useState(false);
+    const copyInstallCmd = async () => {
+        try {
+            await navigator.clipboard.writeText("wp plugin install tempaloo-webp --activate");
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1800);
+        } catch { /* clipboard API unavailable — silent */ }
+    };
     return (
         <section className="pr2-hero">
             <div className="pr2-container pr2-hero-inner">
                 <span className="pr2-pill">
                     <span className="pr2-pill-dot" />
-                    <span>v1.4.0 · WordPress 6.0+</span>
+                    <span>New · WordPress 6.0+ · PHP 7.4+</span>
                 </span>
                 <h1 className="pr2-h-display pr2-hero-h1">
-                    Lighter images.{" "}
-                    <span className="pr2-font-serif pr2-hero-h1-accent">One credit<br />per upload.</span>
+                    Faster WordPress.{" "}
+                    <span className="pr2-font-serif pr2-hero-h1-accent">One upload,<br />every size.</span>
                 </h1>
                 <p className="pr2-hero-lead">
-                    Drop-in WebP &amp; AVIF conversion for WordPress. Every thumbnail size
-                    bundled into a single credit. No visit counting. No surprise bills.
+                    Drop-in WebP &amp; AVIF conversion that bundles every thumbnail WordPress
+                    generates into a single credit. Lighter pages, green Core Web Vitals, no surprise bills.
                 </p>
                 <div className="pr2-hero-ctas">
-                    <Link href="/webp/activate?plan=free" className="pr2-btn pr2-btn-primary">Start free <ArrowIcon /></Link>
-                    <a href="https://wordpress.org/plugins/tempaloo-webp/" className="pr2-btn pr2-btn-ghost" title="WordPress.org">
-                        <span className="pr2-font-mono pr2-mono-sm">$</span> wp plugin install
-                    </a>
+                    <Link href="/webp/activate?plan=free" className="pr2-btn pr2-btn-primary">Get my free API key <ArrowIcon /></Link>
+                    <button type="button" onClick={copyInstallCmd} className="pr2-btn pr2-btn-ghost" aria-label="Copy WP-CLI install command">
+                        <span className="pr2-font-mono pr2-mono-sm">$</span> {copied ? "Copied ✓" : "wp plugin install"}
+                    </button>
                 </div>
+                <ul className="pr2-trust-chips" aria-label="Risk reducers">
+                    <li><CheckIcon size={11} /> 30-day money back</li>
+                    <li><CheckIcon size={11} /> 7-day trial on paid plans</li>
+                    <li><CheckIcon size={11} /> Cancel anytime</li>
+                </ul>
                 <div className="pr2-hero-sub">
                     Free forever · No credit card · 250 images / month
                 </div>
@@ -374,6 +389,105 @@ function StatsBar() {
                         </div>
                     ))}
                 </div>
+            </div>
+        </section>
+    );
+}
+
+const HOW_STEPS = [
+    {
+        n: "01",
+        title: "Install",
+        copy: "Grab the plugin from WordPress.org or run the WP-CLI one-liner. No build step, no config file.",
+        cmd: "wp plugin install tempaloo-webp --activate",
+    },
+    {
+        n: "02",
+        title: "Activate",
+        copy: "Sign in with Google, get your free API key in 10 seconds, paste it in the plugin settings.",
+        cmd: "tmp_live_••••••••••••••",
+    },
+    {
+        n: "03",
+        title: "Convert",
+        copy: "New uploads are converted automatically. Existing library? One click on Bulk does the rest.",
+        cmd: "Auto-convert: ON · Bulk: 1,284 queued",
+    },
+    {
+        n: "04",
+        title: "Serve",
+        copy: "Visitors get WebP or AVIF based on their browser. Originals stay on your server, untouched.",
+        cmd: "Served WEBP to 94% of visits",
+    },
+];
+
+function HowItWorks() {
+    return (
+        <section className="pr2-how">
+            <div className="pr2-container">
+                <div className="pr2-section-head">
+                    <span className="pr2-eyebrow">HOW IT WORKS</span>
+                    <h2 className="pr2-h-display pr2-section-h">
+                        Four steps.{" "}
+                        <span className="pr2-font-serif pr2-section-h-accent">Mostly waiting.</span>
+                    </h2>
+                    <p className="pr2-section-lead">
+                        No build pipeline, no CDN re-architecture. You install a plugin; we do the boring parts.
+                    </p>
+                </div>
+                <ol className="pr2-how-grid" aria-label="Installation steps">
+                    {HOW_STEPS.map((s) => (
+                        <li key={s.n} className="pr2-how-step">
+                            <div className="pr2-how-n pr2-font-mono">{s.n}</div>
+                            <h3 className="pr2-how-title">{s.title}</h3>
+                            <p className="pr2-how-copy">{s.copy}</p>
+                            <code className="pr2-how-cmd pr2-font-mono">{s.cmd}</code>
+                        </li>
+                    ))}
+                </ol>
+            </div>
+        </section>
+    );
+}
+
+const COMPAT = [
+    { name: "Gutenberg", kind: "Block editor" },
+    { name: "Elementor", kind: "Page builder" },
+    { name: "Bricks", kind: "Page builder" },
+    { name: "Divi", kind: "Theme + builder" },
+    { name: "Beaver Builder", kind: "Page builder" },
+    { name: "WooCommerce", kind: "E-commerce" },
+    { name: "WPML / Polylang", kind: "Multilingual" },
+    { name: "Rank Math / Yoast", kind: "SEO" },
+    { name: "WP Rocket", kind: "Cache" },
+    { name: "LiteSpeed Cache", kind: "Cache" },
+];
+
+function Compatibility() {
+    return (
+        <section className="pr2-compat">
+            <div className="pr2-container">
+                <div className="pr2-section-head">
+                    <span className="pr2-eyebrow">COMPATIBILITY</span>
+                    <h2 className="pr2-h-display pr2-section-h">
+                        Works with{" "}
+                        <span className="pr2-font-serif pr2-section-h-accent">your stack.</span>
+                    </h2>
+                    <p className="pr2-section-lead">
+                        Standalone plugin. No lock-in to a page builder, theme or cache plugin — it sits next to whatever you already use.
+                    </p>
+                </div>
+                <ul className="pr2-compat-grid" aria-label="Compatible tools">
+                    {COMPAT.map((c) => (
+                        <li key={c.name} className="pr2-compat-card">
+                            <span className="pr2-compat-name">{c.name}</span>
+                            <span className="pr2-compat-kind pr2-font-mono">{c.kind}</span>
+                        </li>
+                    ))}
+                </ul>
+                <p className="pr2-compat-note">
+                    Theme-agnostic · Works with any image-generating plugin · Zero front-end JS injected
+                </p>
             </div>
         </section>
     );
@@ -892,6 +1006,111 @@ const css = `
 .pr2-footer-inline-muted { color: var(--ink-3) !important; }
 .pr2-footer-tag { font-size: 10px; }
 .pr2-footer-tag-live { color: var(--success); }
+
+/* Trust chips under hero primary CTA */
+.pr2-trust-chips {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.pr2-trust-chips li { display: inline-flex; align-items: center; gap: 5px; }
+.pr2-trust-chips svg { color: var(--ink-2); flex-shrink: 0; }
+
+/* How it works */
+.pr2-how {
+  padding: 112px 0 96px;
+  border-top: 1px solid var(--line);
+}
+.pr2-how-grid {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px; max-width: 1200px; margin: 0 auto;
+  counter-reset: how;
+}
+@media (max-width: 960px) { .pr2-how-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 540px) { .pr2-how-grid { grid-template-columns: 1fr; } }
+.pr2-how-step {
+  position: relative;
+  padding: 22px 20px 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: border-color .15s, transform .15s;
+}
+.pr2-how-step:hover { border-color: var(--line-2); transform: translateY(-2px); }
+.pr2-how-n {
+  font-size: 11px;
+  color: var(--ink-3);
+  letter-spacing: 0.04em;
+}
+.pr2-how-title {
+  font-size: 18px; font-weight: 600; letter-spacing: -0.02em;
+  color: var(--ink); margin: 0;
+}
+.pr2-how-copy {
+  font-size: 13.5px; color: var(--ink-2); margin: 0;
+  line-height: 1.55; flex: 1;
+}
+.pr2-how-cmd {
+  display: block;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  font-size: 11.5px;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Compatibility */
+.pr2-compat {
+  padding: 112px 0;
+  border-top: 1px solid var(--line);
+  background: var(--bg-2);
+}
+.pr2-compat-grid {
+  list-style: none; margin: 0 auto; padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  max-width: 1080px;
+}
+.pr2-compat-card {
+  padding: 18px 18px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: border-color .15s, transform .15s;
+}
+.pr2-compat-card:hover { border-color: var(--line-2); transform: translateY(-2px); }
+.pr2-compat-name {
+  font-size: 14px; font-weight: 500; letter-spacing: -0.015em;
+  color: var(--ink);
+}
+.pr2-compat-kind {
+  font-size: 11px; color: var(--ink-3); letter-spacing: 0.02em;
+}
+.pr2-compat-note {
+  max-width: 720px; margin: 28px auto 0;
+  text-align: center;
+  font-size: 13px; color: var(--ink-3);
+  letter-spacing: -0.01em;
+}
 
 @media (max-width: 720px) {
   .pr2-nav-links { display: none; }
