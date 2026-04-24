@@ -21,6 +21,17 @@ export const metadata: Metadata = {
     description: "Faster WordPress sites. Modern tools for creators.",
     icons: {
         icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+        apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
+    },
+    openGraph: {
+        title: "Tempaloo — WordPress plugins & tools",
+        description: "Faster WordPress sites. Modern tools for creators.",
+        images: [{ url: "/og-image.png", width: 1200, height: 1200 }],
+        type: "website",
+    },
+    twitter: {
+        card: "summary_large_image",
+        images: ["/og-image.png"],
     },
 };
 
