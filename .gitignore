@@ -12,6 +12,10 @@ vendor/
 api/dist/
 web/.next/
 web/out/
+**/*.tsbuildinfo
+
+# Local Claude Code config (per-machine, never committed)
+.claude/settings.local.json
 
 # Vite dev caches inside admin-app, BUT keep the shipped plugin build at plugin/tempaloo-webp/build/
 plugin/tempaloo-webp/admin-app/dist/
