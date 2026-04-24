@@ -35,11 +35,24 @@ require_once TEMPALOO_WEBP_DIR . 'includes/class-bulk.php';
 require_once TEMPALOO_WEBP_DIR . 'includes/class-rest.php';
 require_once TEMPALOO_WEBP_DIR . 'includes/class-retry-queue.php';
 
-register_activation_hook( __FILE__, [ 'Tempaloo_WebP_Plugin', 'on_activate' ] );
-register_activation_hook( __FILE__, [ 'Tempaloo_WebP_Retry_Queue', 'on_activate' ] );
-register_deactivation_hook( __FILE__, [ 'Tempaloo_WebP_Plugin', 'on_deactivate' ] );
-register_deactivation_hook( __FILE__, [ 'Tempaloo_WebP_Retry_Queue', 'on_deactivate' ] );
+// WP only fires one callback per plugin for each of these hooks. Wrap both
+// handlers in a single closure so nothing gets silently overridden.
+register_activation_hook( __FILE__, static function () {
+    Tempaloo_WebP_Plugin::on_activate();
+    Tempaloo_WebP_Retry_Queue::on_activate();
+} );
+register_deactivation_hook( __FILE__, static function () {
+    Tempaloo_WebP_Plugin::on_deactivate();
+    Tempaloo_WebP_Retry_Queue::on_deactivate();
+} );
 
 add_action( 'plugins_loaded', static function () {
+    // Translations. WordPress.org will auto-generate .po/.mo files from the
+    // plugin's text domain once it's published on the directory.
+    load_plugin_textdomain(
+        'tempaloo-webp',
+        false,
+        dirname( plugin_basename( __FILE__ ) ) . '/languages'
+    );
     Tempaloo_WebP_Plugin::instance()->boot();
 } );

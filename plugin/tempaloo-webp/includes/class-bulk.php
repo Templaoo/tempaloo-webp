@@ -186,12 +186,19 @@ class Tempaloo_WebP_Bulk {
     private function find_pending_ids( $limit = 5000 ) {
         global $wpdb;
         $limit = (int) $limit;
-        // MIME list is hardcoded so we can safely inline it (no user input).
-        $sql = "SELECT ID FROM {$wpdb->posts}
-                 WHERE post_type = 'attachment' AND post_status = 'inherit'
-                   AND post_mime_type IN ('image/jpeg','image/png','image/gif')
-                 ORDER BY ID ASC
-                 LIMIT {$limit}";
+        // MIME list is hardcoded (no user input), but going through prepare()
+        // keeps WordPress.org's coding-standards review happy and makes the
+        // intent explicit.
+        $sql = $wpdb->prepare(
+            "SELECT ID FROM {$wpdb->posts}
+              WHERE post_type = %s AND post_status = %s
+                AND post_mime_type IN ('image/jpeg','image/png','image/gif')
+              ORDER BY ID ASC
+              LIMIT %d",
+            'attachment',
+            'inherit',
+            $limit
+        );
         $ids = $wpdb->get_col( $sql );
 
         if ( empty( $ids ) ) {
