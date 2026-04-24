@@ -10,7 +10,7 @@ export function StatsRow({ licenses }: { licenses: DashLicense[] }) {
         : licenses.reduce((a, l) => a + Math.max(0, l.plan.imagesPerMonth), 0).toLocaleString();
 
     return (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
             <Stat label="Active licenses" value={active.toString()} />
             <Stat label="Images this month" value={totalUsed.toLocaleString()} sub={`of ${totalLimit}`} />
             <Stat label="Sites optimized" value={totalSites.toString()} />
@@ -21,10 +21,19 @@ export function StatsRow({ licenses }: { licenses: DashLicense[] }) {
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
     return (
-        <div className="glass rounded-2xl p-5">
-            <div className="text-[11px] uppercase tracking-wider text-white/50">{label}</div>
-            <div className="mt-2 text-2xl font-bold text-white tabular-nums">{value}</div>
-            {sub && <div className="mt-0.5 text-xs text-white/50">{sub}</div>}
+        <div
+            className="surface-card"
+            style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 2 }}
+        >
+            <div className="eyebrow">{label}</div>
+            <div className="h-display" style={{ marginTop: 6, fontSize: 24, fontWeight: 500, letterSpacing: "-0.03em", color: "var(--ink)", fontVariantNumeric: "tabular-nums" }}>
+                {value}
+            </div>
+            {sub && (
+                <div style={{ fontSize: 12, color: "var(--ink-3)", fontFamily: "'Geist Mono', monospace" }}>
+                    {sub}
+                </div>
+            )}
         </div>
     );
 }

@@ -31,14 +31,19 @@ export function LicenseCard({ license }: { license: DashLicense }) {
     const [errorHost, setErrorHost] = useState<string | null>(null);
 
     const masked = `${license.licenseKey.slice(0, 8)}${"•".repeat(24)}${license.licenseKey.slice(-8)}`;
-    const pct = license.plan.imagesPerMonth === -1
-        ? 10
+    const unlimited = license.plan.imagesPerMonth === -1;
+    const pct = unlimited
+        ? 8
         : Math.min(100, license.plan.imagesPerMonth > 0 ? (license.quota.imagesUsed / license.plan.imagesPerMonth) * 100 : 0);
 
-    const slotsLabel = license.plan.maxSites === -1
-        ? `${sites.length} active`
-        : `${sites.length} / ${license.plan.maxSites}`;
+    const slotsLabel = license.plan.maxSites === -1 ? `${sites.length} active` : `${sites.length} / ${license.plan.maxSites}`;
     const slotsFull = license.plan.maxSites !== -1 && sites.length >= license.plan.maxSites;
+
+    const copy = async () => {
+        await navigator.clipboard.writeText(license.licenseKey);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+    };
 
     const deactivate = async (host: string) => {
         if (!confirm(`Deactivate ${host}? The plugin on this site will stop converting until reactivated.`)) return;
@@ -63,100 +68,82 @@ export function LicenseCard({ license }: { license: DashLicense }) {
         }
     };
 
-    const copy = async () => {
-        await navigator.clipboard.writeText(license.licenseKey);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-    };
-
     return (
-        <div className="glass-strong rounded-2xl p-6 md:p-8">
-            <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="surface-card" style={{ padding: "24px 24px 22px" }}>
+            <style dangerouslySetInnerHTML={{ __html: licenseCardCss }} />
+
+            <div className="lc-head">
                 <div>
-                    <div className="flex items-center gap-2">
-                        <h3 className="text-xl font-semibold text-white">{license.plan.name}</h3>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                        <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: "var(--ink)", letterSpacing: "-0.02em" }}>
+                            {license.plan.name}
+                        </h3>
                         <StatusPill status={license.status} />
                         {license.billing !== "free" && (
-                            <span className="text-xs rounded-full bg-white/10 px-2 py-0.5 text-white/70 capitalize">{license.billing}</span>
+                            <span className="font-mono" style={{ fontSize: 11, color: "var(--ink-3)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                                · {license.billing}
+                            </span>
                         )}
                     </div>
-                    <p className="mt-1 text-sm text-white/60">
+                    <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "var(--ink-3)" }}>
                         Since {new Date(license.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
                     </p>
                 </div>
                 {license.plan.code === "free" && (
-                    <a
-                        href="/webp/activate?plan=growth"
-                        className="inline-flex h-9 items-center px-3 rounded-lg bg-gradient-to-r from-brand-500 to-purple-500 text-white text-xs font-semibold glow"
-                    >
+                    <a href="/webp/activate?plan=growth" className="btn btn-primary btn-sm">
                         Upgrade →
                     </a>
                 )}
             </div>
 
-            <div className="mt-6 grid md:grid-cols-[auto_1fr] gap-8 items-start">
+            <div className="lc-body">
                 <QuotaGauge used={license.quota.imagesUsed} limit={license.plan.imagesPerMonth} pct={pct} />
 
-                <div className="min-w-0 space-y-5">
+                <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 20 }}>
                     <div>
-                        <div className="text-xs uppercase tracking-wider text-white/50 mb-2">License key</div>
-                        <div className="flex items-center gap-2">
-                            <code className="flex-1 font-mono text-xs break-all rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white/90">
+                        <div className="eyebrow" style={{ marginBottom: 8 }}>License key</div>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                            <code className="font-mono" style={{ flex: 1, fontSize: 12, padding: "9px 12px", border: "1px solid var(--line-2)", borderRadius: 7, background: "var(--bg-2)", color: "var(--ink)", wordBreak: "break-all" }}>
                                 {revealed ? license.licenseKey : masked}
                             </code>
-                            <button
-                                onClick={() => setRevealed((v) => !v)}
-                                className="h-9 w-9 rounded-lg glass hover:bg-white/10 flex items-center justify-center"
-                                title={revealed ? "Hide" : "Reveal"}
-                                aria-label={revealed ? "Hide key" : "Reveal key"}
-                            >
+                            <button onClick={() => setRevealed((v) => !v)} className="btn btn-ghost" style={{ width: 36, height: 36, padding: 0, borderRadius: 7 }} aria-label={revealed ? "Hide key" : "Reveal key"}>
                                 {revealed ? <EyeOffIcon /> : <EyeIcon />}
                             </button>
-                            <button
-                                onClick={copy}
-                                className="h-9 px-3 rounded-lg bg-white text-ink-950 text-xs font-semibold"
-                            >
+                            <button onClick={copy} className="btn btn-primary btn-sm" style={{ minWidth: 68 }}>
                                 {copied ? "Copied" : "Copy"}
                             </button>
                         </div>
                     </div>
 
                     <div>
-                        <div className="flex items-center justify-between text-xs text-white/60 mb-1.5">
-                            <span>Sites ({slotsLabel})</span>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                            <span className="eyebrow">Sites ({slotsLabel})</span>
                             {slotsFull && (
-                                <span className="rounded-full bg-amber-500/15 text-amber-200 px-2 py-0.5 text-[10px] font-semibold">
-                                    Limit reached
+                                <span className="font-mono" style={{ fontSize: 10, padding: "2px 7px", borderRadius: 4, background: "rgba(245, 165, 36, 0.15)", color: "var(--warn)", fontWeight: 500 }}>
+                                    LIMIT REACHED
                                 </span>
                             )}
                         </div>
                         {sites.length === 0 ? (
-                            <div className="text-sm text-white/50 rounded-lg border border-dashed border-white/15 px-3 py-3">
+                            <div style={{ fontSize: 13, color: "var(--ink-3)", border: "1px dashed var(--line-2)", borderRadius: 7, padding: "12px 14px" }}>
                                 No site activated yet. Paste the key into your plugin to claim this license.
                             </div>
                         ) : (
-                            <ul className="space-y-1.5">
+                            <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }}>
                                 {sites.map((s) => (
-                                    <li
-                                        key={s.host}
-                                        className="flex items-center justify-between gap-3 rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
-                                    >
-                                        <div className="min-w-0 flex-1">
-                                            <div className="text-white/90 truncate">{s.host}</div>
-                                            <div className="text-xs text-white/50 mt-0.5">
-                                                {s.lastSeenAt
-                                                    ? `active ${timeAgo(new Date(s.lastSeenAt))}`
-                                                    : "waiting first request"}
-                                                {errorHost === s.host && (
-                                                    <span className="ml-2 text-rose-300">— deactivate failed, try again</span>
-                                                )}
+                                    <li key={s.host} className="surface-card" style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 12 }}>
+                                        <div style={{ minWidth: 0, flex: 1 }}>
+                                            <div style={{ fontSize: 13, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.host}</div>
+                                            <div style={{ fontSize: 11.5, color: "var(--ink-3)", marginTop: 2 }}>
+                                                {s.lastSeenAt ? `active ${timeAgo(new Date(s.lastSeenAt))}` : "waiting first request"}
+                                                {errorHost === s.host && <span style={{ marginLeft: 8, color: "var(--danger)" }}>— retry</span>}
                                             </div>
                                         </div>
                                         <button
                                             onClick={() => deactivate(s.host)}
                                             disabled={removing === s.host}
-                                            className="shrink-0 inline-flex items-center h-7 px-2.5 rounded-md text-xs font-medium text-white/70 hover:text-rose-200 hover:bg-rose-500/10 border border-white/10 hover:border-rose-400/30 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                            title="Free up this slot"
+                                            className="btn btn-ghost btn-sm"
+                                            style={{ height: 28, padding: "0 10px", fontSize: 12 }}
                                         >
                                             {removing === s.host ? "Removing…" : "Deactivate"}
                                         </button>
@@ -165,9 +152,8 @@ export function LicenseCard({ license }: { license: DashLicense }) {
                             </ul>
                         )}
                         {slotsFull && (
-                            <p className="mt-2 text-xs text-white/50">
-                                Deactivate one to add a new site, or{" "}
-                                <a href="/webp/activate?plan=growth" className="text-brand-300 hover:underline">upgrade for more slots</a>.
+                            <p style={{ margin: "10px 0 0", fontSize: 12, color: "var(--ink-3)" }}>
+                                Deactivate one to add a new site, or <a href="/webp/activate?plan=growth" style={{ color: "var(--ink)", fontWeight: 500, textDecoration: "underline" }}>upgrade for more slots</a>.
                             </p>
                         )}
                     </div>
@@ -179,52 +165,43 @@ export function LicenseCard({ license }: { license: DashLicense }) {
 
 function QuotaGauge({ used, limit, pct }: { used: number; limit: number; pct: number }) {
     const unlimited = limit === -1;
-    const size = 140;
+    const size = 132;
     const r = size / 2 - 8;
     const c = 2 * Math.PI * r;
     const dash = (pct / 100) * c;
     return (
-        <div className="relative" style={{ width: size, height: size }}>
-            <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
-                <circle cx={size / 2} cy={size / 2} r={r} stroke="rgba(255,255,255,0.08)" strokeWidth="8" fill="none" />
-                <circle
-                    cx={size / 2}
-                    cy={size / 2}
-                    r={r}
-                    stroke="url(#dashgrad)"
-                    strokeWidth="8"
-                    fill="none"
-                    strokeLinecap="round"
-                    strokeDasharray={`${dash} ${c - dash}`}
-                    style={{ transition: "stroke-dasharray 600ms ease" }}
-                />
-                <defs>
-                    <linearGradient id="dashgrad" x1="0" y1="0" x2="1" y2="1">
-                        <stop offset="0%" stopColor="#818cf8" />
-                        <stop offset="100%" stopColor="#c084fc" />
-                    </linearGradient>
-                </defs>
+        <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
+            <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: "rotate(-90deg)" }}>
+                <circle cx={size / 2} cy={size / 2} r={r} stroke="var(--line)" strokeWidth="8" fill="none" />
+                <circle cx={size / 2} cy={size / 2} r={r} stroke="var(--ink)" strokeWidth="8" fill="none" strokeLinecap="round" strokeDasharray={`${dash} ${c - dash}`} style={{ transition: "stroke-dasharray 500ms ease" }} />
             </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <div className="text-2xl font-bold text-white tabular-nums">{used.toLocaleString()}</div>
-                <div className="text-[11px] uppercase tracking-wider text-white/50 mt-0.5">
+            <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+                <div className="h-display" style={{ fontSize: 22, fontWeight: 500, letterSpacing: "-0.04em", color: "var(--ink)", fontVariantNumeric: "tabular-nums" }}>
+                    {used.toLocaleString()}
+                </div>
+                <div className="font-mono" style={{ fontSize: 11, color: "var(--ink-3)", marginTop: 2, letterSpacing: "0.02em" }}>
                     of {unlimited ? "∞" : limit.toLocaleString()}
                 </div>
-                <div className="text-[11px] text-white/50 mt-0.5">this month</div>
+                <div style={{ fontSize: 11, color: "var(--ink-3)", marginTop: 2 }}>this month</div>
             </div>
         </div>
     );
 }
 
 function StatusPill({ status }: { status: string }) {
-    const s = {
-        active:   { text: "Active",   bg: "bg-emerald-500/15", fg: "text-emerald-300" },
-        trialing: { text: "Trialing", bg: "bg-blue-500/15",    fg: "text-blue-300" },
-        past_due: { text: "Past due", bg: "bg-amber-500/15",   fg: "text-amber-300" },
-        canceled: { text: "Canceled", bg: "bg-white/10",       fg: "text-white/60" },
-        expired:  { text: "Expired",  bg: "bg-rose-500/15",    fg: "text-rose-300" },
-    }[status] ?? { text: status, bg: "bg-white/10", fg: "text-white/60" };
-    return <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${s.bg} ${s.fg}`}>{s.text}</span>;
+    const map: Record<string, { text: string; bg: string; fg: string }> = {
+        active:   { text: "Active",   bg: "rgba(23, 201, 100, 0.15)", fg: "var(--success)" },
+        trialing: { text: "Trialing", bg: "var(--accent-wash)",       fg: "var(--ink)"     },
+        past_due: { text: "Past due", bg: "rgba(245, 165, 36, 0.15)", fg: "var(--warn)"    },
+        canceled: { text: "Canceled", bg: "var(--bg-2)",              fg: "var(--ink-3)"   },
+        expired:  { text: "Expired",  bg: "rgba(229, 72, 77, 0.15)",  fg: "var(--danger)"  },
+    };
+    const s = map[status] ?? { text: status, bg: "var(--bg-2)", fg: "var(--ink-3)" };
+    return (
+        <span style={{ fontSize: 11, padding: "3px 8px", borderRadius: 4, background: s.bg, color: s.fg, fontWeight: 500, letterSpacing: "0.01em" }}>
+            {s.text}
+        </span>
+    );
 }
 
 function timeAgo(d: Date): string {
@@ -239,18 +216,16 @@ function timeAgo(d: Date): string {
 }
 
 function EyeIcon() {
-    return (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" />
-            <circle cx="12" cy="12" r="3" />
-        </svg>
-    );
+    return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" /><circle cx="12" cy="12" r="3" /></svg>;
 }
 function EyeOffIcon() {
-    return (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-            <line x1="1" y1="1" x2="23" y2="23" />
-        </svg>
-    );
+    return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" /><line x1="1" y1="1" x2="23" y2="23" /></svg>;
 }
+
+const licenseCardCss = `
+.lc-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }
+.lc-body { display: grid; grid-template-columns: 132px 1fr; gap: 28px; align-items: start; }
+@media (max-width: 640px) {
+  .lc-body { grid-template-columns: 1fr; }
+}
+`;

@@ -1,86 +1,128 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
+/* ── Design tokens — Vercel/Framer inspired, shared by every page ───────── */
+:root,
+[data-theme="light"] {
+    --bg: #FFFFFF;
+    --bg-2: #FAFAFA;
+    --surface: #FFFFFF;
+    --ink: #0A0A0A;
+    --ink-2: #404040;
+    --ink-3: #8F8F8F;
+    --line: rgba(0, 0, 0, 0.06);
+    --line-2: rgba(0, 0, 0, 0.1);
+    --accent-wash: #F5F5F5;
+    --success: #17C964;
+    --danger: #E5484D;
+    --warn: #F5A524;
+    color-scheme: light;
+}
+
+[data-theme="dark"] {
+    --bg: #0A0A0A;
+    --bg-2: #111111;
+    --surface: #0A0A0A;
+    --ink: #EDEDED;
+    --ink-2: #A1A1A1;
+    --ink-3: #666666;
+    --line: rgba(255, 255, 255, 0.08);
+    --line-2: rgba(255, 255, 255, 0.14);
+    --accent-wash: #171717;
     color-scheme: dark;
 }
 
 html, body {
-    background: #05060c;
-    color: #f1f5f9;
-    font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Geist', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+    letter-spacing: -0.003em;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
-/* Ambient gradient + grain that wrap the whole page. */
-.ambient {
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 0;
-}
-.ambient::before {
-    content: "";
-    position: absolute;
-    inset: -20% -10% auto -10%;
-    height: 60vh;
-    background:
-        radial-gradient(55% 40% at 20% 30%, rgba(99, 102, 241, 0.22), transparent 70%),
-        radial-gradient(45% 40% at 80% 20%, rgba(168, 85, 247, 0.18), transparent 70%),
-        radial-gradient(40% 40% at 50% 60%, rgba(59, 130, 246, 0.15), transparent 70%);
-    filter: blur(40px);
-}
-.ambient::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.35'/></svg>");
-    opacity: 0.035;
-    mix-blend-mode: overlay;
+* { box-sizing: border-box; }
+a { color: inherit; text-decoration: none; }
+button { font-family: inherit; }
+
+::selection { background: var(--ink); color: var(--bg); }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 4px; }
+
+h1, h2, h3, h4 {
+    font-family: 'Geist', sans-serif;
+    letter-spacing: -0.035em;
+    font-weight: 600;
 }
 
-/* Glass card */
+/* ── Shared utility classes ─────────────────────────────────────────────── */
+.font-serif { font-family: 'Instrument Serif', serif; font-weight: 400; letter-spacing: -0.01em; font-style: italic; }
+.font-mono  { font-family: 'Geist Mono', ui-monospace, monospace; }
+.h-display  { font-family: 'Geist', sans-serif; letter-spacing: -0.035em; font-weight: 600; }
+
+.app-container    { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+.app-container-sm { max-width: 880px;  margin: 0 auto; padding: 0 24px; }
+
+.btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    height: 40px; padding: 0 16px;
+    border-radius: 8px;
+    font-size: 14px; font-weight: 500;
+    letter-spacing: -0.01em;
+    border: 1px solid transparent; cursor: pointer;
+    transition: background .15s ease, color .15s ease, border-color .15s ease, transform .15s ease;
+    white-space: nowrap;
+}
+.btn-primary       { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn-primary:hover { background: var(--ink-2); border-color: var(--ink-2); }
+.btn-ghost         { background: var(--bg); color: var(--ink); border-color: var(--line-2); }
+.btn-ghost:hover   { background: var(--bg-2); border-color: var(--ink-3); }
+.btn-sm            { height: 34px; font-size: 13.5px; padding: 0 14px; border-radius: 7px; }
+
+.eyebrow {
+    font-family: 'Geist Mono', monospace;
+    font-size: 11px; font-weight: 400;
+    letter-spacing: 0.02em;
+    color: var(--ink-3);
+    text-transform: uppercase;
+}
+
+.surface-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 10px; border: 2px solid var(--bg); }
+
+/* ── Modal glass (used by ActivateModal which floats over a black backdrop) */
+.glass-strong {
+    background: linear-gradient(180deg, rgba(20, 20, 20, 0.88) 0%, rgba(10, 10, 10, 0.92) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
 .glass {
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.02) 100%);
     border: 1px solid rgba(255, 255, 255, 0.08);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
 }
-.glass-strong {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.025) 100%);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-}
 
-/* Gradient text */
-.text-gradient {
-    background: linear-gradient(90deg, #c7d2fe 0%, #a5b4fc 40%, #c084fc 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    color: transparent;
-}
-
-/* Subtle ring glow on hover for primary CTAs */
-.glow {
-    box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.4), 0 10px 40px -10px rgba(99, 102, 241, 0.45);
-    transition: box-shadow 200ms ease, transform 200ms ease;
-}
-.glow:hover {
-    box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.6), 0 12px 50px -8px rgba(99, 102, 241, 0.65);
-    transform: translateY(-1px);
-}
-
-/* Entrance fades */
+/* ── Soft entrance animation (used on page load) ────────────────────────── */
 @keyframes rise {
     from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: none; }
+    to   { opacity: 1; transform: none; }
 }
 .rise { animation: rise 500ms ease both; }
 .rise-delay-1 { animation-delay: 60ms; }
 .rise-delay-2 { animation-delay: 120ms; }
 .rise-delay-3 { animation-delay: 180ms; }
 .rise-delay-4 { animation-delay: 240ms; }
-.rise-delay-5 { animation-delay: 300ms; }

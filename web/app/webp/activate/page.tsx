@@ -5,14 +5,14 @@ import { useSearchParams } from "next/navigation";
 import { PLANS, findPlan } from "@/lib/plans";
 import type { Billing } from "@/components/pricing/BillingToggle";
 import { ActivateModal } from "@/components/pricing/ActivateModal";
-import { PricingRefined } from "@/components/activate/PricingRefined";
+import { ActivatePricing } from "@/components/activate/ActivatePricing";
 import { openFreemiusCheckout } from "@/lib/freemius-checkout";
 
 type PlanCode = typeof PLANS[number]["code"];
 
 export default function ActivatePage() {
     return (
-        <Suspense fallback={<main className="mx-auto max-w-5xl px-6 py-24 text-center text-white/60">Loading…</main>}>
+        <Suspense fallback={<main style={{ padding: "96px 24px", textAlign: "center", color: "var(--ink-3)" }}>Loading…</main>}>
             <ActivateInner />
         </Suspense>
     );
@@ -37,7 +37,6 @@ function ActivateInner() {
 
     const activePlan = useMemo(() => (modalPlan ? findPlan(modalPlan) ?? null : null), [modalPlan]);
 
-    // Best-effort session lookup so the header can swap "Sign in" → "Dashboard".
     useEffect(() => {
         let cancelled = false;
         (async () => {
@@ -50,7 +49,6 @@ function ActivateInner() {
         return () => { cancelled = true; };
     }, []);
 
-    // Auto-open Freemius Checkout after returning from Google (?checkout=1).
     useEffect(() => {
         if (checkoutTriggered.current) return;
         const wantCheckout = params.get("checkout") === "1";
@@ -89,16 +87,25 @@ function ActivateInner() {
     return (
         <>
             {banner && (
-                <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] rounded-full glass-strong px-5 py-2.5 text-sm text-white shadow-pop flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                <div
+                    style={{
+                        position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 100,
+                        padding: "8px 18px", borderRadius: 999,
+                        background: "var(--ink)", color: "var(--bg)",
+                        fontSize: 13, display: "inline-flex", alignItems: "center", gap: 8,
+                        boxShadow: "0 10px 30px -10px rgba(0,0,0,0.3)",
+                    }}
+                >
+                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--success)" }} />
                     {banner}
                 </div>
             )}
 
-            <PricingRefined
+            <ActivatePricing
                 billing={billing}
                 onBillingChange={setBilling}
                 onChoose={openModal}
+                initialPlan={initialPlan}
                 authedEmail={authedEmail}
             />
 

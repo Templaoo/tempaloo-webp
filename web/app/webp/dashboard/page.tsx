@@ -12,29 +12,18 @@ export const metadata = {
 };
 
 async function resolveUserEmail(searchEmail: string | undefined): Promise<{ email: string; name?: string; authed: boolean } | null> {
-    // Preferred: real session via Neon Auth (Better Auth).
     const user = await getCurrentUser();
-    if (user?.email) {
-        return { email: user.email, name: user.name, authed: true };
-    }
-    // Dev fallback: ?email=... query param (explicit, never silent).
-    if (searchEmail && /.+@.+\..+/.test(searchEmail)) {
-        return { email: searchEmail, authed: false };
-    }
+    if (user?.email) return { email: user.email, name: user.name, authed: true };
+    if (searchEmail && /.+@.+\..+/.test(searchEmail)) return { email: searchEmail, authed: false };
     return null;
 }
 
 export default async function DashboardPage({ searchParams }: { searchParams: { email?: string; signup?: string } }) {
     const user = await resolveUserEmail(searchParams.email);
-
-    if (!user) {
-        // Not signed in and no email hint — push to activation.
-        redirect("/webp/activate?redirect=dashboard");
-    }
+    if (!user) redirect("/webp/activate?redirect=dashboard");
 
     let licenses = await fetchLicensesByEmail(user.email).catch(() => []);
 
-    // Just signed in via Google with no existing license — auto-provision a Free one.
     if (user.authed && licenses.length === 0 && searchParams.signup) {
         const apiBase = process.env.TEMPALOO_API_BASE ?? "http://localhost:3000/v1";
         try {
@@ -44,45 +33,44 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
                 body: JSON.stringify({ email: user.email, site_url: "https://pending.tempaloo.local" }),
             });
             licenses = await fetchLicensesByEmail(user.email).catch(() => []);
-        } catch {
-            // fall through — empty state will prompt manual action
-        }
+        } catch { /* non-blocking */ }
     }
 
     return (
-        <main className="mx-auto max-w-6xl px-6 py-10 md:py-14 space-y-10">
+        <main style={{ minHeight: "100vh", background: "var(--bg)", color: "var(--ink)" }}>
             <TopBar email={user.email} name={user.name} authed={user.authed} />
 
-            {/* Hello banner */}
-            <section className="rise">
-                <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-white">
-                    Welcome back{user.name ? `, ${user.name.split(" ")[0]}` : ""}.
-                </h1>
-                <p className="mt-2 text-white/60">Overview of your licenses, sites, and usage.</p>
-            </section>
+            <div className="app-container" style={{ padding: "40px 24px 80px" }}>
+                <section className="rise" style={{ marginBottom: 32 }}>
+                    <h1 className="h-display" style={{ fontSize: "clamp(32px, 4vw, 44px)", fontWeight: 600, letterSpacing: "-0.035em", margin: 0, color: "var(--ink)" }}>
+                        Welcome back{user.name ? `, ${user.name.split(" ")[0]}` : ""}.
+                    </h1>
+                    <p style={{ margin: "8px 0 0", fontSize: 15, color: "var(--ink-3)", letterSpacing: "-0.01em" }}>
+                        Overview of your licenses, sites, and usage.
+                    </p>
+                </section>
 
-            <section className="rise rise-delay-1">
-                <StatsRow licenses={licenses} />
-            </section>
+                <section className="rise rise-delay-1" style={{ marginBottom: 32 }}>
+                    <StatsRow licenses={licenses} />
+                </section>
 
-            {/* Main */}
-            <section className="grid lg:grid-cols-3 gap-6 rise rise-delay-2">
-                <div className="lg:col-span-2 space-y-4">
-                    {licenses.length === 0 ? (
-                        <EmptyState email={user.email} />
-                    ) : (
-                        licenses.map((l) => <LicenseCard key={l.id} license={l} />)
-                    )}
-                </div>
+                <section className="rise rise-delay-2" style={{ display: "grid", gridTemplateColumns: "minmax(0, 2fr) minmax(280px, 1fr)", gap: 20 }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                        {licenses.length === 0 ? (
+                            <EmptyState email={user.email} />
+                        ) : (
+                            licenses.map((l) => <LicenseCard key={l.id} license={l} />)
+                        )}
+                    </div>
+                    <aside style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                        <UpgradeCard hasPaid={licenses.some((l) => l.plan.code !== "free")} />
+                        <BillingCard />
+                        <SupportCard />
+                    </aside>
+                </section>
+            </div>
 
-                <aside className="space-y-4">
-                    <UpgradeCard hasPaid={licenses.some((l) => l.plan.code !== "free")} />
-                    <BillingCard />
-                    <SupportCard />
-                </aside>
-            </section>
-
-            <footer className="text-center text-xs text-white/40 pt-10">
+            <footer style={{ borderTop: "1px solid var(--line)", padding: "24px 0", textAlign: "center", fontSize: 12, color: "var(--ink-3)" }}>
                 © {new Date().getFullYear()} Tempaloo.
             </footer>
         </main>
@@ -92,41 +80,30 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 function TopBar({ email, name, authed }: { email: string; name?: string; authed: boolean }) {
     const initial = (name ?? email).trim()[0]?.toUpperCase() ?? "?";
     return (
-        <header className="flex items-center justify-between">
-            <Link href="/webp" className="flex items-center gap-2.5">
-                <span className="h-8 w-8 rounded-lg bg-gradient-to-br from-brand-500 to-purple-500 flex items-center justify-center text-white font-bold text-sm">
-                    T
-                </span>
-                <span className="text-sm font-semibold text-white/90">Tempaloo</span>
-            </Link>
-            <div className="flex items-center gap-3">
-                {!authed && (
-                    <span className="hidden sm:inline-flex items-center gap-2 rounded-full bg-amber-500/15 text-amber-200 px-3 py-1 text-[11px] font-medium">
-                        <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
-                        Preview — sign in with Neon Auth to enable real sessions
+        <header style={{ borderBottom: "1px solid var(--line)", background: "color-mix(in oklab, var(--bg) 80%, transparent)", backdropFilter: "blur(16px)", position: "sticky", top: 0, zIndex: 40 }}>
+            <div className="app-container" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", height: 60 }}>
+                <Link href="/webp" style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill="currentColor" /><path d="M6 8H18M12 8V17" stroke="var(--bg)" strokeWidth="2" strokeLinecap="round" /></svg>
+                    <span style={{ fontWeight: 500, fontSize: 14.5, letterSpacing: "-0.015em" }}>
+                        Tempaloo<span style={{ color: "var(--ink-3)" }}> / WebP</span>
                     </span>
-                )}
-                <div className="flex items-center gap-2.5 rounded-full glass pl-1 pr-3 py-1">
-                    <span className="h-7 w-7 rounded-full bg-gradient-to-br from-brand-400 to-purple-500 flex items-center justify-center text-white text-xs font-bold">
-                        {initial}
-                    </span>
-                    <span className="text-sm text-white/90 truncate max-w-[180px]">{name ?? email}</span>
+                </Link>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    {!authed && (
+                        <span className="font-mono" style={{ fontSize: 10.5, padding: "4px 10px", borderRadius: 999, background: "rgba(245, 165, 36, 0.15)", color: "var(--warn)", letterSpacing: "0.02em" }}>
+                            · PREVIEW
+                        </span>
+                    )}
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "4px 12px 4px 4px", borderRadius: 999, border: "1px solid var(--line)", background: "var(--bg-2)" }}>
+                        <span style={{ width: 26, height: 26, borderRadius: "50%", background: "var(--ink)", color: "var(--bg)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600 }}>{initial}</span>
+                        <span style={{ fontSize: 13, color: "var(--ink)", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name ?? email}</span>
+                    </div>
+                    {authed ? (
+                        <a href="/api/auth/sign-out" style={{ fontSize: 12.5, color: "var(--ink-3)" }}>Sign out</a>
+                    ) : (
+                        <a href="/webp/activate" style={{ fontSize: 12.5, color: "var(--ink-3)" }}>Sign in</a>
+                    )}
                 </div>
-                {authed ? (
-                    <a
-                        href="/api/auth/sign-out"
-                        className="text-xs text-white/60 hover:text-white underline-offset-4 hover:underline"
-                    >
-                        Sign out
-                    </a>
-                ) : (
-                    <a
-                        href="/webp/activate"
-                        className="text-xs text-white/60 hover:text-white underline-offset-4 hover:underline"
-                    >
-                        Sign in
-                    </a>
-                )}
             </div>
         </header>
     );
@@ -134,20 +111,15 @@ function TopBar({ email, name, authed }: { email: string; name?: string; authed:
 
 function EmptyState({ email }: { email: string }) {
     return (
-        <div className="glass rounded-2xl p-10 text-center">
-            <div className="mx-auto h-14 w-14 rounded-2xl bg-gradient-to-br from-brand-500/30 to-purple-500/30 flex items-center justify-center text-white">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 2v20M2 12h20" />
-                </svg>
-            </div>
-            <h3 className="mt-5 text-lg font-semibold text-white">No license yet</h3>
-            <p className="mt-1 text-sm text-white/60 max-w-md mx-auto">
-                We couldn't find a license for <span className="text-white/90">{email}</span>. Generate one — it takes 10 seconds.
+        <div className="surface-card" style={{ padding: "48px 32px", textAlign: "center" }}>
+            <span className="eyebrow">NO LICENSE</span>
+            <h3 style={{ margin: "12px 0 6px", fontSize: 20, fontWeight: 600, letterSpacing: "-0.02em", color: "var(--ink)" }}>
+                No license yet
+            </h3>
+            <p style={{ margin: "0 auto", maxWidth: 440, fontSize: 14, color: "var(--ink-3)", lineHeight: 1.5 }}>
+                We couldn&apos;t find a license for <span style={{ color: "var(--ink)" }}>{email}</span>. Generate one — it takes 10 seconds.
             </p>
-            <a
-                href="/webp/activate"
-                className="mt-6 inline-flex h-11 items-center px-5 rounded-xl bg-gradient-to-r from-brand-500 to-purple-500 text-white font-semibold glow"
-            >
+            <a href="/webp/activate" className="btn btn-primary" style={{ marginTop: 24 }}>
                 Generate a key →
             </a>
         </div>
@@ -157,48 +129,45 @@ function EmptyState({ email }: { email: string }) {
 function UpgradeCard({ hasPaid }: { hasPaid: boolean }) {
     if (hasPaid) {
         return (
-            <div className="glass rounded-2xl p-5">
-                <div className="text-xs uppercase tracking-wider text-white/50">Plan</div>
-                <div className="mt-2 text-white font-semibold">You're on a paid plan 🎉</div>
-                <p className="mt-1 text-xs text-white/60">Manage your subscription from the billing section.</p>
+            <div className="surface-card" style={{ padding: 18 }}>
+                <div className="eyebrow">PLAN</div>
+                <div style={{ marginTop: 8, fontSize: 14, fontWeight: 500, color: "var(--ink)" }}>You&apos;re on a paid plan</div>
+                <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "var(--ink-3)", lineHeight: 1.5 }}>
+                    Manage your subscription from the billing section.
+                </p>
             </div>
         );
     }
     return (
-        <div className="relative overflow-hidden rounded-2xl p-5 bg-gradient-to-br from-brand-600 via-brand-500 to-purple-600 text-white">
-            <div className="absolute inset-0 opacity-30 pointer-events-none" style={{
-                background: "radial-gradient(80% 60% at 50% -10%, rgba(255,255,255,0.35), transparent 60%)",
-            }} />
-            <div className="relative">
-                <div className="text-xs uppercase tracking-wider opacity-80">Upgrade</div>
-                <div className="mt-1 text-lg font-semibold leading-tight">Ship lighter pages on more sites.</div>
-                <ul className="mt-3 space-y-1.5 text-xs opacity-90">
-                    <li>• AVIF + larger quotas</li>
-                    <li>• Multi-site licences</li>
-                    <li>• Priority support</li>
-                </ul>
-                <Link
-                    href="/webp/activate?plan=growth"
-                    className="mt-4 inline-flex h-9 items-center px-3 rounded-lg bg-white text-ink-950 text-xs font-semibold"
-                >
-                    See plans →
-                </Link>
+        <div style={{ padding: 20, borderRadius: 10, background: "var(--ink)", color: "var(--bg)", position: "relative", overflow: "hidden" }}>
+            <div className="eyebrow" style={{ color: "var(--ink-3)" }}>UPGRADE</div>
+            <div className="h-display" style={{ marginTop: 10, fontSize: 20, fontWeight: 600, letterSpacing: "-0.02em", lineHeight: 1.2 }}>
+                Ship lighter pages<br />on more sites.
             </div>
+            <ul style={{ margin: "14px 0 16px", padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 5, fontSize: 12.5, color: "rgba(237,237,237,0.75)" }}>
+                <li>— AVIF + larger quotas</li>
+                <li>— Multi-site licences</li>
+                <li>— Priority support</li>
+            </ul>
+            <Link
+                href="/webp/activate?plan=growth"
+                style={{ display: "inline-flex", alignItems: "center", height: 32, padding: "0 12px", borderRadius: 6, background: "var(--bg)", color: "var(--ink)", fontSize: 12.5, fontWeight: 500 }}
+            >
+                See plans →
+            </Link>
         </div>
     );
 }
 
 function BillingCard() {
     return (
-        <div className="glass rounded-2xl p-5">
-            <div className="flex items-center justify-between">
-                <div>
-                    <div className="text-xs uppercase tracking-wider text-white/50">Billing</div>
-                    <div className="mt-1 text-white font-medium">Invoices & payment</div>
-                </div>
-                <span className="rounded-full bg-white/10 text-white/70 text-[10px] font-semibold px-2 py-0.5">Soon</span>
+        <div className="surface-card" style={{ padding: 18 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div className="eyebrow">BILLING</div>
+                <span className="font-mono" style={{ fontSize: 10, padding: "2px 6px", borderRadius: 4, background: "var(--bg-2)", color: "var(--ink-3)", fontWeight: 500 }}>SOON</span>
             </div>
-            <p className="mt-2 text-xs text-white/60">
+            <div style={{ marginTop: 8, fontSize: 14, fontWeight: 500, color: "var(--ink)" }}>Invoices &amp; payment</div>
+            <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "var(--ink-3)", lineHeight: 1.5 }}>
                 Your invoices will appear here once paid plans are live. Payments are handled securely by Freemius.
             </p>
         </div>
@@ -207,13 +176,15 @@ function BillingCard() {
 
 function SupportCard() {
     return (
-        <div className="glass rounded-2xl p-5">
-            <div className="text-xs uppercase tracking-wider text-white/50">Need help?</div>
-            <div className="mt-1 text-white font-medium">We answer fast.</div>
-            <p className="mt-1 text-xs text-white/60">Docs, troubleshooting and direct contact.</p>
-            <div className="mt-3 flex gap-2">
-                <a href="/webp" className="h-8 px-3 rounded-lg text-xs flex items-center bg-white/10 hover:bg-white/15 text-white/90">Docs</a>
-                <a href="mailto:support@tempaloo.com" className="h-8 px-3 rounded-lg text-xs flex items-center bg-white/10 hover:bg-white/15 text-white/90">Email</a>
+        <div className="surface-card" style={{ padding: 18 }}>
+            <div className="eyebrow">SUPPORT</div>
+            <div style={{ marginTop: 8, fontSize: 14, fontWeight: 500, color: "var(--ink)" }}>We answer fast</div>
+            <p style={{ margin: "4px 0 10px", fontSize: 12.5, color: "var(--ink-3)", lineHeight: 1.5 }}>
+                Docs, troubleshooting and direct contact.
+            </p>
+            <div style={{ display: "flex", gap: 8 }}>
+                <a href="/webp" className="btn btn-ghost btn-sm">Docs</a>
+                <a href="mailto:support@tempaloo.com" className="btn btn-ghost btn-sm">Email</a>
             </div>
         </div>
     );
