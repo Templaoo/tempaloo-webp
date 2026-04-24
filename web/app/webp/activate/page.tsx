@@ -7,6 +7,7 @@ import type { Billing } from "@/components/pricing/BillingToggle";
 import { ActivateModal } from "@/components/pricing/ActivateModal";
 import { ActivatePricing } from "@/components/activate/ActivatePricing";
 import { openFreemiusCheckout } from "@/lib/freemius-checkout";
+import { trackActivateOpen, type TrackPlan } from "@/lib/track";
 
 type PlanCode = typeof PLANS[number]["code"];
 
@@ -38,6 +39,7 @@ function ActivateInner() {
     const activePlan = useMemo(() => (modalPlan ? findPlan(modalPlan) ?? null : null), [modalPlan]);
 
     useEffect(() => {
+        trackActivateOpen(initialPlan as TrackPlan, initialBilling);
         let cancelled = false;
         (async () => {
             try {
@@ -47,7 +49,7 @@ function ActivateInner() {
             } catch { /* non-blocking */ }
         })();
         return () => { cancelled = true; };
-    }, []);
+    }, [initialPlan, initialBilling]);
 
     useEffect(() => {
         if (checkoutTriggered.current) return;

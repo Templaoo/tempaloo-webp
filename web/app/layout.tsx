@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { Instrument_Serif } from "next/font/google";
+import { Analytics } from "@vercel/analytics/react";
 import "./globals.css";
 
 // Geist is self-hosted via Vercel's `geist` package (preloaded, zero CLS).
@@ -30,7 +31,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             data-theme="dark"
             className={`${GeistSans.variable} ${GeistMono.variable} ${instrumentSerif.variable}`}
         >
-            <body>{children}</body>
+            <body>
+                {children}
+                <Analytics />
+            </body>
         </html>
     );
 }

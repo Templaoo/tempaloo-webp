@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { LogoMark } from "@/components/Logo";
+import { trackCtaClick, type TrackLocation, type TrackPlan } from "@/lib/track";
 
 type Theme = "light" | "dark";
 type Billing = "monthly" | "annual";
@@ -232,7 +233,7 @@ function Nav({ theme, scrolled, onToggleTheme }: { theme: Theme; scrolled: boole
                         )}
                     </button>
                     <Link href="/webp/activate" className="pr2-nav-signin">Sign in</Link>
-                    <Link href="/webp/activate?plan=free" className="pr2-btn pr2-btn-primary pr2-btn-sm">Get started <ArrowIcon /></Link>
+                    <Link href="/webp/activate?plan=free" className="pr2-btn pr2-btn-primary pr2-btn-sm" onClick={() => trackCtaClick("nav", "free")}>Get started <ArrowIcon /></Link>
                 </div>
             </div>
         </nav>
@@ -285,8 +286,8 @@ function Hero() {
                     generates into a single credit. Lighter pages, green Core Web Vitals, no surprise bills.
                 </p>
                 <div className="pr2-hero-ctas">
-                    <Link href="/webp/activate?plan=free" className="pr2-btn pr2-btn-primary">Get my free API key <ArrowIcon /></Link>
-                    <button type="button" onClick={copyInstallCmd} className="pr2-btn pr2-btn-ghost" aria-label="Copy WP-CLI install command">
+                    <Link href="/webp/activate?plan=free" className="pr2-btn pr2-btn-primary" onClick={() => trackCtaClick("hero", "free")}>Get my free API key <ArrowIcon /></Link>
+                    <button type="button" onClick={() => { copyInstallCmd(); trackCtaClick("hero_install_copy", "free"); }} className="pr2-btn pr2-btn-ghost" aria-label="Copy WP-CLI install command">
                         <span className="pr2-font-mono pr2-mono-sm">$</span> {copied ? "Copied ✓" : "wp plugin install"}
                     </button>
                 </div>
@@ -653,6 +654,7 @@ function UseCases() {
                             <Link
                                 href={`/webp/activate?plan=${u.plan}&billing=annual`}
                                 className="pr2-uc-link"
+                                onClick={() => trackCtaClick("uc_card", u.plan as TrackPlan)}
                             >
                                 {u.cta}
                             </Link>
@@ -779,7 +781,7 @@ function StickyMobileCTA() {
                     <strong>Free · 250 images/mo</strong>
                     <span className="pr2-sticky-sub">No card · 30-day money back</span>
                 </div>
-                <Link href="/webp/activate?plan=free" className="pr2-btn pr2-btn-primary pr2-btn-sm">
+                <Link href="/webp/activate?plan=free" className="pr2-btn pr2-btn-primary pr2-btn-sm" onClick={() => trackCtaClick("sticky_mobile", "free")}>
                     Start free <ArrowIcon />
                 </Link>
             </div>
@@ -963,7 +965,11 @@ function PlanCard({ plan, billing }: { plan: Plan; billing: Billing }) {
                     </li>
                 ))}
             </ul>
-            <Link href={activateHref(plan.id, billing)} className={`pr2-btn ${plan.highlight ? "pr2-btn-primary" : "pr2-btn-ghost"} pr2-plan-cta`}>
+            <Link
+                href={activateHref(plan.id, billing)}
+                className={`pr2-btn ${plan.highlight ? "pr2-btn-primary" : "pr2-btn-ghost"} pr2-plan-cta`}
+                onClick={() => trackCtaClick("pricing", plan.id as TrackPlan)}
+            >
                 {plan.cta} <ArrowIcon />
             </Link>
         </div>
@@ -985,7 +991,11 @@ function SmallPlanRow({ plan, billing }: { plan: Plan; billing: Billing }) {
             <div className="pr2-smallrow-price">
                 {isFree ? "€0" : `€${Number.isInteger(monthly) ? monthly : monthly.toFixed(2)}/mo`}
             </div>
-            <Link href={activateHref(plan.id, billing)} className="pr2-btn pr2-btn-ghost pr2-btn-sm">
+            <Link
+                href={activateHref(plan.id, billing)}
+                className="pr2-btn pr2-btn-ghost pr2-btn-sm"
+                onClick={() => trackCtaClick("pricing", plan.id as TrackPlan)}
+            >
                 {plan.cta} <ArrowIcon />
             </Link>
         </div>
@@ -1046,7 +1056,7 @@ function FinalCTA() {
                     Activate the free plan now. Convert your first 250 images before lunch.
                 </p>
                 <div className="pr2-final-ctas">
-                    <Link href="/webp/activate?plan=free" className="pr2-btn pr2-btn-final-primary">Start free <ArrowIcon /></Link>
+                    <Link href="/webp/activate?plan=free" className="pr2-btn pr2-btn-final-primary" onClick={() => trackCtaClick("final_cta", "free")}>Start free <ArrowIcon /></Link>
                     <a href="https://wordpress.org/plugins/tempaloo-webp/" className="pr2-btn pr2-btn-final-ghost">Read the docs</a>
                 </div>
             </div>
