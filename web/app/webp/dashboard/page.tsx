@@ -4,6 +4,7 @@ import { fetchLicensesByEmail } from "@/lib/account";
 import { getCurrentUser } from "@/lib/auth";
 import { LicenseCard } from "@/components/dashboard/LicenseCard";
 import { StatsRow } from "@/components/dashboard/StatsRow";
+import { LogoMark } from "@/components/Logo";
 
 export const dynamic = "force-dynamic";
 
@@ -83,7 +84,7 @@ function TopBar({ email, name, authed }: { email: string; name?: string; authed:
         <header style={{ borderBottom: "1px solid var(--line)", background: "color-mix(in oklab, var(--bg) 80%, transparent)", backdropFilter: "blur(16px)", position: "sticky", top: 0, zIndex: 40 }}>
             <div className="app-container" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", height: 60 }}>
                 <Link href="/webp" style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill="currentColor" /><path d="M6 8H18M12 8V17" stroke="var(--bg)" strokeWidth="2" strokeLinecap="round" /></svg>
+                    <LogoMark size={22} />
                     <span style={{ fontWeight: 500, fontSize: 14.5, letterSpacing: "-0.015em" }}>
                         Tempaloo<span style={{ color: "var(--ink-3)" }}> / WebP</span>
                     </span>

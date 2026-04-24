@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { LogoMark } from "@/components/Logo";
 
 type Theme = "light" | "dark";
 type Billing = "monthly" | "annual";
@@ -165,7 +166,7 @@ function Nav({ theme, scrolled, onToggleTheme }: { theme: Theme; scrolled: boole
 function Logo() {
     return (
         <span className="pr2-logo">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill="currentColor" /><path d="M6 8H18M12 8V17" stroke="var(--bg)" strokeWidth="2" strokeLinecap="round" /></svg>
+            <LogoMark size={24} />
             <span className="pr2-logo-text">Tempaloo<span className="pr2-logo-sub"> / WebP</span></span>
         </span>
     );

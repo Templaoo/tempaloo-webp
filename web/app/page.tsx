@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LogoWordmark } from "@/components/Logo";
 
 export const metadata = {
     title: "Tempaloo — WordPress plugins & templates",
@@ -34,9 +35,8 @@ export default function Home() {
     return (
         <main style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
             <header className="app-container" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", height: 60 }}>
-                <Link href="/" style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill="currentColor" /><path d="M6 8H18M12 8V17" stroke="var(--bg)" strokeWidth="2" strokeLinecap="round" /></svg>
-                    <span style={{ fontWeight: 500, fontSize: 14.5, letterSpacing: "-0.015em" }}>Tempaloo</span>
+                <Link href="/">
+                    <LogoWordmark />
                 </Link>
                 <nav style={{ display: "flex", alignItems: "center", gap: 16, fontSize: 14 }}>
                     <Link href="/webp" style={{ color: "var(--ink-2)" }}>WebP plugin</Link>

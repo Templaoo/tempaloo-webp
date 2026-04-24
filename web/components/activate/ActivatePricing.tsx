@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
 import { PLANS, type Plan } from "@/lib/plans";
 import type { Billing } from "@/components/pricing/BillingToggle";
+import { LogoMark } from "@/components/Logo";
 
 type PlanCode = Plan["code"];
 
@@ -87,7 +88,7 @@ function Nav({ authedEmail }: { authedEmail?: string | null }) {
         <nav className="pr3-nav">
             <div className="app-container pr3-nav-inner">
                 <Link href="/webp" className="pr3-nav-logo">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill="currentColor" /><path d="M6 8H18M12 8V17" stroke="var(--bg)" strokeWidth="2" strokeLinecap="round" /></svg>
+                    <LogoMark size={22} />
                     <span>Tempaloo<span className="pr3-nav-sub"> / WebP</span></span>
                 </Link>
                 <div className="pr3-nav-right">
