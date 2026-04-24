@@ -43,7 +43,7 @@ class Tempaloo_WebP_Converter {
      *
      * Returns ['metadata' => updated_meta, 'converted' => n, 'failed' => n, 'error_code' => '…'].
      */
-    public static function convert_all_sizes( $attachment_id, $metadata, array $settings ) {
+    public static function convert_all_sizes( $attachment_id, $metadata, array $settings, $mode = 'auto' ) {
         $file = get_attached_file( $attachment_id );
         if ( ! $file || ! file_exists( $file ) ) {
             return [ 'metadata' => $metadata, 'converted' => 0, 'failed' => 0, 'error_code' => 'missing_file' ];
@@ -72,7 +72,7 @@ class Tempaloo_WebP_Converter {
         }
         $paths = array_values( array_unique( $paths ) );
 
-        $res = $client->convert_batch( $paths, $format, $quality );
+        $res = $client->convert_batch( $paths, $format, $quality, $mode );
         if ( empty( $res['ok'] ) ) {
             $code = isset( $res['error']['code'] ) ? $res['error']['code'] : 'error';
             if ( 'quota_exceeded' === $code ) {

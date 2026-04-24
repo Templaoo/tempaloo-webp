@@ -79,6 +79,10 @@ class Tempaloo_WebP_Bulk {
                     $state['status'] = 'paused_quota';
                     break;
                 }
+                if ( 'daily_bulk_limit_reached' === $res['code'] ) {
+                    $state['status'] = 'paused_daily_limit';
+                    break;
+                }
                 // Infra failure during bulk → enqueue for background retry.
                 if ( in_array( $res['code'], [ 'http_error', 'no_output' ], true )
                   || ( is_string( $res['code'] ) && 0 === strpos( $res['code'], 'status_5' ) ) ) {
@@ -123,8 +127,9 @@ class Tempaloo_WebP_Bulk {
      */
     public function ajax_resume() {
         $this->check_caps();
-        $state = get_option( self::STATE_OPTION );
-        if ( ! is_array( $state ) || 'paused_quota' !== ( $state['status'] ?? '' ) || empty( $state['remaining'] ) ) {
+        $state  = get_option( self::STATE_OPTION );
+        $status = is_array( $state ) ? ( $state['status'] ?? '' ) : '';
+        if ( ! in_array( $status, [ 'paused_quota', 'paused_daily_limit' ], true ) || empty( $state['remaining'] ) ) {
             wp_send_json_error( [ 'message' => 'No paused job to resume' ], 409 );
         }
         $s = Tempaloo_WebP_Plugin::get_settings();
@@ -132,20 +137,25 @@ class Tempaloo_WebP_Bulk {
             wp_send_json_error( [ 'message' => __( 'Activate a license first.', 'tempaloo-webp' ) ], 400 );
         }
 
-        $client = new Tempaloo_WebP_API_Client( $s['license_key'] );
-        $q = $client->get_quota();
-        $remaining = ( ! empty( $q['ok'] ) && isset( $q['data']['images_remaining'] ) )
-            ? (int) $q['data']['images_remaining']
-            : 0;
-        if ( $remaining <= 0 ) {
-            wp_send_json_error( [
-                'message' => __( 'Still out of credits. Upgrade your plan or wait for the monthly reset.', 'tempaloo-webp' ),
-                'code'    => 'quota_exceeded',
-            ], 402 );
+        if ( 'paused_quota' === $status ) {
+            // Verify credits before replaying the loop.
+            $client = new Tempaloo_WebP_API_Client( $s['license_key'] );
+            $q = $client->get_quota();
+            $remaining = ( ! empty( $q['ok'] ) && isset( $q['data']['images_remaining'] ) )
+                ? (int) $q['data']['images_remaining']
+                : 0;
+            if ( $remaining <= 0 ) {
+                wp_send_json_error( [
+                    'message' => __( 'Still out of credits. Upgrade your plan or wait for the monthly reset.', 'tempaloo-webp' ),
+                    'code'    => 'quota_exceeded',
+                ], 402 );
+            }
+            delete_option( 'tempaloo_webp_quota_exceeded_at' );
         }
+        // For paused_daily_limit we let the loop re-call the API — if the
+        // UTC day has rolled over, the next tick succeeds; otherwise it
+        // immediately pauses again, which is the correct signal.
 
-        // Credits available again — clear the global flag and flip back to running.
-        delete_option( 'tempaloo_webp_quota_exceeded_at' );
         $state['status'] = 'running';
         update_option( self::STATE_OPTION, $state, false );
         wp_send_json_success( $this->public_state( $state ) );
@@ -203,7 +213,9 @@ class Tempaloo_WebP_Bulk {
         $meta = wp_get_attachment_metadata( $attachment_id );
         if ( ! is_array( $meta ) ) $meta = [];
 
-        $result = Tempaloo_WebP_Converter::convert_all_sizes( $attachment_id, $meta, $settings );
+        // The bulk loop always runs in "bulk" mode so the API can enforce
+        // the Free-plan daily cap (auto-convert on upload stays "auto").
+        $result = Tempaloo_WebP_Converter::convert_all_sizes( $attachment_id, $meta, $settings, 'bulk' );
 
         if ( $result['converted'] > 0 ) {
             wp_update_attachment_metadata( $attachment_id, $result['metadata'] );

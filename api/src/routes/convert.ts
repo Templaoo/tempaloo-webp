@@ -27,6 +27,27 @@ export default async function convertRoute(app: FastifyInstance) {
             throw err.unprocessable("Batch endpoint requires multipart/form-data");
         }
 
+        const modeHeader = req.headers["x-tempaloo-mode"];
+        const mode: "auto" | "bulk" | "api" =
+            modeHeader === "bulk" ? "bulk" : modeHeader === "api" ? "api" : "auto";
+
+        // Free-plan daily bulk cap (validated product rule 2026-04-24).
+        // Auto-convert on upload stays unlimited; manual bulk runs are capped.
+        if (mode === "bulk" && license.planCode === "free") {
+            const { rows: dRows } = await query<{ count: number }>(
+                `SELECT COUNT(*)::int AS count
+                   FROM usage_logs
+                  WHERE license_id = $1
+                    AND mode = 'bulk'
+                    AND status = 'success'
+                    AND created_at >= (NOW() AT TIME ZONE 'UTC')::date`,
+                [license.licenseId],
+            );
+            if ((dRows[0]?.count ?? 0) >= config.BULK_DAILY_LIMIT_FREE) {
+                throw err.dailyBulkLimit(config.BULK_DAILY_LIMIT_FREE);
+            }
+        }
+
         let fmt: "webp" | "avif" = "webp";
         let quality = config.DEFAULT_QUALITY;
         const files: { name: string; buffer: Buffer }[] = [];
@@ -85,9 +106,9 @@ export default async function convertRoute(app: FastifyInstance) {
         const totalOut = results.reduce((a, r) => a + r.output_bytes, 0);
 
         query(
-            `INSERT INTO usage_logs (license_id, output_format, input_bytes, output_bytes, quality, duration_ms, status)
-             VALUES ($1, $2::output_format, $3, $4, $5, $6, 'success')`,
-            [license.licenseId, fmt, totalIn, totalOut, quality, durationMs],
+            `INSERT INTO usage_logs (license_id, output_format, input_bytes, output_bytes, quality, duration_ms, status, mode)
+             VALUES ($1, $2::output_format, $3, $4, $5, $6, 'success', $7)`,
+            [license.licenseId, fmt, totalIn, totalOut, quality, durationMs, mode],
         ).catch((e) => req.log.error({ e }, "usage_log insert failed"));
 
         const { rows: qRows } = await query<{ used: number; limit: number }>(

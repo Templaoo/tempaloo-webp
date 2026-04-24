@@ -17,6 +17,9 @@ export const err = {
         new ApiError(403, "site_limit_reached", msg),
     quotaExceeded: (msg = "Monthly quota exceeded") =>
         new ApiError(402, "quota_exceeded", msg),
+    dailyBulkLimit: (limit: number) =>
+        new ApiError(429, "daily_bulk_limit_reached",
+            `Daily bulk limit reached (${limit} conversions today). Resume tomorrow or upgrade for unlimited bulk.`),
     payloadTooLarge: (max: number) =>
         new ApiError(413, "payload_too_large", `Image exceeds ${max} bytes`),
     unprocessable: (msg: string) => new ApiError(422, "unprocessable_image", msg),

@@ -153,9 +153,13 @@ class Tempaloo_WebP_API_Client {
     /**
      * Batch convert: send N files (all sizes of one attachment), consumes 1 credit.
      *
+     * $mode is used by the API to enforce the Free-plan daily bulk cap:
+     *   - 'auto' (default) → unlimited within monthly quota (new uploads)
+     *   - 'bulk'           → counted against the daily bulk cap on Free
+     *
      * @return array{ok:bool, files?:array, used?:int, limit?:int, error?:array}
      */
-    public function convert_batch( array $file_paths, $format = 'webp', $quality = 82 ) {
+    public function convert_batch( array $file_paths, $format = 'webp', $quality = 82, $mode = 'auto' ) {
         $paths = array_values( array_filter( $file_paths, 'file_exists' ) );
         if ( empty( $paths ) ) {
             return [ 'ok' => false, 'error' => [ 'code' => 'no_files', 'message' => 'No source files' ] ];
@@ -181,9 +185,10 @@ class Tempaloo_WebP_API_Client {
             [
                 'timeout' => 120,
                 'headers' => [
-                    'X-License-Key' => $this->license_key,
-                    'X-Site-Url'    => home_url(),
-                    'Content-Type'  => "multipart/form-data; boundary={$boundary}",
+                    'X-License-Key'   => $this->license_key,
+                    'X-Site-Url'      => home_url(),
+                    'X-Tempaloo-Mode' => $mode,
+                    'Content-Type'    => "multipart/form-data; boundary={$boundary}",
                 ],
                 'body' => $body,
             ]

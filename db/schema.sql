@@ -126,10 +126,17 @@ CREATE TABLE usage_logs (
     duration_ms          INTEGER,
     status               conversion_status NOT NULL,
     error_code           TEXT,
+    -- "auto"  = wp_handle_upload hook (unlimited on Free within monthly quota)
+    -- "bulk"  = manual "Start conversion" from the admin (capped on Free)
+    -- "api"   = future direct API clients
+    mode                 TEXT NOT NULL DEFAULT 'auto' CHECK (mode IN ('auto','bulk','api')),
     created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_usage_logs_license_time ON usage_logs (license_id, created_at DESC);
+CREATE INDEX idx_usage_logs_bulk_today
+    ON usage_logs (license_id, created_at DESC)
+    WHERE mode = 'bulk';
 
 -- ---------------------------------------------------------------
 -- webhooks_events — Freemius (and future providers) idempotency store

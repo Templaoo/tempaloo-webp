@@ -54,7 +54,7 @@ export interface AppState {
 }
 
 export interface BulkStatus {
-    status: "idle" | "running" | "paused_quota" | "done" | "canceled";
+    status: "idle" | "running" | "paused_quota" | "paused_daily_limit" | "done" | "canceled";
     total: number;
     processed: number;
     succeeded: number;

@@ -16,6 +16,7 @@ const schema = z.object({
     INTERNAL_API_KEY: z.string().min(16).default("dev-internal-please-change"),
     UNLIMITED_FAIR_USE: z.coerce.number().int().positive().default(500_000),
     UNLIMITED_NOTIFY_WEBHOOK: z.string().url().optional(),
+    BULK_DAILY_LIMIT_FREE: z.coerce.number().int().positive().default(50),
 });
 
 const parsed = schema.safeParse(process.env);

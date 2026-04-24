@@ -54,6 +54,8 @@ export default function Bulk({ state, onUpgrade }: { state: AppState; onUpgrade?
                     toast("success", `Done — ${s.succeeded} converted, ${s.failed} failed`);
                 } else if (s.status === "paused_quota") {
                     toast("error", "Paused — monthly quota reached");
+                } else if (s.status === "paused_daily_limit") {
+                    toast("error", "Paused — daily bulk limit reached (Free plan)");
                 }
             }
         } catch (e) {
@@ -125,7 +127,7 @@ export default function Bulk({ state, onUpgrade }: { state: AppState; onUpgrade?
                     )}
                 </div>
 
-                {(status.status === "running" || status.status === "done" || status.status === "paused_quota") && (
+                {(status.status === "running" || status.status === "done" || status.status === "paused_quota" || status.status === "paused_daily_limit") && (
                     <div className="mt-5">
                         <Progress
                             value={pct}
@@ -134,37 +136,15 @@ export default function Bulk({ state, onUpgrade }: { state: AppState; onUpgrade?
                     </div>
                 )}
 
-                {status.status === "paused_quota" && (
-                    <div className="mt-5 rounded-lg border border-amber-300 bg-amber-50 p-4">
-                        <div className="flex items-start gap-3">
-                            <div className="shrink-0 mt-0.5 text-amber-700">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                                    <rect x="6" y="4" width="4" height="16" rx="1" />
-                                    <rect x="14" y="4" width="4" height="16" rx="1" />
-                                </svg>
-                            </div>
-                            <div className="min-w-0 flex-1">
-                                <h4 className="text-sm font-semibold text-amber-900">Paused — monthly quota reached</h4>
-                                <p className="mt-1 text-sm text-amber-900/80">
-                                    {status.total - status.processed} of {status.total} images still to convert.
-                                    Upgrade for instant access, or click Resume after the monthly reset.
-                                </p>
-                                <div className="mt-3 flex flex-wrap gap-2">
-                                    {onUpgrade && (
-                                        <button
-                                            onClick={onUpgrade}
-                                            className="inline-flex items-center h-9 px-4 rounded-lg bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 transition shadow-sm"
-                                        >
-                                            Upgrade plan
-                                        </button>
-                                    )}
-                                    <Button variant="secondary" onClick={resume} loading={resuming}>
-                                        Resume
-                                    </Button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                {(status.status === "paused_quota" || status.status === "paused_daily_limit") && (
+                    <PausedCard
+                        status={status.status}
+                        remaining={status.total - status.processed}
+                        total={status.total}
+                        onUpgrade={onUpgrade}
+                        onResume={resume}
+                        resuming={resuming}
+                    />
                 )}
 
                 {status.errors.length > 0 && (
@@ -190,6 +170,54 @@ export default function Bulk({ state, onUpgrade }: { state: AppState; onUpgrade?
                     <li>• If the process is interrupted (tab closed, server restart), click <em>Start</em> again — it resumes where it stopped.</li>
                 </ul>
             </Card>
+        </div>
+    );
+}
+
+function PausedCard({
+    status, remaining, total, onUpgrade, onResume, resuming,
+}: {
+    status: "paused_quota" | "paused_daily_limit";
+    remaining: number;
+    total: number;
+    onUpgrade?: () => void;
+    onResume: () => void;
+    resuming: boolean;
+}) {
+    const isDaily = status === "paused_daily_limit";
+    const title = isDaily
+        ? "Paused — daily bulk limit reached"
+        : "Paused — monthly quota reached";
+    const body = isDaily
+        ? `${remaining} of ${total} images still to convert. Free plans cap bulk at 50 conversions per day. Resume tomorrow, or upgrade for unlimited bulk.`
+        : `${remaining} of ${total} images still to convert. Upgrade for instant access, or click Resume after the monthly reset.`;
+    return (
+        <div className="mt-5 rounded-lg border border-amber-300 bg-amber-50 p-4">
+            <div className="flex items-start gap-3">
+                <div className="shrink-0 mt-0.5 text-amber-700">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <rect x="6" y="4" width="4" height="16" rx="1" />
+                        <rect x="14" y="4" width="4" height="16" rx="1" />
+                    </svg>
+                </div>
+                <div className="min-w-0 flex-1">
+                    <h4 className="text-sm font-semibold text-amber-900">{title}</h4>
+                    <p className="mt-1 text-sm text-amber-900/80">{body}</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                        {onUpgrade && (
+                            <button
+                                onClick={onUpgrade}
+                                className="inline-flex items-center h-9 px-4 rounded-lg bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 transition shadow-sm"
+                            >
+                                {isDaily ? "Unlock unlimited bulk" : "Upgrade plan"}
+                            </button>
+                        )}
+                        <Button variant="secondary" onClick={onResume} loading={resuming}>
+                            Resume
+                        </Button>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }
