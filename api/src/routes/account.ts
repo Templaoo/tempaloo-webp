@@ -18,6 +18,39 @@ export default async function accountRoutes(app: FastifyInstance) {
         }
     });
 
+    // Self-service: dashboard user deactivates a site to free a license slot.
+    // We re-verify ownership server-side so the route can't be abused even if
+    // the internal key leaks — the email comes from the Next.js session.
+    app.post("/account/sites/deactivate", async (req, reply) => {
+        const body = z
+            .object({
+                email: z.string().email(),
+                license_id: z.string().uuid(),
+                site_host: z.string().min(1),
+            })
+            .parse(req.body);
+
+        const { rowCount } = await query(
+            `UPDATE sites
+                SET deactivated_at = NOW()
+              WHERE license_id = $1
+                AND site_host = $2
+                AND deactivated_at IS NULL
+                AND license_id IN (
+                  SELECT l.id FROM licenses l
+                    JOIN users u ON u.id = l.user_id
+                   WHERE u.email = $3
+                )`,
+            [body.license_id, body.site_host.toLowerCase(), body.email.toLowerCase()],
+        );
+        if (!rowCount) {
+            return reply.code(404).send({
+                error: { code: "not_found", message: "Site not found for this license" },
+            });
+        }
+        return reply.code(204).send();
+    });
+
     app.post("/account/licenses", async (req) => {
         const body = z.object({ email: z.string().email() }).parse(req.body);
         const email = body.email.toLowerCase();

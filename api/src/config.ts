@@ -14,6 +14,8 @@ const schema = z.object({
     FREEMIUS_API_KEY: z.string().optional(),
     SENTRY_DSN: z.string().optional(),
     INTERNAL_API_KEY: z.string().min(16).default("dev-internal-please-change"),
+    UNLIMITED_FAIR_USE: z.coerce.number().int().positive().default(500_000),
+    UNLIMITED_NOTIFY_WEBHOOK: z.string().url().optional(),
 });
 
 const parsed = schema.safeParse(process.env);

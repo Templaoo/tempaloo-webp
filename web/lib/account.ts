@@ -20,3 +20,24 @@ export async function fetchLicensesByEmail(email: string): Promise<DashLicense[]
     const data = (await res.json()) as { licenses: DashLicense[] };
     return data.licenses;
 }
+
+/** Server-only. Deactivates a site so the slot can be reassigned. */
+export async function deactivateSite(input: { email: string; licenseId: string; siteHost: string }): Promise<void> {
+    const res = await fetch(`${API_BASE}/account/sites/deactivate`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "X-Internal-Key": INTERNAL_KEY,
+        },
+        body: JSON.stringify({
+            email: input.email,
+            license_id: input.licenseId,
+            site_host: input.siteHost,
+        }),
+        cache: "no-store",
+    });
+    if (res.status === 204) return;
+    const body = await res.json().catch(() => null);
+    const msg = (body && (body.error?.message || body.message)) || `Account API returned ${res.status}`;
+    throw new Error(msg);
+}

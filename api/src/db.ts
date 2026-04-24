@@ -33,3 +33,7 @@ export async function withTx<T>(fn: (client: pg.PoolClient) => Promise<T>): Prom
         client.release();
     }
 }
+
+export async function closePool(): Promise<void> {
+    await pool.end();
+}

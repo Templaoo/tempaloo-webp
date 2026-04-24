@@ -1,6 +1,5 @@
 "use client";
 import { useState } from "react";
-import clsx from "clsx";
 
 export interface DashLicense {
     id: string;
@@ -27,11 +26,42 @@ export interface DashLicense {
 export function LicenseCard({ license }: { license: DashLicense }) {
     const [revealed, setRevealed] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [sites, setSites] = useState(license.sites);
+    const [removing, setRemoving] = useState<string | null>(null);
+    const [errorHost, setErrorHost] = useState<string | null>(null);
 
     const masked = `${license.licenseKey.slice(0, 8)}${"•".repeat(24)}${license.licenseKey.slice(-8)}`;
     const pct = license.plan.imagesPerMonth === -1
         ? 10
         : Math.min(100, license.plan.imagesPerMonth > 0 ? (license.quota.imagesUsed / license.plan.imagesPerMonth) * 100 : 0);
+
+    const slotsLabel = license.plan.maxSites === -1
+        ? `${sites.length} active`
+        : `${sites.length} / ${license.plan.maxSites}`;
+    const slotsFull = license.plan.maxSites !== -1 && sites.length >= license.plan.maxSites;
+
+    const deactivate = async (host: string) => {
+        if (!confirm(`Deactivate ${host}? The plugin on this site will stop converting until reactivated.`)) return;
+        setRemoving(host);
+        setErrorHost(null);
+        try {
+            const res = await fetch("/api/sites/deactivate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ licenseId: license.id, siteHost: host }),
+            });
+            if (!res.ok && res.status !== 204) {
+                const data = await res.json().catch(() => null);
+                throw new Error((data && data.error) || `Deactivate failed (${res.status})`);
+            }
+            setSites((cur) => cur.filter((s) => s.host !== host));
+        } catch (e) {
+            setErrorHost(host);
+            console.error(e);
+        } finally {
+            setRemoving(null);
+        }
+    };
 
     const copy = async () => {
         await navigator.clipboard.writeText(license.licenseKey);
@@ -93,28 +123,52 @@ export function LicenseCard({ license }: { license: DashLicense }) {
 
                     <div>
                         <div className="flex items-center justify-between text-xs text-white/60 mb-1.5">
-                            <span>
-                                Sites ({license.sites.length}
-                                {license.plan.maxSites !== -1 ? ` / ${license.plan.maxSites}` : ""})
-                            </span>
+                            <span>Sites ({slotsLabel})</span>
+                            {slotsFull && (
+                                <span className="rounded-full bg-amber-500/15 text-amber-200 px-2 py-0.5 text-[10px] font-semibold">
+                                    Limit reached
+                                </span>
+                            )}
                         </div>
-                        {license.sites.length === 0 ? (
+                        {sites.length === 0 ? (
                             <div className="text-sm text-white/50 rounded-lg border border-dashed border-white/15 px-3 py-3">
                                 No site activated yet. Paste the key into your plugin to claim this license.
                             </div>
                         ) : (
                             <ul className="space-y-1.5">
-                                {license.sites.map((s) => (
-                                    <li key={s.host} className="flex items-center justify-between rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm">
-                                        <span className="text-white/90 truncate">{s.host}</span>
-                                        <span className="text-xs text-white/50">
-                                            {s.lastSeenAt
-                                                ? `active ${timeAgo(new Date(s.lastSeenAt))}`
-                                                : "waiting first request"}
-                                        </span>
+                                {sites.map((s) => (
+                                    <li
+                                        key={s.host}
+                                        className="flex items-center justify-between gap-3 rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
+                                    >
+                                        <div className="min-w-0 flex-1">
+                                            <div className="text-white/90 truncate">{s.host}</div>
+                                            <div className="text-xs text-white/50 mt-0.5">
+                                                {s.lastSeenAt
+                                                    ? `active ${timeAgo(new Date(s.lastSeenAt))}`
+                                                    : "waiting first request"}
+                                                {errorHost === s.host && (
+                                                    <span className="ml-2 text-rose-300">— deactivate failed, try again</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => deactivate(s.host)}
+                                            disabled={removing === s.host}
+                                            className="shrink-0 inline-flex items-center h-7 px-2.5 rounded-md text-xs font-medium text-white/70 hover:text-rose-200 hover:bg-rose-500/10 border border-white/10 hover:border-rose-400/30 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                            title="Free up this slot"
+                                        >
+                                            {removing === s.host ? "Removing…" : "Deactivate"}
+                                        </button>
                                     </li>
                                 ))}
                             </ul>
+                        )}
+                        {slotsFull && (
+                            <p className="mt-2 text-xs text-white/50">
+                                Deactivate one to add a new site, or{" "}
+                                <a href="/webp/activate?plan=growth" className="text-brand-300 hover:underline">upgrade for more slots</a>.
+                            </p>
                         )}
                     </div>
                 </div>
