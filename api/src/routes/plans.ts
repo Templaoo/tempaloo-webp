@@ -44,6 +44,16 @@ export default async function plansRoute(app: FastifyInstance) {
         // 5 min browser cache, 5 min CDN cache, 10 min stale-while-revalidate.
         // Plan changes don't need to propagate instantly — a short delay is fine.
         reply.header("Cache-Control", "public, max-age=300, s-maxage=300, stale-while-revalidate=600");
+        // CORS: any WordPress install on any domain runs the plugin admin
+        // and calls this endpoint from the browser. Public marketing data
+        // → wildcard is safe. Applied here (not globally) so the protected
+        // routes (/convert, /license/*, /account/*) stay same-origin.
+        reply.header("Access-Control-Allow-Origin", "*");
+        reply.header("Vary", "Origin");
+        // Helmet globally sets CORP=same-origin (protects the convert/license
+        // endpoints). For this public endpoint we override to cross-origin so
+        // browsers let the plugin admin read the response.
+        reply.header("Cross-Origin-Resource-Policy", "cross-origin");
 
         return {
             plans: rows.map((r) => ({
