@@ -30,7 +30,7 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
                 {value}
             </div>
             {sub && (
-                <div style={{ fontSize: 12, color: "var(--ink-3)", fontFamily: "'Geist Mono', monospace" }}>
+                <div style={{ fontSize: 12, color: "var(--ink-3)", fontFamily: "var(--font-geist-mono), ui-monospace, monospace" }}>
                     {sub}
                 </div>
             )}

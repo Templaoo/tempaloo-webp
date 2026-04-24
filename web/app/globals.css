@@ -1,7 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Fonts are self-hosted via next/font (see app/layout.tsx). The --font-*
+   variables are injected on <html> — no render-blocking @import fetch. */
 
 /* ── Design tokens — Vercel/Framer inspired, shared by every page ───────── */
 :root,
@@ -39,7 +41,7 @@ html, body {
     padding: 0;
     background: var(--bg);
     color: var(--ink);
-    font-family: 'Geist', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
     font-size: 15px;
     line-height: 1.55;
     letter-spacing: -0.003em;
@@ -55,15 +57,15 @@ button { font-family: inherit; }
 :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 4px; }
 
 h1, h2, h3, h4 {
-    font-family: 'Geist', sans-serif;
+    font-family: var(--font-geist-sans), sans-serif;
     letter-spacing: -0.035em;
     font-weight: 600;
 }
 
 /* ── Shared utility classes ─────────────────────────────────────────────── */
-.font-serif { font-family: 'Instrument Serif', serif; font-weight: 400; letter-spacing: -0.01em; font-style: italic; }
-.font-mono  { font-family: 'Geist Mono', ui-monospace, monospace; }
-.h-display  { font-family: 'Geist', sans-serif; letter-spacing: -0.035em; font-weight: 600; }
+.font-serif { font-family: var(--font-serif), serif; font-weight: 400; letter-spacing: -0.01em; font-style: italic; }
+.font-mono  { font-family: var(--font-geist-mono), ui-monospace, monospace; }
+.h-display  { font-family: var(--font-geist-sans), sans-serif; letter-spacing: -0.035em; font-weight: 600; }
 
 .app-container    { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
 .app-container-sm { max-width: 880px;  margin: 0 auto; padding: 0 24px; }
@@ -85,7 +87,7 @@ h1, h2, h3, h4 {
 .btn-sm            { height: 34px; font-size: 13.5px; padding: 0 14px; border-radius: 7px; }
 
 .eyebrow {
-    font-family: 'Geist Mono', monospace;
+    font-family: var(--font-geist-mono), ui-monospace, monospace;
     font-size: 11px; font-weight: 400;
     letter-spacing: 0.02em;
     color: var(--ink-3);

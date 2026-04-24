@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { LogoMark } from "@/components/Logo";
 
@@ -104,6 +104,63 @@ function usePrefersReducedMotion(): boolean {
     return reduced;
 }
 
+/** Mark an element as visible the first time it enters the viewport. */
+function useInView<T extends HTMLElement = HTMLDivElement>(
+    options: IntersectionObserverInit = { threshold: 0.15, rootMargin: "0px 0px -10% 0px" }
+): { ref: React.RefObject<T>; inView: boolean } {
+    const ref = useRef<T>(null);
+    const [inView, setInView] = useState(false);
+    useEffect(() => {
+        if (!ref.current || typeof IntersectionObserver === "undefined") {
+            setInView(true);
+            return;
+        }
+        const io = new IntersectionObserver(([entry]) => {
+            if (entry?.isIntersecting) {
+                setInView(true);
+                io.disconnect();
+            }
+        }, options);
+        io.observe(ref.current);
+        return () => io.disconnect();
+    }, [options]);
+    return { ref, inView };
+}
+
+/** Animated counter from 0 → target over `duration`, started only when `active`. */
+function useAnimatedNumber(target: number, active: boolean, duration = 900): number {
+    const reduced = usePrefersReducedMotion();
+    const [value, setValue] = useState(reduced ? target : 0);
+    useEffect(() => {
+        if (!active || reduced) { setValue(target); return; }
+        let raf = 0;
+        const start = performance.now();
+        const tick = (now: number) => {
+            const t = Math.min(1, (now - start) / duration);
+            // easeOutCubic
+            const eased = 1 - Math.pow(1 - t, 3);
+            setValue(target * eased);
+            if (t < 1) raf = requestAnimationFrame(tick);
+        };
+        raf = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(raf);
+    }, [target, active, duration, reduced]);
+    return value;
+}
+
+function Reveal({ children, delay = 0, className = "" }: { children: ReactNode; delay?: number; className?: string }) {
+    const { ref, inView } = useInView<HTMLDivElement>();
+    return (
+        <div
+            ref={ref}
+            className={`pr2-reveal ${inView ? "pr2-reveal-in" : ""} ${className}`}
+            style={{ transitionDelay: `${delay}ms` }}
+        >
+            {children}
+        </div>
+    );
+}
+
 export function LandingPage() {
     const [theme, setThemeState] = useState<Theme>("dark");
     const [billing, setBilling] = useState<Billing>("annual");
@@ -138,12 +195,14 @@ export function LandingPage() {
             <Nav theme={theme} scrolled={scrolled} onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")} />
             <Hero />
             <StatsBar />
-            <HowItWorks />
-            <Compatibility />
-            <ThumbnailTrap />
-            <Comparison />
-            <Pricing billing={billing} onBillingChange={setBilling} />
-            <FAQ openIdx={faqOpen} onToggle={(i) => setFaqOpen(faqOpen === i ? -1 : i)} />
+            <Reveal><HowItWorks /></Reveal>
+            <Reveal><Compatibility /></Reveal>
+            <Reveal><UseCases /></Reveal>
+            <Reveal><Security /></Reveal>
+            <Reveal><ThumbnailTrap /></Reveal>
+            <Reveal><Comparison /></Reveal>
+            <Reveal><Pricing billing={billing} onBillingChange={setBilling} /></Reveal>
+            <Reveal><FAQ openIdx={faqOpen} onToggle={(i) => setFaqOpen(faqOpen === i ? -1 : i)} /></Reveal>
             <FinalCTA />
             <Footer />
             <StickyMobileCTA />
@@ -265,21 +324,51 @@ function formatKB(kb: number): string {
 
 function MediaLibraryDemo() {
     const reduced = usePrefersReducedMotion();
+    const hostRef = useRef<HTMLDivElement>(null);
     // t=5.5 lands the animation in the "Complete" state (all WebP, −77%) —
     // shows the outcome without any motion for reduced-motion users.
     const [t, setT] = useState(reduced ? 5.5 : 0);
+
     useEffect(() => {
         if (reduced) { setT(5.5); return; }
+        if (!hostRef.current || typeof IntersectionObserver === "undefined") {
+            // Fallback: run unconditionally if IO is unavailable.
+            let raf = 0;
+            let start = performance.now();
+            const loop = (now: number) => {
+                const elapsed = (now - start) / 1000;
+                if (elapsed > 7) start = now;
+                setT(elapsed % 7);
+                raf = requestAnimationFrame(loop);
+            };
+            raf = requestAnimationFrame(loop);
+            return () => cancelAnimationFrame(raf);
+        }
+
         let raf = 0;
-        let start = performance.now();
+        let running = false;
+        let start = 0;
         const loop = (now: number) => {
             const elapsed = (now - start) / 1000;
             if (elapsed > 7) start = now;
             setT(elapsed % 7);
             raf = requestAnimationFrame(loop);
         };
-        raf = requestAnimationFrame(loop);
-        return () => cancelAnimationFrame(raf);
+        const io = new IntersectionObserver(([entry]) => {
+            if (entry?.isIntersecting && !running) {
+                running = true;
+                start = performance.now();
+                raf = requestAnimationFrame(loop);
+            } else if (!entry?.isIntersecting && running) {
+                running = false;
+                cancelAnimationFrame(raf);
+            }
+        }, { threshold: 0.2 });
+        io.observe(hostRef.current);
+        return () => {
+            io.disconnect();
+            cancelAnimationFrame(raf);
+        };
     }, [reduced]);
 
     const rowState = (i: number): { stage: "pending" | "jpg" | "converting" | "webp"; p: number } => {
@@ -304,7 +393,7 @@ function MediaLibraryDemo() {
     else if (t > 1) stateLabel = "…GENERATING";
 
     return (
-        <div className="pr2-demo">
+        <div ref={hostRef} className="pr2-demo">
             <div className="pr2-demo-chrome">
                 <span className="pr2-traffic pr2-traffic-red" />
                 <span className="pr2-traffic pr2-traffic-yellow" />
@@ -391,25 +480,30 @@ function MediaLibraryDemo() {
 }
 
 function StatsBar() {
-    const stats = [
-        { k: "−70%", v: "avg. page weight" },
-        { k: "30s", v: "setup time" },
-        { k: "6.0+", v: "WP compatibility" },
-        { k: "30d", v: "money-back guarantee" },
-    ];
+    const { ref, inView } = useInView<HTMLDivElement>();
+    const pct = useAnimatedNumber(70, inView);
+    const secs = useAnimatedNumber(30, inView);
+    const days = useAnimatedNumber(30, inView);
     return (
-        <section className="pr2-statsbar">
+        <section ref={ref} className="pr2-statsbar">
             <div className="pr2-container">
                 <div className="pr2-stats-grid">
-                    {stats.map((s) => (
-                        <div key={s.v} className="pr2-stat">
-                            <div className="pr2-h-display pr2-stat-k">{s.k}</div>
-                            <div className="pr2-stat-v">{s.v}</div>
-                        </div>
-                    ))}
+                    <Stat k={`−${Math.round(pct)}%`} v="avg. page weight" />
+                    <Stat k={`${Math.round(secs)}s`} v="setup time" />
+                    <Stat k="6.0+" v="WP compatibility" />
+                    <Stat k={`${Math.round(days)}d`} v="money-back guarantee" />
                 </div>
             </div>
         </section>
+    );
+}
+
+function Stat({ k, v }: { k: string; v: string }) {
+    return (
+        <div className="pr2-stat">
+            <div className="pr2-h-display pr2-stat-k">{k}</div>
+            <div className="pr2-stat-v">{v}</div>
+        </div>
     );
 }
 
@@ -507,6 +601,100 @@ function Compatibility() {
                 <p className="pr2-compat-note">
                     Theme-agnostic · Works with any image-generating plugin · Zero front-end JS injected
                 </p>
+            </div>
+        </section>
+    );
+}
+
+const USE_CASES = [
+    {
+        tag: "Solo blogger",
+        title: "Ship a post a day,\nnot a bill.",
+        copy: "Writing 10-image articles, one per day? Free covers ~25 posts/mo. Starter covers ~500. No credit card until you really need it.",
+        plan: "starter" as const,
+        cta: "Fits Starter →",
+    },
+    {
+        tag: "Agency / Freelance",
+        title: "Five client sites,\none receipt.",
+        copy: "Growth license runs on up to 5 sites, 25k images/mo pooled. Credit rollover covers lumpy launch cycles. One invoice, one dashboard.",
+        plan: "growth" as const,
+        cta: "Fits Growth →",
+    },
+    {
+        tag: "E-commerce / Shop",
+        title: "150,000 products.\nOne API.",
+        copy: "WooCommerce stores with thousands of SKU visuals. Business tier: unlimited sites, direct API for custom workflows, priority chat support.",
+        plan: "business" as const,
+        cta: "Fits Business →",
+    },
+];
+
+function UseCases() {
+    return (
+        <section className="pr2-uc">
+            <div className="pr2-container">
+                <div className="pr2-section-head">
+                    <span className="pr2-eyebrow">WHO IT&rsquo;S FOR</span>
+                    <h2 className="pr2-h-display pr2-section-h">
+                        One plugin.{" "}
+                        <span className="pr2-font-serif pr2-section-h-accent">Three realities.</span>
+                    </h2>
+                    <p className="pr2-section-lead">
+                        We priced Tempaloo for the three types of WordPress user that usually lose out on optimizer pricing.
+                    </p>
+                </div>
+                <div className="pr2-uc-grid">
+                    {USE_CASES.map((u) => (
+                        <article key={u.tag} className="pr2-uc-card">
+                            <span className="pr2-uc-tag">{u.tag}</span>
+                            <h3 className="pr2-h-display pr2-uc-title">{u.title}</h3>
+                            <p className="pr2-uc-copy">{u.copy}</p>
+                            <Link
+                                href={`/webp/activate?plan=${u.plan}&billing=annual`}
+                                className="pr2-uc-link"
+                            >
+                                {u.cta}
+                            </Link>
+                        </article>
+                    ))}
+                </div>
+            </div>
+        </section>
+    );
+}
+
+const SECURITY = [
+    { title: "No image storage", copy: "Conversion happens in-memory. Files stream straight back to your server, never saved on ours." },
+    { title: "Originals untouched", copy: "We write a WebP sibling next to each original. Disable Tempaloo any time — your site still works." },
+    { title: "EU-hosted (GDPR)", copy: "API and database run in Frankfurt. No cross-Atlantic data transfer, no Privacy Shield drama." },
+    { title: "Per-site activation", copy: "Each site gets one activation slot. Deactivate from your dashboard if you move hosts — no ticket required." },
+    { title: "Signed webhooks", copy: "Every Freemius callback is verified with HMAC before we touch your licence. Replays are rejected." },
+    { title: "Key rotation", copy: "Compromised key? Regenerate from the dashboard. The old one dies the instant the new one is issued." },
+];
+
+function Security() {
+    return (
+        <section className="pr2-sec">
+            <div className="pr2-container">
+                <div className="pr2-section-head">
+                    <span className="pr2-eyebrow">SAFE BY DEFAULT</span>
+                    <h2 className="pr2-h-display pr2-section-h">
+                        Your site,{" "}
+                        <span className="pr2-font-serif pr2-section-h-accent">your files.</span>
+                    </h2>
+                    <p className="pr2-section-lead">
+                        Tempaloo is a pipe, not a storage locker. Here&rsquo;s the short list of what that means in practice.
+                    </p>
+                </div>
+                <ul className="pr2-sec-grid" aria-label="Security and privacy guarantees">
+                    {SECURITY.map((s) => (
+                        <li key={s.title} className="pr2-sec-card">
+                            <div className="pr2-sec-title">{s.title}</div>
+                            <p className="pr2-sec-copy">{s.copy}</p>
+                        </li>
+                    ))}
+                </ul>
             </div>
         </section>
     );
@@ -920,9 +1108,9 @@ const css = `
 .pr2-container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
 .pr2-container-sm { max-width: 880px; margin: 0 auto; padding: 0 24px; }
 
-.pr2-h-display { font-family: 'Geist', sans-serif; letter-spacing: -0.035em; font-weight: 600; }
-.pr2-font-serif { font-family: 'Instrument Serif', serif; font-weight: 400; letter-spacing: -0.01em; font-style: italic; }
-.pr2-font-mono { font-family: 'Geist Mono', ui-monospace, monospace; }
+.pr2-h-display { font-family: var(--font-geist-sans), sans-serif; letter-spacing: -0.035em; font-weight: 600; }
+.pr2-font-serif { font-family: var(--font-serif), serif; font-weight: 400; letter-spacing: -0.01em; font-style: italic; }
+.pr2-font-mono { font-family: var(--font-geist-mono), ui-monospace, monospace; }
 .pr2-mono-sm { font-size: 13px; }
 .pr2-text-ink { color: var(--ink); font-weight: 500; }
 .pr2-text-danger { color: var(--danger); }
@@ -971,46 +1159,46 @@ const css = `
 .pr2-hero-ctas { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 24px; }
 .pr2-hero-sub { font-size: 13px; color: var(--ink-3); }
 .pr2-hero-viz { margin-top: 72px; position: relative; }
-.pr2-hero-caption { text-align: center; margin-top: 16px; font-size: 12.5px; color: var(--ink-3); font-family: 'Geist Mono', ui-monospace, monospace; letter-spacing: -0.01em; }
+.pr2-hero-caption { text-align: center; margin-top: 16px; font-size: 12.5px; color: var(--ink-3); font-family: var(--font-geist-mono), ui-monospace, monospace; letter-spacing: -0.01em; }
 
-.pr2-demo { width: 100%; max-width: 960px; margin: 0 auto; background: var(--surface); border: 1px solid var(--line-2); border-radius: 12px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 24px 48px -24px rgba(0,0,0,0.18); font-family: 'Geist', sans-serif; }
+.pr2-demo { width: 100%; max-width: 960px; margin: 0 auto; background: var(--surface); border: 1px solid var(--line-2); border-radius: 12px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 24px 48px -24px rgba(0,0,0,0.18); font-family: var(--font-geist-sans), sans-serif; }
 .pr2-demo-chrome { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-bottom: 1px solid var(--line); background: var(--bg-2); }
 .pr2-traffic { width: 10px; height: 10px; border-radius: 50%; }
 .pr2-traffic-red { background: #FF5F57; }
 .pr2-traffic-yellow { background: #FEBC2E; }
 .pr2-traffic-green { background: #28C840; }
-.pr2-demo-url { flex: 1; text-align: center; font-size: 11.5px; font-family: 'Geist Mono', monospace; color: var(--ink-3); letter-spacing: -0.01em; }
+.pr2-demo-url { flex: 1; text-align: center; font-size: 11.5px; font-family: var(--font-geist-mono), ui-monospace, monospace; color: var(--ink-3); letter-spacing: -0.01em; }
 .pr2-demo-grid { display: grid; grid-template-columns: 280px 1fr; }
 .pr2-demo-left { padding: 20px; border-right: 1px solid var(--line); background: var(--bg-2); }
 .pr2-demo-right { padding: 20px; min-height: 340px; }
-.pr2-demo-section-label { font-size: 10.5px; font-family: 'Geist Mono', monospace; color: var(--ink-3); letter-spacing: 0.02em; margin-bottom: 10px; }
+.pr2-demo-section-label { font-size: 10.5px; font-family: var(--font-geist-mono), ui-monospace, monospace; color: var(--ink-3); letter-spacing: 0.02em; margin-bottom: 10px; }
 .pr2-demo-img { aspect-ratio: 4 / 3; border-radius: 8px; overflow: hidden; border: 1px solid var(--line-2); margin-bottom: 12px; }
 .pr2-demo-filename { font-size: 12.5px; font-weight: 500; color: var(--ink); letter-spacing: -0.01em; margin-bottom: 2px; }
-.pr2-demo-filemeta { font-size: 11.5px; color: var(--ink-3); font-family: 'Geist Mono', monospace; }
+.pr2-demo-filemeta { font-size: 11.5px; color: var(--ink-3); font-family: var(--font-geist-mono), ui-monospace, monospace; }
 .pr2-demo-credit { margin-top: 16px; padding: 10px 12px; border: 1px solid var(--ink); border-radius: 8px; background: var(--bg); transition: opacity .3s, transform .3s; }
-.pr2-demo-credit-label { font-size: 10px; font-family: 'Geist Mono', monospace; color: var(--ink-3); letter-spacing: 0.02em; margin-bottom: 2px; }
+.pr2-demo-credit-label { font-size: 10px; font-family: var(--font-geist-mono), ui-monospace, monospace; color: var(--ink-3); letter-spacing: 0.02em; margin-bottom: 2px; }
 .pr2-demo-credit-row { display: flex; align-items: baseline; gap: 6px; }
-.pr2-demo-credit-num { font-size: 22px; font-weight: 500; letter-spacing: -0.04em; font-family: 'Geist Mono', monospace; color: var(--ink); }
+.pr2-demo-credit-num { font-size: 22px; font-weight: 500; letter-spacing: -0.04em; font-family: var(--font-geist-mono), ui-monospace, monospace; color: var(--ink); }
 .pr2-demo-credit-sub { font-size: 11.5px; color: var(--ink-3); }
 .pr2-demo-right-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 14px; gap: 12px; flex-wrap: wrap; }
-.pr2-demo-state { font-size: 10.5px; font-family: 'Geist Mono', monospace; color: var(--ink-3); letter-spacing: 0.02em; transition: color .2s; }
+.pr2-demo-state { font-size: 10.5px; font-family: var(--font-geist-mono), ui-monospace, monospace; color: var(--ink-3); letter-spacing: 0.02em; transition: color .2s; }
 .pr2-demo-state-done { color: var(--success); }
 .pr2-demo-rows { display: flex; flex-direction: column; gap: 6px; }
 .pr2-demo-row { display: grid; grid-template-columns: 170px 1fr 80px 44px; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; border: 1px solid transparent; transition: all .25s ease; font-size: 12.5px; }
 .pr2-row-webp { background: var(--bg-2); }
 .pr2-row-converting { border-color: var(--ink); }
-.pr2-demo-row-label { font-family: 'Geist Mono', monospace; color: var(--ink); letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pr2-demo-row-label { font-family: var(--font-geist-mono), ui-monospace, monospace; color: var(--ink); letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pr2-demo-row-bar { height: 4px; border-radius: 999px; background: var(--line); position: relative; overflow: hidden; }
 .pr2-demo-row-bar-fill { position: absolute; left: 0; top: 0; bottom: 0; transition: width .1s linear, background .2s; }
-.pr2-demo-row-size { font-family: 'Geist Mono', monospace; text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
-.pr2-demo-row-format { font-family: 'Geist Mono', monospace; font-size: 10.5px; font-weight: 500; padding: 2px 6px; border-radius: 4px; text-align: center; background: var(--bg-2); color: var(--ink-3); transition: background .2s, color .2s; }
+.pr2-demo-row-size { font-family: var(--font-geist-mono), ui-monospace, monospace; text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
+.pr2-demo-row-format { font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: 10.5px; font-weight: 500; padding: 2px 6px; border-radius: 4px; text-align: center; background: var(--bg-2); color: var(--ink-3); transition: background .2s, color .2s; }
 .pr2-fmt-webp { background: var(--ink); color: var(--bg); }
 .pr2-demo-totals { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
 .pr2-demo-totals-row { display: flex; gap: 18px; font-size: 12px; }
-.pr2-demo-total-val { font-family: 'Geist Mono', monospace; font-weight: 500; color: var(--ink); transition: color .3s; }
+.pr2-demo-total-val { font-family: var(--font-geist-mono), ui-monospace, monospace; font-weight: 500; color: var(--ink); transition: color .3s; }
 .pr2-demo-total-done { color: var(--success); }
 .pr2-demo-arrow { font-size: 14px; color: var(--ink-3); align-self: flex-end; padding-bottom: 1px; }
-.pr2-demo-saved { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 6px; background: var(--bg-2); color: var(--ink-3); font-size: 12px; font-weight: 500; font-family: 'Geist Mono', monospace; letter-spacing: -0.01em; transition: all .3s; }
+.pr2-demo-saved { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 6px; background: var(--bg-2); color: var(--ink-3); font-size: 12px; font-weight: 500; font-family: var(--font-geist-mono), ui-monospace, monospace; letter-spacing: -0.01em; transition: all .3s; }
 .pr2-demo-saved-on { background: var(--ink); color: var(--bg); }
 .pr2-demo-saved-sub { opacity: 0.7; }
 @media (max-width: 760px) {
@@ -1023,11 +1211,11 @@ const css = `
 .pr2-stat { padding: 32px 20px; text-align: center; border-right: 1px solid var(--line); }
 .pr2-stat:last-child { border-right: none; }
 .pr2-stat-k { font-size: 32px; font-weight: 500; letter-spacing: -0.04em; color: var(--ink); margin-bottom: 4px; }
-.pr2-stat-v { font-size: 12.5px; color: var(--ink-3); font-family: 'Geist Mono', monospace; letter-spacing: -0.01em; }
+.pr2-stat-v { font-size: 12.5px; color: var(--ink-3); font-family: var(--font-geist-mono), ui-monospace, monospace; letter-spacing: -0.01em; }
 
 .pr2-trap { padding: 120px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--bg-2); }
 .pr2-section-head { max-width: 640px; margin: 0 auto 48px; text-align: center; }
-.pr2-eyebrow { font-family: 'Geist Mono', monospace; font-size: 11px; font-weight: 400; letter-spacing: 0.02em; color: var(--ink-3); }
+.pr2-eyebrow { font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: 11px; font-weight: 400; letter-spacing: 0.02em; color: var(--ink-3); }
 .pr2-section-h { font-size: clamp(36px, 4.8vw, 60px); font-weight: 600; letter-spacing: -0.04em; margin: 10px 0 14px; line-height: 1.05; color: var(--ink); }
 .pr2-section-h-accent { color: var(--ink-3); }
 .pr2-section-lead { font-size: 16px; color: var(--ink-2); line-height: 1.55; letter-spacing: -0.01em; }
@@ -1122,7 +1310,7 @@ const css = `
 .pr2-footer-brand { max-width: 320px; }
 .pr2-footer-brand p { font-size: 12.5px; color: var(--ink-3); margin: 14px 0 0; line-height: 1.55; }
 .pr2-footer-cols { display: flex; gap: 56px; font-size: 13px; flex-wrap: wrap; }
-.pr2-footer-col-h { font-size: 11px; letter-spacing: 0.02em; color: var(--ink-3); margin-bottom: 12px; font-family: 'Geist Mono', monospace; }
+.pr2-footer-col-h { font-size: 11px; letter-spacing: 0.02em; color: var(--ink-3); margin-bottom: 12px; font-family: var(--font-geist-mono), ui-monospace, monospace; }
 .pr2-footer-col { display: flex; flex-direction: column; gap: 10px; }
 .pr2-footer-col a { color: var(--ink-2); transition: color .15s; }
 .pr2-footer-col a:hover { color: var(--ink); }
@@ -1234,6 +1422,106 @@ const css = `
   text-align: center;
   font-size: 13px; color: var(--ink-3);
   letter-spacing: -0.01em;
+}
+
+/* Reveal-on-scroll wrapper */
+.pr2-reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 600ms cubic-bezier(.2,.7,.3,1), transform 600ms cubic-bezier(.2,.7,.3,1);
+  will-change: opacity, transform;
+}
+.pr2-reveal-in { opacity: 1; transform: none; }
+
+/* Focus-visible on pricing cards — when the inner button catches focus,
+   highlight the whole card so keyboard users know which plan is targeted. */
+.pr2-plan:focus-within {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 1px var(--ink);
+}
+.pr2-smallrow:focus-within {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 1px var(--ink);
+}
+
+/* Use Cases */
+.pr2-uc {
+  padding: 112px 0 96px;
+  border-top: 1px solid var(--line);
+  background: var(--bg-2);
+}
+.pr2-uc-grid {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px; max-width: 1120px; margin: 0 auto;
+}
+@media (max-width: 900px) { .pr2-uc-grid { grid-template-columns: 1fr; max-width: 560px; } }
+.pr2-uc-card {
+  padding: 28px 26px 24px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  display: flex; flex-direction: column; gap: 10px;
+  transition: border-color .15s, transform .15s;
+}
+.pr2-uc-card:hover { border-color: var(--line-2); transform: translateY(-3px); }
+.pr2-uc-tag {
+  align-self: flex-start;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+  padding: 3px 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  text-transform: uppercase;
+}
+.pr2-uc-title {
+  font-size: 28px; font-weight: 600; letter-spacing: -0.035em;
+  color: var(--ink); margin: 6px 0 0;
+  white-space: pre-line;
+  line-height: 1.05;
+}
+.pr2-uc-copy {
+  font-size: 14px; color: var(--ink-2); line-height: 1.55; margin: 0;
+  flex: 1;
+}
+.pr2-uc-link {
+  font-size: 13px; font-weight: 500; color: var(--ink);
+  display: inline-flex; align-items: center; gap: 4px;
+  margin-top: 4px;
+  border-bottom: 1px solid var(--line-2);
+  padding-bottom: 2px;
+  align-self: flex-start;
+  transition: border-color .15s;
+}
+.pr2-uc-link:hover { border-color: var(--ink); }
+
+/* Security */
+.pr2-sec {
+  padding: 112px 0 96px;
+  border-top: 1px solid var(--line);
+}
+.pr2-sec-grid {
+  list-style: none; margin: 0 auto; padding: 0;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px; max-width: 1080px;
+}
+@media (max-width: 900px) { .pr2-sec-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .pr2-sec-grid { grid-template-columns: 1fr; } }
+.pr2-sec-card {
+  padding: 20px 22px 18px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  transition: border-color .15s;
+}
+.pr2-sec-card:hover { border-color: var(--line-2); }
+.pr2-sec-title {
+  font-size: 14px; font-weight: 500; color: var(--ink);
+  margin-bottom: 6px; letter-spacing: -0.015em;
+}
+.pr2-sec-copy {
+  margin: 0; font-size: 13px; color: var(--ink-2); line-height: 1.55;
 }
 
 /* Comparison table */
