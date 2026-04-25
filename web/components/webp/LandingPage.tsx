@@ -196,7 +196,6 @@ export function LandingPage({ plans }: { plans: ApiPlan[] }) {
             <Reveal><Security /></Reveal>
             <Reveal><ThumbnailTrap /></Reveal>
             <Reveal><WhatsNew /></Reveal>
-            <Reveal><Comparison /></Reveal>
             <Reveal><Testimonials /></Reveal>
             <Reveal><Pricing plans={cardPlans} billing={billing} onBillingChange={setBilling} /></Reveal>
             <Reveal><FAQ openIdx={faqOpen} onToggle={(i) => setFaqOpen(faqOpen === i ? -1 : i)} /></Reveal>
@@ -783,63 +782,6 @@ function Security() {
     );
 }
 
-const COMPARE_ROWS = [
-    { label: "Credits model",          tempaloo: "1 per upload (all sizes)", shortpixel: "1 per thumbnail", imagify: "1 per image (MB-tiered)", elementor: "1 per thumbnail" },
-    { label: "AVIF support",           tempaloo: "From Starter",              shortpixel: "Paid addon",      imagify: "Pro only",                elementor: "✗" },
-    { label: "Unlimited bulk",         tempaloo: "Yes (except Free)",         shortpixel: "Limited",         imagify: "Limited",                 elementor: "Limited" },
-    { label: "Credit rollover",        tempaloo: "30 days",                   shortpixel: "✗",               imagify: "✗",                       elementor: "✗" },
-    { label: "Sites per license",      tempaloo: "1 → ∞",                     shortpixel: "1 base",          imagify: "3 base",                  elementor: "Per site" },
-    { label: "5,000 imgs/mo (€/mo)",   tempaloo: "€5",                        shortpixel: "~€9.99",          imagify: "~€10",                    elementor: "Bundled" },
-    { label: "EU-hosted (GDPR)",       tempaloo: "✓",                         shortpixel: "US",              imagify: "US/EU",                   elementor: "US" },
-];
-
-function Comparison() {
-    return (
-        <section className="pr2-cmp">
-            <div className="pr2-container">
-                <div className="pr2-section-head">
-                    <span className="pr2-eyebrow">COMPARISON</span>
-                    <h2 className="pr2-h-display pr2-section-h">
-                        Not the same{" "}
-                        <span className="pr2-font-serif pr2-section-h-accent">credit math.</span>
-                    </h2>
-                    <p className="pr2-section-lead">
-                        Same &ldquo;WebP plugin&rdquo; category, very different pricing models. Here is what actually differs.
-                    </p>
-                </div>
-                <div className="pr2-cmp-wrap">
-                    <table className="pr2-cmp-table" aria-label="Feature comparison vs competitors">
-                        <thead>
-                            <tr>
-                                <th scope="col" className="pr2-cmp-feat">Feature</th>
-                                <th scope="col" className="pr2-cmp-us">Tempaloo WebP</th>
-                                <th scope="col">ShortPixel</th>
-                                <th scope="col">Imagify</th>
-                                <th scope="col">Elementor IO</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {COMPARE_ROWS.map((r) => (
-                                <tr key={r.label}>
-                                    <th scope="row" className="pr2-cmp-feat">{r.label}</th>
-                                    <td className="pr2-cmp-us">{r.tempaloo}</td>
-                                    <td>{r.shortpixel}</td>
-                                    <td>{r.imagify}</td>
-                                    <td>{r.elementor}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-                <p className="pr2-cmp-note">
-                    Data cross-checked against each vendor&rsquo;s public pricing page in April 2026.
-                    Competitors&rsquo; pricing and features may change; we won&rsquo;t update this table silently.
-                </p>
-            </div>
-        </section>
-    );
-}
-
 function StickyMobileCTA() {
     // Only emerge after the user has scrolled past the hero. Avoids
     // covering the H1 on first paint.
@@ -951,6 +893,14 @@ function ThumbnailTrap() {
                     <span className="pr2-font-mono pr2-text-danger">6,000</span> vs{" "}
                     <span className="pr2-font-mono pr2-text-ink">1,000</span>{" "}credits.
                 </p>
+                <div className="pr2-trap-vs">
+                    See the math against each one:&nbsp;
+                    <Link href="/webp/vs-shortpixel">vs ShortPixel</Link>
+                    <span aria-hidden> · </span>
+                    <Link href="/webp/vs-imagify">vs Imagify</Link>
+                    <span aria-hidden> · </span>
+                    <Link href="/webp/vs-tinypng">vs TinyPNG</Link>
+                </div>
             </div>
         </section>
     );
@@ -1654,57 +1604,18 @@ const css = `
   margin: 0; font-size: 13px; color: var(--ink-2); line-height: 1.55;
 }
 
-/* Comparison table */
-.pr2-cmp {
-  padding: 112px 0 96px;
-  border-top: 1px solid var(--line);
+/* Inline cross-link to the dedicated /webp/vs-* comparison pages, surfaced
+   at the end of ThumbnailTrap so visitors who want a head-to-head can
+   click through to a page where each cell is sourced + dated. */
+.pr2-trap-vs {
+  max-width: 580px; margin: 18px auto 0; text-align: center;
+  font-size: 13px; color: var(--ink-3); letter-spacing: -0.01em;
 }
-.pr2-cmp-wrap {
-  max-width: 1080px; margin: 0 auto;
-  overflow-x: auto;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface);
+.pr2-trap-vs a {
+  color: var(--ink); border-bottom: 1px solid var(--line-2); padding-bottom: 1px;
+  transition: border-color .15s;
 }
-.pr2-cmp-table {
-  width: 100%; min-width: 720px;
-  border-collapse: collapse;
-  font-size: 14px;
-}
-.pr2-cmp-table th,
-.pr2-cmp-table td {
-  padding: 14px 16px;
-  text-align: left;
-  border-bottom: 1px solid var(--line);
-  letter-spacing: -0.01em;
-  white-space: nowrap;
-}
-.pr2-cmp-table thead th {
-  font-size: 12px; font-weight: 500;
-  color: var(--ink-3);
-  letter-spacing: 0.02em; text-transform: uppercase;
-  border-bottom: 1px solid var(--line-2);
-  background: var(--bg-2);
-}
-.pr2-cmp-table tbody th {
-  font-weight: 500; color: var(--ink);
-}
-.pr2-cmp-table tbody td { color: var(--ink-2); }
-.pr2-cmp-feat { width: 36%; }
-.pr2-cmp-us { color: var(--ink) !important; font-weight: 500; background: var(--accent-wash); }
-.pr2-cmp-table thead .pr2-cmp-us { color: var(--ink) !important; }
-.pr2-cmp-table tr:last-child th,
-.pr2-cmp-table tr:last-child td { border-bottom: none; }
-.pr2-cmp-note {
-  max-width: 720px; margin: 20px auto 0;
-  text-align: center;
-  font-size: 12.5px; color: var(--ink-3);
-  letter-spacing: -0.01em;
-}
-@media (max-width: 640px) {
-  .pr2-cmp-wrap { border-radius: 10px; }
-  .pr2-cmp-table th, .pr2-cmp-table td { padding: 10px 12px; font-size: 13px; }
-}
+.pr2-trap-vs a:hover { border-bottom-color: var(--ink); }
 
 /* Sticky mobile bottom CTA */
 .pr2-sticky-cta {
