@@ -243,14 +243,12 @@ function Nav({ theme, scrolled, onToggleTheme }: { theme: Theme; scrolled: boole
         <>
             <nav className={`pr2-nav ${scrolled ? "pr2-nav-scrolled" : ""}`}>
                 <div className="pr2-container pr2-nav-inner">
-                    <div className="pr2-nav-left">
-                        <Link href="/webp" className="pr2-nav-logo" aria-label="Tempaloo WebP home"><Logo /></Link>
-                        <div className="pr2-nav-links">
-                            <a href="#pricing">Pricing</a>
-                            <a href="#faq">FAQ</a>
-                            <a href="#" title="Coming soon">Docs</a>
-                            <a href="#" title="Coming soon">Changelog</a>
-                        </div>
+                    <Link href="/webp" className="pr2-nav-logo" aria-label="Tempaloo WebP home"><Logo /></Link>
+                    <div className="pr2-nav-links" aria-label="Primary">
+                        <a href="#pricing">Pricing</a>
+                        <a href="#faq">FAQ</a>
+                        <a href="#" title="Coming soon">Docs</a>
+                        <a href="#" title="Coming soon">Changelog</a>
                     </div>
                     <div className="pr2-nav-right">
                         <button onClick={onToggleTheme} className="pr2-btn pr2-btn-ghost pr2-icon-btn" aria-label="Toggle theme">
@@ -1227,13 +1225,16 @@ const css = `
 
 .pr2-nav { position: sticky; top: 0; z-index: 50; background: transparent; border-bottom: 1px solid transparent; transition: background .2s, border-color .2s; }
 .pr2-nav-scrolled { background: color-mix(in oklab, var(--bg) 80%, transparent); backdrop-filter: blur(16px) saturate(180%); -webkit-backdrop-filter: blur(16px) saturate(180%); border-bottom-color: var(--line); }
-.pr2-nav-inner { display: flex; align-items: center; justify-content: space-between; height: 60px; }
-.pr2-nav-left { display: flex; align-items: center; gap: 28px; }
-.pr2-nav-logo { display: flex; align-items: center; }
-.pr2-nav-links { display: flex; gap: 4px; }
+/* 3-column grid: logo left, links centered, CTAs right. The center column
+   is absolutely centered to the viewport regardless of the side widths,
+   so the menu sits on the page's vertical axis even if Sign in / Get
+   started grows or shrinks. */
+.pr2-nav-inner { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; height: 60px; }
+.pr2-nav-logo { display: flex; align-items: center; justify-self: start; }
+.pr2-nav-links { display: flex; gap: 4px; justify-self: center; }
 .pr2-nav-links a { font-size: 14px; color: var(--ink-2); padding: 6px 10px; font-weight: 450; border-radius: 6px; transition: color .15s, background .15s; }
 .pr2-nav-links a:hover { color: var(--ink); background: var(--bg-2); }
-.pr2-nav-right { display: flex; align-items: center; gap: 6px; }
+.pr2-nav-right { display: flex; align-items: center; gap: 6px; justify-self: end; }
 .pr2-nav-signin { font-size: 14px; color: var(--ink-2); padding: 6px 12px; font-weight: 450; transition: color .15s; }
 .pr2-nav-signin:hover { color: var(--ink); }
 
@@ -1718,12 +1719,14 @@ const css = `
    the "Get started" text collapses below 420px, leaving just the arrow. */
 .pr2-nav-burger { display: none; }
 @media (max-width: 720px) {
+  /* Drop the center column entirely so the logo + right cluster don't
+     get pinned to a 1fr-auto-1fr layout that wastes horizontal space. */
+  .pr2-nav-inner { grid-template-columns: auto 1fr; }
   .pr2-nav-links { display: none; }
   .pr2-nav-burger { display: inline-flex; }
 }
 @media (max-width: 520px) {
   .pr2-nav-signin { display: none; }
-  .pr2-nav-left { gap: 16px; }
 }
 @media (max-width: 420px) {
   .pr2-nav-cta-label { display: none; }
