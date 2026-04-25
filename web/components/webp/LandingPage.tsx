@@ -5,6 +5,10 @@ import Link from "next/link";
 import { LogoMark } from "@/components/Logo";
 import { trackCtaClick, type TrackPlan } from "@/lib/track";
 import type { Plan as ApiPlan } from "@/lib/plans";
+import { BeforeAfterSlider } from "@/components/webp/sections/BeforeAfterSlider";
+import { WhyMatters }        from "@/components/webp/sections/WhyMatters";
+import { WhatsNew }          from "@/components/webp/sections/WhatsNew";
+import { Testimonials }      from "@/components/webp/sections/Testimonials";
 
 type Theme = "light" | "dark";
 type Billing = "monthly" | "annual";
@@ -181,13 +185,17 @@ export function LandingPage({ plans }: { plans: ApiPlan[] }) {
 
             <Nav theme={theme} scrolled={scrolled} onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")} />
             <Hero />
+            <Reveal><BeforeAfterSlider /></Reveal>
             <StatsBar />
+            <Reveal><WhyMatters /></Reveal>
             <Reveal><HowItWorks /></Reveal>
             <Reveal><Compatibility /></Reveal>
             <Reveal><UseCases /></Reveal>
             <Reveal><Security /></Reveal>
             <Reveal><ThumbnailTrap /></Reveal>
+            <Reveal><WhatsNew /></Reveal>
             <Reveal><Comparison /></Reveal>
+            <Reveal><Testimonials /></Reveal>
             <Reveal><Pricing plans={cardPlans} billing={billing} onBillingChange={setBilling} /></Reveal>
             <Reveal><FAQ openIdx={faqOpen} onToggle={(i) => setFaqOpen(faqOpen === i ? -1 : i)} /></Reveal>
             <FinalCTA />
