@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.4.3
+Stable tag: 0.4.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -125,6 +125,9 @@ See the **External services** section above for a full disclosure of the data th
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 0.4.4 =
+* Fix: post-upload stats now appear reliably on `/wp-admin/media-new.php`. Replaces the previous wp.media-based read with a dedicated admin-ajax endpoint (`tempaloo_stats`) so the script works on the legacy uploader page where wp.media isn't loaded.
 
 = 0.4.3 =
 * Fix: post-upload compression stats now appear reliably on `media-new.php` even after WP rewrites the row. Per-row MutationObserver re-injects on every WP render pass.

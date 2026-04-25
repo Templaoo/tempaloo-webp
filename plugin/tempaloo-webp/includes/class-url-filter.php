@@ -37,6 +37,9 @@ class Tempaloo_WebP_URL_Filter {
         // Visual "WebP" badge on admin thumbnails (Media Library + block editor only).
         add_action( 'admin_enqueue_scripts',        [ $this, 'enqueue_admin_badge' ] );
         add_action( 'enqueue_block_editor_assets',  [ $this, 'enqueue_admin_badge' ] );
+
+        // admin-ajax handler that backs the post-upload stats JS.
+        add_action( 'wp_ajax_tempaloo_stats',       [ $this, 'ajax_stats' ] );
     }
 
     /**
@@ -157,18 +160,59 @@ class Tempaloo_WebP_URL_Filter {
         );
 
         // Inline post-upload stats: only useful where WP renders media-item
-        // rows after an upload (media-new.php, upload.php list view). Depends
-        // on media-models for wp.media.attachment(); media-views isn't needed
-        // and isn't always loaded on the legacy uploader.
+        // rows after an upload (media-new.php, upload.php list view).
+        // Zero JS dependency — calls admin-ajax directly via vanilla fetch
+        // because wp.media.attachment() isn't reliably loaded on the legacy
+        // /wp-admin/media-new.php uploader.
         if ( in_array( $hook, [ 'media-new.php', 'upload.php' ], true ) ) {
             wp_enqueue_script(
                 'tempaloo-webp-upload-stats',
                 TEMPALOO_WEBP_URL . 'assets/upload-stats.js',
-                [ 'media-models' ],
+                [],
                 TEMPALOO_WEBP_VERSION,
                 true
             );
+            wp_localize_script(
+                'tempaloo-webp-upload-stats',
+                'TempalooStatsBoot',
+                [
+                    'ajaxUrl' => admin_url( 'admin-ajax.php' ),
+                    'nonce'   => wp_create_nonce( 'tempaloo_stats' ),
+                ]
+            );
         }
+    }
+
+    /**
+     * admin-ajax endpoint: returns compression stats for one attachment.
+     * Bypasses the REST permissions / wp.media model loading entirely so
+     * the post-upload row JS can grab data with a single fetch.
+     */
+    public function ajax_stats() {
+        check_ajax_referer( 'tempaloo_stats', 'nonce' );
+        if ( ! current_user_can( 'upload_files' ) ) {
+            wp_send_json_error( [ 'message' => 'forbidden' ], 403 );
+        }
+        $id = isset( $_REQUEST['id'] ) ? absint( $_REQUEST['id'] ) : 0;
+        if ( $id <= 0 ) {
+            wp_send_json_error( [ 'message' => 'missing_id' ], 400 );
+        }
+        $s = $this->compute_attachment_savings( $id );
+        if ( ! $s ) {
+            // 200 OK with `ready=false` lets the JS know to retry
+            // (conversion may finish a few hundred ms after the upload row
+            // appears for big images).
+            wp_send_json_success( [ 'ready' => false ] );
+        }
+        wp_send_json_success( [
+            'ready'       => true,
+            'format'      => $s['format'],
+            'savedPct'    => $s['saved_pct'],
+            'bytesIn'     => $s['bytes_in'],
+            'bytesOut'    => $s['bytes_out'],
+            'sizes'       => $s['sizes'],
+            'convertedAt' => $s['at'],
+        ] );
     }
 
     public function media_column( $cols ) {

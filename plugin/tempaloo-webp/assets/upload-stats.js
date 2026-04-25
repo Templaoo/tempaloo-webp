@@ -2,22 +2,31 @@
  * Inline compression stats on the post-upload row of /wp-admin/media-new.php
  * and the Media Library list view.
  *
- * Survives WP's re-renders: when WP rewrites the inner HTML of a media-item
- * row after upload completes (which wipes our injected stats line), a
- * per-row MutationObserver re-injects automatically.
- *
- * Data sources, in order of preference:
- *   1. wp.media.attachment(id).get('tempaloo')       — synchronous, in cache
- *   2. wp.media.attachment(id).fetch() then re-read  — async, REST round-trip
+ * Implementation notes:
+ *   - Zero dependency on wp.media — that script isn't reliably loaded on
+ *     the legacy /wp-admin/media-new.php uploader and was the root cause
+ *     of the previous releases failing silently.
+ *   - Talks to admin-ajax.php (a vanilla fetch, nonce-protected) so the
+ *     data path works on every page that enqueues this script.
+ *   - Per-row MutationObserver re-injects whenever WP rewrites the row
+ *     (which it does between the "uploading" and "complete" states).
  */
 ( function () {
     var STATS_CLASS = "tempaloo-upload-stats";
-    var DEBUG = !! window.TEMPALOO_DEBUG;
+    var POLL_DELAY  = 600;   // ms between retries while conversion finishes
+    var MAX_TRIES   = 25;    // 25 × 600 ms = 15 s window per row
+    var DEBUG       = !! window.TEMPALOO_DEBUG;
+    var BOOT        = window.TempalooStatsBoot;
 
     function log() {
         if ( DEBUG && window.console ) {
             console.log.apply( console, [ "[tempaloo]" ].concat( [].slice.call( arguments ) ) );
         }
+    }
+
+    if ( ! BOOT || ! BOOT.ajaxUrl ) {
+        log( "boot config missing — script disabled" );
+        return;
     }
 
     function formatBytes( n ) {
@@ -64,95 +73,78 @@
         } else {
             anchor.parentNode.appendChild( node );
         }
-        log( "injected stats into media-item-" + row.id, data );
+        log( "injected stats", row.id, data );
     }
 
-    function readData( id ) {
-        if ( ! window.wp || ! window.wp.media || ! window.wp.media.attachment ) return null;
-        var att = window.wp.media.attachment( id );
-        return att && att.get ? att.get( "tempaloo" ) : null;
+    function fetchStats( id ) {
+        var body = "action=tempaloo_stats&id=" + encodeURIComponent( id ) +
+                   "&nonce=" + encodeURIComponent( BOOT.nonce );
+        return fetch( BOOT.ajaxUrl, {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: body,
+        } ).then( function ( res ) { return res.json(); } );
     }
 
-    function ensureFetched( id, cb ) {
-        if ( ! window.wp || ! window.wp.media || ! window.wp.media.attachment ) {
-            cb( null );
-            return;
-        }
-        var att = window.wp.media.attachment( id );
-        if ( ! att || ! att.fetch ) { cb( null ); return; }
-        att.fetch().done( function () {
-            cb( att.get( "tempaloo" ) );
-        } ).fail( function () {
-            cb( null );
-        } );
-    }
-
-    /**
-     * Watch a single row: re-inject every time its inner DOM changes,
-     * since WP rewrites it after upload completes (which removes our line).
-     */
-    function attachRow( row ) {
+    function watchRow( row ) {
         if ( ! row || row.__tempalooBound ) return;
         row.__tempalooBound = true;
 
-        var idMatch = ( row.id || "" ).match( /^media-item-(\d+)$/ );
-        var id = idMatch ? Number( idMatch[ 1 ] ) : null;
-        if ( ! id ) {
-            log( "row without numeric id (still uploading?)", row.id );
+        var tries = 0;
+
+        function rowAttachmentId() {
+            var m = ( row.id || "" ).match( /^media-item-(\d+)$/ );
+            return m ? Number( m[ 1 ] ) : null;
         }
 
-        var tries = 0;
-        var maxTries = 30; // 30 × 250 ms = 7.5 s window after row appears
-
         function attempt() {
-            // Re-resolve the id in case WP swapped the temp plupload UID
-            // for the real attachment id between attempts.
-            var nowIdMatch = ( row.id || "" ).match( /^media-item-(\d+)$/ );
-            var resolvedId = nowIdMatch ? Number( nowIdMatch[ 1 ] ) : null;
-            if ( ! resolvedId ) {
+            var id = rowAttachmentId();
+            if ( ! id ) {
+                // Plupload temp UID, not yet swapped for the WP id. Wait.
                 tries++;
-                if ( tries < maxTries ) setTimeout( attempt, 250 );
+                if ( tries < MAX_TRIES ) setTimeout( attempt, POLL_DELAY );
                 return;
             }
-            var data = readData( resolvedId );
-            if ( data ) {
-                inject( row, data );
-                return; // success
-            }
-            // Trigger a fetch once if the cache is empty
-            ensureFetched( resolvedId, function ( fetched ) {
-                if ( fetched ) {
-                    inject( row, fetched );
+            fetchStats( id ).then( function ( j ) {
+                if ( j && j.success && j.data && j.data.ready ) {
+                    inject( row, j.data );
                 } else {
+                    // Conversion not done yet, retry.
                     tries++;
-                    if ( tries < maxTries ) setTimeout( attempt, 250 );
+                    if ( tries < MAX_TRIES ) setTimeout( attempt, POLL_DELAY );
+                    else log( "gave up after " + MAX_TRIES + " tries", id );
                 }
+            } ).catch( function ( e ) {
+                log( "fetch error", e );
+                tries++;
+                if ( tries < MAX_TRIES ) setTimeout( attempt, POLL_DELAY * 2 );
             } );
         }
         attempt();
 
-        // Also re-inject if WP later replaces the row's inner HTML.
+        // Re-inject if WP rewrites the row's content after our injection.
         var rowObserver = new MutationObserver( function () {
-            if ( ! alreadyInjected( row ) ) {
-                var rid = ( row.id || "" ).match( /^media-item-(\d+)$/ );
-                var realId = rid ? Number( rid[ 1 ] ) : null;
-                if ( ! realId ) return;
-                var d = readData( realId );
-                if ( d ) inject( row, d );
-            }
+            if ( alreadyInjected( row ) ) return;
+            var id = rowAttachmentId();
+            if ( ! id ) return;
+            fetchStats( id ).then( function ( j ) {
+                if ( j && j.success && j.data && j.data.ready ) {
+                    inject( row, j.data );
+                }
+            } );
         } );
         rowObserver.observe( row, { childList: true, subtree: true } );
     }
 
     function scanRoot( root ) {
         var rows = ( root || document ).querySelectorAll( '[id^="media-item-"]' );
-        for ( var i = 0; i < rows.length; i++ ) attachRow( rows[ i ] );
+        for ( var i = 0; i < rows.length; i++ ) watchRow( rows[ i ] );
     }
 
     function boot() {
-        log( "boot, wp.media available?", !! ( window.wp && window.wp.media ) );
+        log( "boot ok" );
         scanRoot( document );
-
         var globalObserver = new MutationObserver( function ( mutations ) {
             for ( var i = 0; i < mutations.length; i++ ) {
                 var added = mutations[ i ].addedNodes;
@@ -160,7 +152,7 @@
                     var n = added[ j ];
                     if ( n.nodeType !== 1 ) continue;
                     if ( n.id && /^media-item-/.test( n.id ) ) {
-                        attachRow( n );
+                        watchRow( n );
                     } else if ( n.querySelectorAll ) {
                         scanRoot( n );
                     }
