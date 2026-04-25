@@ -31,6 +31,82 @@ class Tempaloo_WebP_REST {
             'callback'            => [ $this, 'post_retry' ],
             'permission_callback' => [ $this, 'perm_manage' ],
         ] );
+        register_rest_route( self::NS, '/restore', [
+            'methods'             => 'POST',
+            'callback'            => [ $this, 'post_restore' ],
+            'permission_callback' => [ $this, 'perm_manage' ],
+            'args'                => [
+                // Empty / omitted → restore all converted attachments. An
+                // explicit list lets a future per-row UI restore one at a time.
+                'ids' => [ 'required' => false, 'type' => 'array' ],
+            ],
+        ] );
+    }
+
+    /**
+     * Restore originals: deletes every .webp/.avif sibling we wrote and
+     * strips the tempaloo_webp meta block. The original JPEG/PNG/GIF on
+     * disk was never touched, so users get back exactly what they uploaded.
+     */
+    public function post_restore( WP_REST_Request $req ) {
+        $ids = $req->get_param( 'ids' );
+        if ( ! is_array( $ids ) || empty( $ids ) ) {
+            $ids = get_posts( [
+                'post_type'      => 'attachment',
+                'post_status'    => 'inherit',
+                'post_mime_type' => [ 'image/jpeg', 'image/png', 'image/gif' ],
+                'numberposts'    => 5000,
+                'fields'         => 'ids',
+                'meta_query'     => [
+                    [
+                        'key'     => '_wp_attachment_metadata',
+                        'value'   => 'tempaloo_webp',
+                        'compare' => 'LIKE',
+                    ],
+                ],
+            ] );
+        } else {
+            $ids = array_map( 'absint', $ids );
+        }
+
+        $restored = 0;
+        $files_removed = 0;
+        foreach ( $ids as $id ) {
+            $meta = wp_get_attachment_metadata( $id );
+            if ( empty( $meta['tempaloo_webp'] ) ) continue;
+
+            $original = get_attached_file( $id );
+            if ( $original ) {
+                $dir = trailingslashit( dirname( $original ) );
+                $names = [ basename( $original ) ];
+                if ( ! empty( $meta['sizes'] ) && is_array( $meta['sizes'] ) ) {
+                    foreach ( $meta['sizes'] as $size ) {
+                        if ( ! empty( $size['file'] ) ) $names[] = $size['file'];
+                    }
+                }
+                foreach ( $names as $name ) {
+                    foreach ( [ '.webp', '.avif' ] as $ext ) {
+                        $sibling = $dir . $name . $ext;
+                        // wp_delete_file is the WP-blessed way to unlink an
+                        // attachment-adjacent file (handles permissions +
+                        // hooks). It returns void, so we count optimistically.
+                        if ( file_exists( $sibling ) ) {
+                            wp_delete_file( $sibling );
+                            $files_removed++;
+                        }
+                    }
+                }
+            }
+            unset( $meta['tempaloo_webp'] );
+            wp_update_attachment_metadata( $id, $meta );
+            $restored++;
+        }
+
+        return rest_ensure_response( [
+            'state'        => $this->state_response()->get_data(),
+            'restored'     => $restored,
+            'filesRemoved' => $files_removed,
+        ] );
     }
 
     public function post_retry() {
@@ -85,6 +161,12 @@ class Tempaloo_WebP_REST {
         }
         if ( array_key_exists( 'serveWebp', $p ) ) {
             $patch['serve_webp'] = ! empty( $p['serveWebp'] );
+        }
+        if ( array_key_exists( 'resizeMaxWidth', $p ) ) {
+            $w = (int) $p['resizeMaxWidth'];
+            // 0 = off; clamp the max so a typo can't turn off the resize
+            // feature by setting an absurd value (we top out at 8K).
+            $patch['resize_max_width'] = $w <= 0 ? 0 : max( 320, min( 7680, $w ) );
         }
         if ( ! empty( $patch ) ) {
             Tempaloo_WebP_Plugin::update_settings( $patch );
@@ -149,10 +231,11 @@ class Tempaloo_WebP_REST {
             'apiHealth'       => $api_health,
             'retryQueue'      => Tempaloo_WebP_Retry_Queue::stats(),
             'settings' => [
-                'quality'      => (int) $s['quality'],
-                'outputFormat' => (string) $s['output_format'],
-                'autoConvert'  => ! empty( $s['auto_convert'] ),
-                'serveWebp'    => ! empty( $s['serve_webp'] ),
+                'quality'        => (int) $s['quality'],
+                'outputFormat'   => (string) $s['output_format'],
+                'autoConvert'    => ! empty( $s['auto_convert'] ),
+                'serveWebp'      => ! empty( $s['serve_webp'] ),
+                'resizeMaxWidth' => (int) ( $s['resize_max_width'] ?? 0 ),
             ],
             'savings'  => $this->compute_savings(),
         ] );
@@ -202,3 +285,5 @@ class Tempaloo_WebP_REST {
         ];
     }
 }
+
+

@@ -46,6 +46,9 @@ export interface AppState {
         outputFormat: "webp" | "avif";
         autoConvert: boolean;
         serveWebp: boolean;
+        // 0 = off; otherwise the max width in px above which uploads are
+        // resized before conversion (hooks into core's big_image_size_threshold).
+        resizeMaxWidth: number;
     };
     savings: null | {
         bytesIn: number;
@@ -82,7 +85,7 @@ export const boot: BootState =
             quotaExceededAt: null,
             apiHealth: { ok: true, failedAt: 0, code: "", message: "", attempts: 0 },
             retryQueue: { pending: 0, dueNow: 0, nextRetryAt: 0 },
-            settings: { quality: 82, outputFormat: "webp", autoConvert: true, serveWebp: true },
+            settings: { quality: 82, outputFormat: "webp", autoConvert: true, serveWebp: true, resizeMaxWidth: 2560 },
             savings: null,
         },
     };
@@ -151,6 +154,10 @@ export const api = {
     runRetry: () =>
         restFetch<{ ran: number; succeeded: number; failed: number; state: AppState }>(
             "/retry/run", { method: "POST", body: "{}" }
+        ),
+    restore: (ids?: number[]) =>
+        restFetch<{ state: AppState; restored: number; filesRemoved: number }>(
+            "/restore", { method: "POST", body: JSON.stringify({ ids: ids ?? [] }) }
         ),
 };
 

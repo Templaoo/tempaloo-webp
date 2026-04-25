@@ -26,6 +26,10 @@ final class Tempaloo_WebP_Plugin {
             'output_format'   => 'webp',   // webp | avif (avif only if supported)
             'auto_convert'    => true,
             'serve_webp'      => true,
+            // Resize uploads larger than this width before conversion. 0 = off.
+            // Hooks into core's big_image_size_threshold filter; the user's
+            // original is kept as a -scaled-original copy by WordPress itself.
+            'resize_max_width' => 2560,
             'last_verified_at' => 0,
         ];
     }
@@ -61,5 +65,14 @@ final class Tempaloo_WebP_Plugin {
         ( new Tempaloo_WebP_Bulk() )->register();
         ( new Tempaloo_WebP_REST() )->register();
         ( new Tempaloo_WebP_Retry_Queue() )->register();
+
+        // Resize-on-upload: pipe the user's setting into WP core's built-in
+        // big-image threshold (since WP 5.3). Returning 0 disables the
+        // mechanism, which is exactly the behavior we want for "Off".
+        add_filter( 'big_image_size_threshold', static function ( $threshold ) {
+            $s = self::get_settings();
+            $w = isset( $s['resize_max_width'] ) ? (int) $s['resize_max_width'] : 0;
+            return $w > 0 ? $w : false; // false → disable, per WP docs
+        }, 10, 1 );
     }
 }

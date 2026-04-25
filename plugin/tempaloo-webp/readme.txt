@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.3.0
+Stable tag: 0.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -126,6 +126,12 @@ See the **External services** section above for a full disclosure of the data th
 
 == Changelog ==
 
+= 0.4.0 =
+* New: One-click "Restore originals" — wipes every .webp/.avif sibling we wrote, never touches your original JPEG/PNG/GIF files.
+* New: Resize-on-upload — pipe a max-width threshold (1920 / 2560 / 3840 / Off) into WordPress core's big-image scaler so huge photos shrink before conversion.
+* New: Three quality presets (Normal 85 / Aggressive 75 / Ultra 60) above the slider — covers 95% of use cases without exposing the full range.
+* Improved: Settings tab redesigned with clearer sections and a sticky save bar.
+
 = 0.3.0 =
 * New: daily bulk cap on the Free plan (50 images/day) — auto-convert on upload stays unlimited within the monthly quota.
 * New: in-admin retry queue (WP cron) for conversions that fail due to temporary API unavailability.
@@ -143,6 +149,9 @@ See the **External services** section above for a full disclosure of the data th
 * Initial release.
 
 == Upgrade Notice ==
+
+= 0.4.0 =
+Adds one-click restore, automatic resize on upload, and 3 quality presets — major UX upgrade.
 
 = 0.3.0 =
 Adds a Free-plan daily bulk cap (50/day) and a background retry queue for failed conversions. Upgrade recommended.
