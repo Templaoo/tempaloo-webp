@@ -150,6 +150,9 @@ function PricingCard({ plan, billing, selected, onChoose }: { plan: Plan; billin
                     <>
                         <span className="h-display pr3-card-price-amt">€0</span>
                         <div className="pr3-card-bill">forever · no card</div>
+                        <div className="pr3-card-bill" style={{ marginTop: 4, fontSize: 11, color: "var(--ink-3)" }}>
+                            Bulk capped at 50/day
+                        </div>
                     </>
                 )}
             </div>

@@ -68,6 +68,8 @@ const FAQS = [
       a: "They roll over automatically for 30 days, capped at one month's worth of your plan. Example: on Starter (5,000/mo), if you only use 2,000 in March, April opens at 8,000 available. No more \"use it or lose it\"." },
     { q: "What happens if I hit my quota?",
       a: "New uploads simply stop being converted until next month, or until you upgrade in one click. Images already optimized keep being served as WebP — nothing breaks." },
+    { q: "Are there any limits on the Free plan beyond the 250 images/month?",
+      a: "Just one: bulk runs (manual conversion of your existing media library) are capped at 50 images per day on Free. Auto-conversion of new uploads stays unlimited within your monthly quota — so a normal blog or portfolio never hits the cap. The cap only exists to prevent agencies from one-shot-migrating large client sites on a free key. Upgrading to any paid plan removes it entirely." },
     { q: "Do you keep my images?",
       a: "No. Conversion happens in-memory and the converted file is streamed back to your site. Originals stay on your server, untouched. We are not a storage service." },
     { q: "Can I cancel anytime? What about refunds?",
@@ -1071,7 +1073,14 @@ function SmallPlanRow({ plan, billing }: { plan: CardPlan; billing: Billing }) {
     return (
         <div className="pr2-smallrow">
             <div className="pr2-smallrow-col">
-                <div className="pr2-smallrow-name">{plan.name}</div>
+                <div className="pr2-smallrow-name">
+                    {plan.name}
+                    {isFree && (
+                        <span className="pr2-smallrow-note" title="Bulk runs (manual conversion of existing library) are capped at 50 images/day on Free. Auto-conversion of new uploads stays unlimited.">
+                            · bulk capped at 50/day
+                        </span>
+                    )}
+                </div>
                 <div className="pr2-smallrow-tag">{plan.tagline}</div>
             </div>
             <div className="pr2-smallrow-meta pr2-font-mono">
@@ -1398,6 +1407,7 @@ const css = `
 .pr2-smallrow-col { flex: 1 1 180px; min-width: 160px; }
 .pr2-smallrow-name { font-weight: 500; font-size: 14px; margin-bottom: 2px; color: var(--ink); }
 .pr2-smallrow-tag { font-size: 12.5px; color: var(--ink-3); }
+.pr2-smallrow-note { font-size: 11px; color: var(--ink-3); font-weight: 400; margin-left: 6px; cursor: help; border-bottom: 1px dotted var(--line-2); }
 .pr2-smallrow-meta { font-size: 12.5px; color: var(--ink-3); flex: 1 1 180px; letter-spacing: -0.01em; }
 .pr2-smallrow-quota { color: var(--ink); }
 .pr2-smallrow-price { font-size: 14px; color: var(--ink); font-weight: 500; min-width: 90px; }
