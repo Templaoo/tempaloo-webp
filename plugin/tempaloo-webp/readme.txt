@@ -1,8 +1,8 @@
 === Tempaloo WebP – Image Optimizer & AVIF Converter ===
 Contributors: tempaloo
-Tags: webp, avif, image optimization, image compression, performance
+Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
-Tested up to: 6.7
+Tested up to: 6.8
 Requires PHP: 7.4
 Stable tag: 0.3.0
 License: GPLv2 or later
@@ -36,6 +36,10 @@ Most WordPress image optimizers count every thumbnail WordPress generates as a s
 * **Unlimited** (59 €/mo): fair-use policy (500k/mo), priority SLA
 
 Full details at [https://tempaloo.com/webp](https://tempaloo.com/webp).
+
+**Trademarks**
+
+WebP and AVIF are open image formats developed by Google and the Alliance for Open Media respectively. Tempaloo is an independent product and is not affiliated with, endorsed by, or sponsored by Google or the Alliance for Open Media.
 
 == External services ==
 
