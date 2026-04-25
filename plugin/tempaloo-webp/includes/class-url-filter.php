@@ -21,9 +21,94 @@ class Tempaloo_WebP_URL_Filter {
         add_filter( 'manage_upload_columns',        [ $this, 'media_column' ] );
         add_action( 'manage_media_custom_column',   [ $this, 'media_column_value' ], 10, 2 );
 
+        // "Tempaloo optimization" field in the attachment edit panel — shown
+        // both in the post.php?post=N edit screen AND in the right sidebar
+        // of the Media Library modal (the one that pops up after an upload
+        // on media-new.php and any time you click an image).
+        add_filter( 'attachment_fields_to_edit',    [ $this, 'attachment_field' ], 10, 2 );
+
         // Visual "WebP" badge on admin thumbnails (Media Library + block editor only).
         add_action( 'admin_enqueue_scripts',        [ $this, 'enqueue_admin_badge' ] );
         add_action( 'enqueue_block_editor_assets',  [ $this, 'enqueue_admin_badge' ] );
+    }
+
+    /**
+     * Sums original vs converted bytes across the original + every generated
+     * size for a single attachment. Returns null if nothing was converted.
+     *
+     * Reused by the "Optimized" column, the attachment edit field, and the
+     * JS data block — one place to maintain the "saved X%" math.
+     */
+    private function compute_attachment_savings( $post_id ) {
+        $meta = wp_get_attachment_metadata( $post_id );
+        $tw   = isset( $meta['tempaloo_webp'] ) ? $meta['tempaloo_webp'] : null;
+        if ( empty( $tw ) ) return null;
+
+        $orig_file = get_attached_file( $post_id );
+        if ( ! $orig_file ) return null;
+
+        $paths = [ $orig_file ];
+        if ( ! empty( $meta['sizes'] ) && is_array( $meta['sizes'] ) ) {
+            foreach ( $meta['sizes'] as $size ) {
+                if ( ! empty( $size['file'] ) ) {
+                    $paths[] = trailingslashit( dirname( $orig_file ) ) . $size['file'];
+                }
+            }
+        }
+        $fmt = isset( $tw['format'] ) ? $tw['format'] : 'webp';
+        $in = 0; $out = 0; $count = 0;
+        foreach ( $paths as $p ) {
+            $alt = $p . '.' . $fmt;
+            if ( file_exists( $p ) && file_exists( $alt ) ) {
+                $in  += filesize( $p );
+                $out += filesize( $alt );
+                $count++;
+            }
+        }
+        if ( $count === 0 || $in === 0 ) return null;
+        return [
+            'format'    => strtoupper( $fmt ),
+            'sizes'     => $count,
+            'bytes_in'  => $in,
+            'bytes_out' => $out,
+            'saved_pct' => max( 0, (int) round( ( 1 - ( $out / $in ) ) * 100 ) ),
+            'at'        => isset( $tw['at'] ) ? (int) $tw['at'] : 0,
+        ];
+    }
+
+    /**
+     * Adds a read-only "Tempaloo" field to the attachment edit panel.
+     * Renders a green "Converted" block with savings, or a neutral hint
+     * if the file hasn't been processed yet (gives the user a clear
+     * affordance for what's happening with their upload).
+     */
+    public function attachment_field( $form_fields, $post ) {
+        if ( ! Tempaloo_WebP_Converter::is_supported_attachment( $post->ID ) ) {
+            return $form_fields;
+        }
+        $s = $this->compute_attachment_savings( $post->ID );
+        if ( $s ) {
+            $html = sprintf(
+                '<div style="display:flex;align-items:center;gap:8px;line-height:1.4;">'
+                . '<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:4px;background:#dcfce7;color:#166534;font-weight:600;font-size:11px;">✓ %s</span>'
+                . '<span style="color:#166534;font-weight:600;">−%d%%</span>'
+                . '<span style="color:#555;font-size:12px;">%s → %s · %d sizes</span>'
+                . '</div>',
+                esc_html( $s['format'] ),
+                (int) $s['saved_pct'],
+                esc_html( size_format( $s['bytes_in'] ) ),
+                esc_html( size_format( $s['bytes_out'] ) ),
+                (int) $s['sizes']
+            );
+        } else {
+            $html = '<span style="color:#6b7280;font-size:12px;">Not converted yet — runs automatically on upload, or use the Bulk tab to process existing images.</span>';
+        }
+        $form_fields['tempaloo_webp'] = [
+            'label' => __( 'Tempaloo', 'tempaloo-webp' ),
+            'input' => 'html',
+            'html'  => $html,
+        ];
+        return $form_fields;
     }
 
     public function enqueue_admin_badge( $hook = '' ) {
@@ -53,47 +138,17 @@ class Tempaloo_WebP_URL_Filter {
 
     public function media_column_value( $column, $post_id ) {
         if ( 'tempaloo_webp' !== $column ) return;
-        $meta = wp_get_attachment_metadata( $post_id );
-        $tw   = isset( $meta['tempaloo_webp'] ) ? $meta['tempaloo_webp'] : null;
-        if ( empty( $tw ) || ( empty( $tw['sizes'] ) && empty( $tw['path'] ) ) ) {
+        $s = $this->compute_attachment_savings( $post_id );
+        if ( ! $s ) {
             echo '<span style="color:#9a6700;">—</span>';
             return;
         }
-
-        $uploads   = wp_get_upload_dir();
-        $base_dir  = trailingslashit( $uploads['basedir'] );
-        $orig_file = get_attached_file( $post_id );
-
-        // Gather all original sibling paths: main file + every generated size.
-        $original_paths = [ $orig_file ];
-        if ( ! empty( $meta['sizes'] ) && is_array( $meta['sizes'] ) ) {
-            foreach ( $meta['sizes'] as $size ) {
-                if ( ! empty( $size['file'] ) ) {
-                    $original_paths[] = trailingslashit( dirname( $orig_file ) ) . $size['file'];
-                }
-            }
-        }
-        $total_in = 0; $total_out = 0; $count = 0;
-        foreach ( $original_paths as $p ) {
-            $alt = $p . '.' . ( isset( $tw['format'] ) ? $tw['format'] : 'webp' );
-            if ( file_exists( $p ) && file_exists( $alt ) ) {
-                $total_in  += filesize( $p );
-                $total_out += filesize( $alt );
-                $count++;
-            }
-        }
-        $fmt = strtoupper( isset( $tw['format'] ) ? $tw['format'] : 'webp' );
-        if ( $count === 0 || $total_in === 0 ) {
-            echo '<span style="color:#1a7f37;">✓ ' . esc_html( $fmt ) . '</span>';
-            return;
-        }
-        $saved_pct = max( 0, round( ( 1 - ( $total_out / $total_in ) ) * 100 ) );
         printf(
             '<span style="color:#1a7f37;font-weight:600;">✓ %s</span><br><span style="color:#555;font-size:11px;">−%d%% · %s → %s</span>',
-            esc_html( $fmt ),
-            (int) $saved_pct,
-            esc_html( size_format( $total_in ) ),
-            esc_html( size_format( $total_out ) )
+            esc_html( $s['format'] ),
+            (int) $s['saved_pct'],
+            esc_html( size_format( $s['bytes_in'] ) ),
+            esc_html( size_format( $s['bytes_out'] ) )
         );
     }
 
@@ -127,6 +182,22 @@ class Tempaloo_WebP_URL_Filter {
                 if ( empty( $size['url'] ) ) continue;
                 $alt = $this->alternate_url( $size['url'] );
                 if ( $alt ) $response['sizes'][ $key ]['url'] = $alt;
+            }
+        }
+
+        // Surface compression stats so the block editor + any custom UI can
+        // read response.tempaloo without parsing the WP meta themselves.
+        if ( ! empty( $attachment->ID ) ) {
+            $s = $this->compute_attachment_savings( $attachment->ID );
+            if ( $s ) {
+                $response['tempaloo'] = [
+                    'format'      => $s['format'],
+                    'savedPct'    => $s['saved_pct'],
+                    'bytesIn'     => $s['bytes_in'],
+                    'bytesOut'    => $s['bytes_out'],
+                    'sizes'       => $s['sizes'],
+                    'convertedAt' => $s['at'],
+                ];
             }
         }
         return $response;

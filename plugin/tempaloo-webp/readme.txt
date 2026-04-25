@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.4.0
+Stable tag: 0.4.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -125,6 +125,10 @@ See the **External services** section above for a full disclosure of the data th
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 0.4.1 =
+* New: per-attachment compression stats in the Media Library attachment edit panel — instantly visible after upload (`media-new.php`) and in the Media Library modal.
+* New: `attachment.tempaloo` field on `wp_prepare_attachment_for_js` so the block editor and custom UIs can read savings without reparsing meta.
 
 = 0.4.0 =
 * New: One-click "Restore originals" — wipes every .webp/.avif sibling we wrote, never touches your original JPEG/PNG/GIF files.
