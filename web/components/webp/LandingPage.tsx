@@ -1159,8 +1159,16 @@ function Footer() {
                         <div className="pr2-footer-col">
                             <a href="#pricing">Pricing</a>
                             <a href="#faq">FAQ</a>
+                            <Link href="/docs">Docs</Link>
                             <a href="#" title="Coming soon">Changelog</a>
-                            <a href="#" title="Coming soon">Status</a>
+                        </div>
+                    </div>
+                    <div>
+                        <div className="pr2-footer-col-h">COMPARE</div>
+                        <div className="pr2-footer-col">
+                            <Link href="/webp/vs-shortpixel">vs ShortPixel</Link>
+                            <Link href="/webp/vs-imagify">vs Imagify</Link>
+                            <Link href="/webp/vs-tinypng">vs TinyPNG</Link>
                         </div>
                     </div>
                     <div>
