@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.4.4
+Stable tag: 0.4.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -125,6 +125,9 @@ See the **External services** section above for a full disclosure of the data th
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 0.4.5 =
+* Fix (real this time): the multi-file uploader gives each row an id of `media-item-{plupload_uid}`, NOT `media-item-{wp_attachment_id}`. The post-upload stats script now sniffs the real attachment id from the row's Edit link `?post=N`, `data-id`, or `attachments[N]` input names — so the stats line finally appears on `media-new.php`.
 
 = 0.4.4 =
 * Fix: post-upload stats now appear reliably on `/wp-admin/media-new.php`. Replaces the previous wp.media-based read with a dedicated admin-ajax endpoint (`tempaloo_stats`) so the script works on the legacy uploader page where wp.media isn't loaded.
