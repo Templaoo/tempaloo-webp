@@ -247,7 +247,7 @@ function Nav({ theme, scrolled, onToggleTheme }: { theme: Theme; scrolled: boole
                     <div className="pr2-nav-links" aria-label="Primary">
                         <a href="#pricing">Pricing</a>
                         <a href="#faq">FAQ</a>
-                        <a href="#" title="Coming soon">Docs</a>
+                        <Link href="/docs">Docs</Link>
                         <a href="#" title="Coming soon">Changelog</a>
                     </div>
                     <div className="pr2-nav-right">
@@ -297,7 +297,7 @@ function Nav({ theme, scrolled, onToggleTheme }: { theme: Theme; scrolled: boole
                     <nav className="pr2-mobile-links" aria-label="Mobile">
                         <a href="#pricing" onClick={close}>Pricing</a>
                         <a href="#faq" onClick={close}>FAQ</a>
-                        <a href="#" onClick={close} title="Coming soon">Docs <span className="pr2-mobile-soon">soon</span></a>
+                        <Link href="/docs" onClick={close}>Docs</Link>
                         <a href="#" onClick={close} title="Coming soon">Changelog <span className="pr2-mobile-soon">soon</span></a>
                     </nav>
                     <div className="pr2-mobile-ctas">
