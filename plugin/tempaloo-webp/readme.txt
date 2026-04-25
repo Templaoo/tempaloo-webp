@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.4.5
+Stable tag: 0.5.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -125,6 +125,15 @@ See the **External services** section above for a full disclosure of the data th
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 0.5.0 =
+* New: WP-CLI commands for the agency segment.
+  * `wp tempaloo status` — license, plan, quota, API health
+  * `wp tempaloo activate <key>` — activate a license
+  * `wp tempaloo bulk [--dry-run] [--limit=N]` — convert every pending attachment with a progress bar
+  * `wp tempaloo restore [--ids=…] [--yes]` — delete .webp/.avif siblings
+  * `wp tempaloo quota` — current monthly usage
+  * `wp tempaloo settings get|set <key> [<value>]` — read/write settings (quality, output_format, auto_convert, serve_webp, resize_max_width)
 
 = 0.4.5 =
 * Fix (real this time): the multi-file uploader gives each row an id of `media-item-{plupload_uid}`, NOT `media-item-{wp_attachment_id}`. The post-upload stats script now sniffs the real attachment id from the row's Edit link `?post=N`, `data-id`, or `attachments[N]` input names — so the stats line finally appears on `media-new.php`.
