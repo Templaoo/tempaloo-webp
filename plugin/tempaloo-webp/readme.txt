@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.4.2
+Stable tag: 0.4.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -125,6 +125,11 @@ See the **External services** section above for a full disclosure of the data th
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 0.4.3 =
+* Fix: post-upload compression stats now appear reliably on `media-new.php` even after WP rewrites the row. Per-row MutationObserver re-injects on every WP render pass.
+* Fix: the `tempaloo` payload is now also exposed via the WordPress REST API (`/wp/v2/media/{id}`), so `wp.media.attachment(id).fetch()` sees it.
+* Improved: smaller, more accurate dependency on `media-models` instead of `media-views`.
 
 = 0.4.2 =
 * New: inline compression stats on the post-upload row of /wp-admin/media-new.php — see "✓ WEBP −67% 1.2 MB → 412 KB · 7 sizes" right next to the filename, no need to click Edit.

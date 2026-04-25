@@ -27,6 +27,13 @@ class Tempaloo_WebP_URL_Filter {
         // on media-new.php and any time you click an image).
         add_filter( 'attachment_fields_to_edit',    [ $this, 'attachment_field' ], 10, 2 );
 
+        // Mirror the same payload onto the REST API attachment response. WP's
+        // wp.media.attachment(id).fetch() goes through /wp/v2/media/{id}, NOT
+        // wp_prepare_attachment_for_js, so without this filter the inline
+        // upload stats can't see our `tempaloo` data after a page reload or
+        // from any non-uploader context.
+        add_filter( 'rest_prepare_attachment',      [ $this, 'rest_inject_stats' ], 10, 2 );
+
         // Visual "WebP" badge on admin thumbnails (Media Library + block editor only).
         add_action( 'admin_enqueue_scripts',        [ $this, 'enqueue_admin_badge' ] );
         add_action( 'enqueue_block_editor_assets',  [ $this, 'enqueue_admin_badge' ] );
@@ -111,6 +118,25 @@ class Tempaloo_WebP_URL_Filter {
         return $form_fields;
     }
 
+    public function rest_inject_stats( $response, $post ) {
+        if ( ! ( $response instanceof WP_REST_Response ) || ! $post ) {
+            return $response;
+        }
+        $s = $this->compute_attachment_savings( $post->ID );
+        if ( ! $s ) return $response;
+        $data = $response->get_data();
+        $data['tempaloo'] = [
+            'format'      => $s['format'],
+            'savedPct'    => $s['saved_pct'],
+            'bytesIn'     => $s['bytes_in'],
+            'bytesOut'    => $s['bytes_out'],
+            'sizes'       => $s['sizes'],
+            'convertedAt' => $s['at'],
+        ];
+        $response->set_data( $data );
+        return $response;
+    }
+
     public function enqueue_admin_badge( $hook = '' ) {
         // Never on our own settings page — our React app manages its own visuals.
         if ( 'toplevel_page_tempaloo-webp' === $hook || 'settings_page_tempaloo-webp' === $hook ) {
@@ -132,12 +158,13 @@ class Tempaloo_WebP_URL_Filter {
 
         // Inline post-upload stats: only useful where WP renders media-item
         // rows after an upload (media-new.php, upload.php list view). Depends
-        // on wp.media which is only registered on media admin contexts.
+        // on media-models for wp.media.attachment(); media-views isn't needed
+        // and isn't always loaded on the legacy uploader.
         if ( in_array( $hook, [ 'media-new.php', 'upload.php' ], true ) ) {
             wp_enqueue_script(
                 'tempaloo-webp-upload-stats',
                 TEMPALOO_WEBP_URL . 'assets/upload-stats.js',
-                [ 'media-views' ],
+                [ 'media-models' ],
                 TEMPALOO_WEBP_VERSION,
                 true
             );

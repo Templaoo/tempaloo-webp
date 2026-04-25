@@ -2,13 +2,23 @@
  * Inline compression stats on the post-upload row of /wp-admin/media-new.php
  * and the Media Library list view.
  *
- * The data lands in `wp.media.attachment(id)` already (we set it server-side
- * via wp_prepare_attachment_for_js → response.tempaloo). All this script
- * does is pick the row by its `media-item-{id}` DOM id and inject a small
- * stats line next to the filename.
+ * Survives WP's re-renders: when WP rewrites the inner HTML of a media-item
+ * row after upload completes (which wipes our injected stats line), a
+ * per-row MutationObserver re-injects automatically.
+ *
+ * Data sources, in order of preference:
+ *   1. wp.media.attachment(id).get('tempaloo')       — synchronous, in cache
+ *   2. wp.media.attachment(id).fetch() then re-read  — async, REST round-trip
  */
 ( function () {
-    var STATS_ATTR = "data-tempaloo-stats";
+    var STATS_CLASS = "tempaloo-upload-stats";
+    var DEBUG = !! window.TEMPALOO_DEBUG;
+
+    function log() {
+        if ( DEBUG && window.console ) {
+            console.log.apply( console, [ "[tempaloo]" ].concat( [].slice.call( arguments ) ) );
+        }
+    }
 
     function formatBytes( n ) {
         if ( ! n || n < 0 ) return "0 B";
@@ -17,98 +27,147 @@
         return ( n / Math.pow( 1024, i ) ).toFixed( i === 0 ? 0 : 1 ) + " " + units[ i ];
     }
 
-    function render( t ) {
-        // One element, inline, BEM-ish class so we can style + dedupe.
-        var html =
-            '<div class="tempaloo-upload-stats" style="margin-top:6px;display:inline-flex;align-items:center;gap:8px;font-size:12px;line-height:1.4;">' +
-              '<span style="display:inline-flex;align-items:center;padding:2px 7px;border-radius:4px;background:#dcfce7;color:#166534;font-weight:600;font-size:11px;">' +
-                "✓ " + ( t.format || "WebP" ) +
-              "</span>" +
-              '<span style="color:#166534;font-weight:600;">−' + ( t.savedPct || 0 ) + "%</span>" +
-              '<span style="color:#555;">' + formatBytes( t.bytesIn ) + " → " + formatBytes( t.bytesOut ) +
+    function buildStatsNode( t ) {
+        var div = document.createElement( "div" );
+        div.className = STATS_CLASS;
+        div.style.cssText = "margin-top:6px;display:inline-flex;align-items:center;gap:8px;font-size:12px;line-height:1.4;flex-wrap:wrap;";
+        div.innerHTML =
+            '<span style="display:inline-flex;align-items:center;padding:2px 7px;border-radius:4px;background:#dcfce7;color:#166534;font-weight:600;font-size:11px;">' +
+              "✓ " + ( t.format || "WebP" ) +
+            "</span>" +
+            '<span style="color:#166534;font-weight:600;">−' + ( t.savedPct || 0 ) + "%</span>" +
+            '<span style="color:#555;">' +
+              formatBytes( t.bytesIn ) + " → " + formatBytes( t.bytesOut ) +
               ( t.sizes ? ' · <span style="color:#888;">' + t.sizes + " sizes</span>" : "" ) +
-              "</span>" +
-            "</div>";
-        var wrap = document.createElement( "div" );
-        wrap.innerHTML = html;
-        return wrap.firstChild;
+            "</span>";
+        return div;
     }
 
-    function injectFromAttachment( id, row ) {
-        if ( ! id || ! row ) return;
-        if ( row.getAttribute( STATS_ATTR ) ) return;
-        if ( ! window.wp || ! window.wp.media || ! window.wp.media.attachment ) return;
-
-        var att = window.wp.media.attachment( id );
-        if ( ! att ) return;
-
-        // The model may not have been fetched yet — when it's still loading,
-        // the `tempaloo` property is undefined. Fetch + retry once.
-        var data = att.get( "tempaloo" );
-        if ( ! data ) {
-            if ( typeof att.fetch === "function" ) {
-                att.fetch().done( function () {
-                    var refreshed = att.get( "tempaloo" );
-                    if ( refreshed ) {
-                        row.setAttribute( STATS_ATTR, "1" );
-                        var node = render( refreshed );
-                        appendInto( row, node );
-                    }
-                } );
-            }
-            return;
-        }
-        row.setAttribute( STATS_ATTR, "1" );
-        appendInto( row, render( data ) );
+    function alreadyInjected( row ) {
+        return !! row.querySelector( "." + STATS_CLASS );
     }
 
-    function appendInto( row, node ) {
-        // Prefer placing the stats line under the filename / "Edit · Copy URL"
-        // cluster. Falls back to appending to the row if WP changes its
-        // markup down the road.
+    function inject( row, data ) {
+        if ( alreadyInjected( row ) ) return;
         var anchor =
             row.querySelector( ".filename" ) ||
             row.querySelector( ".uploaded" ) ||
             row.querySelector( ".attachment-info" ) ||
-            row.querySelector( ".thumbnail + *" ) ||
+            row.querySelector( ".describe" ) ||
+            row.querySelector( "strong" ) ||
             row;
-        if ( anchor.nextSibling && anchor !== row ) {
+        var node = buildStatsNode( data );
+        if ( anchor === row ) {
+            row.appendChild( node );
+        } else if ( anchor.nextSibling ) {
             anchor.parentNode.insertBefore( node, anchor.nextSibling );
         } else {
-            anchor.appendChild ? anchor.appendChild( node ) : row.appendChild( node );
+            anchor.parentNode.appendChild( node );
         }
+        log( "injected stats into media-item-" + row.id, data );
     }
 
-    function scanRow( row ) {
-        if ( ! row || row.nodeType !== 1 ) return;
-        var idAttr = row.id || "";
-        var match = idAttr.match( /^media-item-(\d+)$/ );
-        var id = match ? Number( match[ 1 ] ) : ( row.getAttribute( "data-id" ) ? Number( row.getAttribute( "data-id" ) ) : null );
-        if ( id ) injectFromAttachment( id, row );
+    function readData( id ) {
+        if ( ! window.wp || ! window.wp.media || ! window.wp.media.attachment ) return null;
+        var att = window.wp.media.attachment( id );
+        return att && att.get ? att.get( "tempaloo" ) : null;
     }
 
-    function scanAll( root ) {
+    function ensureFetched( id, cb ) {
+        if ( ! window.wp || ! window.wp.media || ! window.wp.media.attachment ) {
+            cb( null );
+            return;
+        }
+        var att = window.wp.media.attachment( id );
+        if ( ! att || ! att.fetch ) { cb( null ); return; }
+        att.fetch().done( function () {
+            cb( att.get( "tempaloo" ) );
+        } ).fail( function () {
+            cb( null );
+        } );
+    }
+
+    /**
+     * Watch a single row: re-inject every time its inner DOM changes,
+     * since WP rewrites it after upload completes (which removes our line).
+     */
+    function attachRow( row ) {
+        if ( ! row || row.__tempalooBound ) return;
+        row.__tempalooBound = true;
+
+        var idMatch = ( row.id || "" ).match( /^media-item-(\d+)$/ );
+        var id = idMatch ? Number( idMatch[ 1 ] ) : null;
+        if ( ! id ) {
+            log( "row without numeric id (still uploading?)", row.id );
+        }
+
+        var tries = 0;
+        var maxTries = 30; // 30 × 250 ms = 7.5 s window after row appears
+
+        function attempt() {
+            // Re-resolve the id in case WP swapped the temp plupload UID
+            // for the real attachment id between attempts.
+            var nowIdMatch = ( row.id || "" ).match( /^media-item-(\d+)$/ );
+            var resolvedId = nowIdMatch ? Number( nowIdMatch[ 1 ] ) : null;
+            if ( ! resolvedId ) {
+                tries++;
+                if ( tries < maxTries ) setTimeout( attempt, 250 );
+                return;
+            }
+            var data = readData( resolvedId );
+            if ( data ) {
+                inject( row, data );
+                return; // success
+            }
+            // Trigger a fetch once if the cache is empty
+            ensureFetched( resolvedId, function ( fetched ) {
+                if ( fetched ) {
+                    inject( row, fetched );
+                } else {
+                    tries++;
+                    if ( tries < maxTries ) setTimeout( attempt, 250 );
+                }
+            } );
+        }
+        attempt();
+
+        // Also re-inject if WP later replaces the row's inner HTML.
+        var rowObserver = new MutationObserver( function () {
+            if ( ! alreadyInjected( row ) ) {
+                var rid = ( row.id || "" ).match( /^media-item-(\d+)$/ );
+                var realId = rid ? Number( rid[ 1 ] ) : null;
+                if ( ! realId ) return;
+                var d = readData( realId );
+                if ( d ) inject( row, d );
+            }
+        } );
+        rowObserver.observe( row, { childList: true, subtree: true } );
+    }
+
+    function scanRoot( root ) {
         var rows = ( root || document ).querySelectorAll( '[id^="media-item-"]' );
-        for ( var i = 0; i < rows.length; i++ ) scanRow( rows[ i ] );
+        for ( var i = 0; i < rows.length; i++ ) attachRow( rows[ i ] );
     }
 
     function boot() {
-        scanAll( document );
-        var observer = new MutationObserver( function ( mutations ) {
+        log( "boot, wp.media available?", !! ( window.wp && window.wp.media ) );
+        scanRoot( document );
+
+        var globalObserver = new MutationObserver( function ( mutations ) {
             for ( var i = 0; i < mutations.length; i++ ) {
                 var added = mutations[ i ].addedNodes;
                 for ( var j = 0; j < added.length; j++ ) {
                     var n = added[ j ];
                     if ( n.nodeType !== 1 ) continue;
-                    if ( n.id && /^media-item-\d+$/.test( n.id ) ) {
-                        scanRow( n );
-                    } else {
-                        scanAll( n );
+                    if ( n.id && /^media-item-/.test( n.id ) ) {
+                        attachRow( n );
+                    } else if ( n.querySelectorAll ) {
+                        scanRoot( n );
                     }
                 }
             }
         } );
-        observer.observe( document.body, { childList: true, subtree: true } );
+        globalObserver.observe( document.body, { childList: true, subtree: true } );
     }
 
     if ( document.readyState === "loading" ) {
