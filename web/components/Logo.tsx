@@ -34,29 +34,25 @@ export function LogoMark({
     ariaLabel?: string;
 }) {
     if (variant === "brand") {
-        // Canonical brand mark, derived from /public/favicon.svg. Background
-        // rectangle removed, viewBox trimmed to the letterforms, the
-        // blue-grey fill swapped to currentColor + the light accent kept at
-        // 35% opacity — so it reads correctly in both light and dark
-        // themes without a hardcoded bg behind it.
+        // Canonical brand mark — the geometric T from /public/favicon.svg
+        // with its background rectangle stripped and the fill swapped to
+        // currentColor so it adapts to light + dark themes. The viewBox
+        // matches the path's `translate(334, 334)` origin and the figure's
+        // bounding box (it ends near 1714, 1714 in the 2048 canvas).
         return (
             <svg
                 width={size}
                 height={size}
-                viewBox="390 600 1130 860"
+                viewBox="334 334 1380 1380"
                 xmlns="http://www.w3.org/2000/svg"
                 role="img"
                 aria-label={ariaLabel}
                 className={className}
             >
-                <g fill="currentColor">
-                    <path d="m1200 621h288l-3 10-23 62-15 41-26 70-16 43-1 2-246 1-9 3-8 7-5 10-5 18-18 94-10 54-13 71-12 63-13 70-20 107-15 79-1 1-7 1h-187l-12-1 2-14 14-74 12-64 21-111 24-129 24-128 7-37 8-32 11-33 10-23 12-24 12-19 13-17 12-14 17-17 14-11 15-11 15-9 19-10 27-11 15-5 24-6 29-5z" />
-                    <path d="m746 621h315l-4 2-22 8-24 12-24 16-11 9-12 11-10 10-3 1-204 1-19 4-19 8-11 7-10 8-11 11-12 16-10 18-8 18 253-1-2 9-10 30-8 29-1 1h-319l6-35 7-28 9-27 8-18 10-20 10-16 10-14 12-14 12-12 11-9 18-12 15-8 22-8 21-5z" />
-                </g>
                 <path
-                    d="m1372 689h19l-1 6-19 51-13 34-1 1h-194l-18 2-16 5-14 7-12 9-12 12-9 14-7 15-6 18-6 28-14 74-18 95-23 122-17 90-15 80-2 7h-66l1-9 17-89 46-242 21-110 9-42 8-27 11-28 12-23 11-16 9-11 9-10 8-8 14-11 13-9 16-9 19-9 24-8 22-5 23-3z"
                     fill="currentColor"
-                    opacity="0.35"
+                    transform="translate(334,334)"
+                    d="m0 0h29l25 2 36 6 30 7 37 12 29 12 29 14 24 14 24 16 16 12 16 13 11 9 7 7 8 7 15 15 7 8 13 15 13 17 13 18 12 19 12 21 9 17 13 30 10 27 9 31 7 34 5 36 1 14 3-34 6-35 8-32 12-36 13-30 8-16 10-19 12-19 10-15 12-16 8-10 12-14 7-8 12-13 5-5h2v-2l8-7 14-13 28-22 27-18 15-9 24-13 21-10 28-11 30-10 33-8 36-6 27-2h489v461l-875 1 30 4 31 6 26 7 27 9 29 12 32 16 20 12 22 15 16 12 10 8 13 11 13 12 27 27 9 11 12 14 14 19 18 27 14 26 14 28 9 24 10 30 7 27 6 29 4 28 2 26v478h-460v-919h-460z"
                 />
             </svg>
         );
