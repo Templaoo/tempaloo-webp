@@ -129,6 +129,19 @@ class Tempaloo_WebP_URL_Filter {
             [],
             TEMPALOO_WEBP_VERSION
         );
+
+        // Inline post-upload stats: only useful where WP renders media-item
+        // rows after an upload (media-new.php, upload.php list view). Depends
+        // on wp.media which is only registered on media admin contexts.
+        if ( in_array( $hook, [ 'media-new.php', 'upload.php' ], true ) ) {
+            wp_enqueue_script(
+                'tempaloo-webp-upload-stats',
+                TEMPALOO_WEBP_URL . 'assets/upload-stats.js',
+                [ 'media-views' ],
+                TEMPALOO_WEBP_VERSION,
+                true
+            );
+        }
     }
 
     public function media_column( $cols ) {
