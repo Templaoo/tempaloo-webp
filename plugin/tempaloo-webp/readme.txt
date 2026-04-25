@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.5.0
+Stable tag: 0.5.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -117,6 +117,26 @@ No. Paid plans include a 7-day trial and a 30-day money-back guarantee.
 
 See the **External services** section above for a full disclosure of the data this plugin sends to the Tempaloo API.
 
+== Developer hooks ==
+
+Three hooks let you tailor the plugin's behavior from your own theme or custom plugin. They fire on both the auto-convert-on-upload path and the bulk path (CLI or admin), so a single rule applies everywhere.
+
+`apply_filters( 'tempaloo_skip_attachment', false, $attachment_id, $mode )`
+Return `true` to bypass conversion for a specific attachment. Useful to exclude a folder, a CPT, or images larger than a threshold.
+
+`apply_filters( 'tempaloo_quality_for', $quality, $attachment_id, $format )`
+Override the quality value (1–100) per attachment. Returned values are clamped to 1–100. Useful to lift quality on portfolio shots or drop it on product thumbnails.
+
+`do_action( 'tempaloo_after_convert', $attachment_id, $info )`
+Fired after a successful conversion (one or more sizes written). `$info` contains `format`, `converted`, `failed`, `mode`, `quality`, `sizes`. Useful for CDN purges, custom logging, webhooks, manifest rebuilds.
+
+Example — skip conversion for any attachment in the `private/` upload subfolder:
+
+`add_filter( 'tempaloo_skip_attachment', function( $skip, $id ) {
+    $path = get_attached_file( $id );
+    return $path && false !== strpos( $path, '/uploads/private/' );
+}, 10, 2 );`
+
 == Screenshots ==
 
 1. The dashboard — monthly quota, savings stats, license management.
@@ -125,6 +145,12 @@ See the **External services** section above for a full disclosure of the data th
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 0.5.1 =
+* New: three developer hooks documented in the new "Developer hooks" section.
+  * `tempaloo_skip_attachment` — bypass conversion per attachment
+  * `tempaloo_quality_for` — override quality per attachment / format
+  * `tempaloo_after_convert` — react to successful conversions (CDN purge, webhooks, logging)
 
 = 0.5.0 =
 * New: WP-CLI commands for the agency segment.

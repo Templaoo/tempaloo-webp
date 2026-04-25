@@ -49,11 +49,40 @@ class Tempaloo_WebP_Converter {
             return [ 'metadata' => $metadata, 'converted' => 0, 'failed' => 0, 'error_code' => 'missing_file' ];
         }
 
+        /**
+         * Filter: tempaloo_skip_attachment
+         *
+         * Return true to bypass conversion for this attachment. Fires on both
+         * the auto-convert-on-upload path AND the bulk path, so a "skip"
+         * decision is honored everywhere (useful for excluding a folder, a
+         * post type, a CPT-bound image, etc.).
+         *
+         * @param bool   $skip          Default false.
+         * @param int    $attachment_id The attachment being processed.
+         * @param string $mode          'auto' (on upload) or 'bulk' (CLI / bulk job).
+         */
+        if ( apply_filters( 'tempaloo_skip_attachment', false, $attachment_id, $mode ) ) {
+            return [ 'metadata' => $metadata, 'converted' => 0, 'failed' => 0, 'error_code' => 'skipped' ];
+        }
+
         $format = $settings['output_format'];
         if ( 'avif' === $format && empty( $settings['supports_avif'] ) ) {
             $format = 'webp';
         }
-        $quality = (int) $settings['quality'];
+
+        /**
+         * Filter: tempaloo_quality_for
+         *
+         * Override the quality value (1–100) for a specific attachment. Lets
+         * devs lift quality on portfolio shots, drop it on product thumbs,
+         * or branch by mime type / CPT.
+         *
+         * @param int    $quality       The current quality (default from settings).
+         * @param int    $attachment_id The attachment being processed.
+         * @param string $format        'webp' or 'avif' — the target format chosen above.
+         */
+        $quality = (int) apply_filters( 'tempaloo_quality_for', (int) $settings['quality'], $attachment_id, $format );
+        $quality = max( 1, min( 100, $quality ) ); // clamp — defends against stray filter values
         $client  = new Tempaloo_WebP_API_Client( $settings['license_key'] );
 
         if ( ! is_array( $metadata ) ) {
@@ -118,6 +147,32 @@ class Tempaloo_WebP_Converter {
             'converted' => $converted,
             'at'        => time(),
         ];
+
+        /**
+         * Action: tempaloo_after_convert
+         *
+         * Fired after a successful conversion (one or more sizes written).
+         * Use cases: bust a CDN cache, log to a custom system, push a webhook,
+         * update an analytics counter, regenerate a JSON manifest, etc.
+         *
+         * @param int   $attachment_id   The attachment that was converted.
+         * @param array $info {
+         *     @type string $format     'webp' | 'avif'
+         *     @type int    $converted  Number of sizes converted (1 + thumbs).
+         *     @type int    $failed     Number of sizes that failed.
+         *     @type string $mode       'auto' | 'bulk'.
+         *     @type int    $quality    Quality used (post-filter).
+         *     @type array  $sizes      Generated sizes map: orig_basename => { file, bytes }.
+         * }
+         */
+        do_action( 'tempaloo_after_convert', $attachment_id, [
+            'format'    => $format,
+            'converted' => $converted,
+            'failed'    => $failed,
+            'mode'      => $mode,
+            'quality'   => $quality,
+            'sizes'     => $generated,
+        ] );
 
         return [ 'metadata' => $metadata, 'converted' => $converted, 'failed' => $failed, 'error_code' => '' ];
     }
