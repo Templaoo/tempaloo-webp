@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, boot, formatBytes, type AppState } from "../api";
-import { Badge, Button, Card, CardHeader, Input, Modal, QuotaRing, Stat, toast } from "../components/ui";
+import { Badge, Button, Card, CardHeader, Input, Modal, PerformanceScorecard, QuotaRing, Stat, toast } from "../components/ui";
 
 const NUDGE_DISMISS_KEY = "tempaloo_upgrade_nudge_dismissed_until";
 
@@ -44,10 +44,20 @@ export default function Overview({ state, onState, freeQuota, onGoToUpgrade }: {
         try {
             const next = await api.activate(key.trim());
             onState(next);
-            toast("success", "License activated");
+            toast({
+                kind: "success",
+                title: "License activated",
+                text: `You're on the ${next.license.plan.toUpperCase()} plan.`,
+                duration: 5000,
+            });
             setChangeOpen(false);
         } catch (e) {
-            toast("error", e instanceof Error ? e.message : "Activation failed");
+            toast({
+                kind: "error",
+                title: "Activation failed",
+                text: e instanceof Error ? e.message : "Unknown error",
+                action: { label: "Get a key", onClick: () => window.open(boot.activateUrl, "_blank") },
+            });
         } finally {
             setActivating(false);
         }
@@ -80,6 +90,15 @@ export default function Overview({ state, onState, freeQuota, onGoToUpgrade }: {
 
     return (
         <div className="grid gap-6">
+            {/* ─── Performance scorecard (hero) ──────────────────────────── */}
+            {state.license.valid && (
+                <PerformanceScorecard
+                    bytesIn={state.savings?.bytesIn ?? 0}
+                    bytesOut={state.savings?.bytesOut ?? 0}
+                    converted={state.savings?.converted ?? 0}
+                />
+            )}
+
             {/* ─── Activate (only when no valid license) ─────────────────── */}
             {!state.license.valid && (
                 <Card className="bg-gradient-to-br from-brand-50 to-white border-brand-200">

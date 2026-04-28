@@ -187,41 +187,365 @@ export function Progress({ value, label }: { value: number; label?: string }) {
     );
 }
 
-/** Very small toast system — just enough for success/error feedback. */
-let toastSubs: ((t: ToastItem) => void)[] = [];
-export interface ToastItem { id: string; kind: "success" | "error" | "info"; text: string }
-export function toast(kind: ToastItem["kind"], text: string) {
-    const id = Math.random().toString(36).slice(2);
-    toastSubs.forEach((fn) => fn({ id, kind, text }));
+/* ── Toast system v2 ────────────────────────────────────────────────── */
+
+export type ToastKind = "success" | "error" | "info" | "warn";
+export interface ToastItem {
+    id: string;
+    kind: ToastKind;
+    title?: string;
+    text: string;
+    duration?: number;            // ms; defaults below; pass 0 to disable auto-dismiss
+    action?: { label: string; onClick: () => void };
 }
+
+let toastSubs: ((t: ToastItem) => void)[] = [];
+
+/**
+ * Backward-compatible: `toast("success", "Saved")` still works.
+ * New form: `toast({ kind, title, text, action, duration })`.
+ */
+export function toast(kindOrItem: ToastKind | Omit<ToastItem, "id">, text?: string) {
+    const id = Math.random().toString(36).slice(2);
+    const item: ToastItem =
+        typeof kindOrItem === "string"
+            ? { id, kind: kindOrItem, text: text ?? "" }
+            : { id, ...kindOrItem };
+    toastSubs.forEach((fn) => fn(item));
+}
+
+const TOAST_DEFAULTS: Record<ToastKind, number> = {
+    success: 4500,
+    info:    4500,
+    warn:    6000,
+    error:   7000,
+};
+
 export function Toasts() {
-    const [items, setItems] = useState<ToastItem[]>([]);
+    const [items, setItems] = useState<(ToastItem & { paused?: boolean; startedAt: number })[]>([]);
+
     useEffect(() => {
-        const h = (t: ToastItem) => {
-            setItems((cur) => [...cur, t]);
-            setTimeout(() => setItems((cur) => cur.filter((x) => x.id !== t.id)), 4000);
+        const handler = (t: ToastItem) => {
+            const startedAt = Date.now();
+            setItems((cur) => [...cur, { ...t, startedAt }]);
         };
-        toastSubs.push(h);
-        return () => { toastSubs = toastSubs.filter((f) => f !== h); };
+        toastSubs.push(handler);
+        return () => { toastSubs = toastSubs.filter((f) => f !== handler); };
     }, []);
+
+    // Auto-dismiss tick — every 200ms check what's expired (pauses while hovered)
+    useEffect(() => {
+        const t = setInterval(() => {
+            setItems((cur) => cur.filter((it) => {
+                if (it.paused) return true;
+                const dur = it.duration ?? TOAST_DEFAULTS[it.kind];
+                if (dur === 0) return true;
+                return Date.now() - it.startedAt < dur;
+            }));
+        }, 200);
+        return () => clearInterval(t);
+    }, []);
+
+    const dismiss = (id: string) =>
+        setItems((cur) => cur.filter((x) => x.id !== id));
+
+    const setPaused = (id: string, paused: boolean) =>
+        setItems((cur) => cur.map((x) =>
+            x.id === id
+                ? { ...x, paused, startedAt: paused ? x.startedAt : Date.now() } // reset timer on resume
+                : x
+        ));
+
     return (
-        <div className="fixed bottom-6 right-6 flex flex-col gap-2 z-[100000]">
-            {items.map((t) => (
-                <div
+        <div className="fixed bottom-6 right-6 flex flex-col gap-2.5 z-[100000] pointer-events-none">
+            {items.slice(-4).map((t) => (
+                <ToastCard
                     key={t.id}
-                    className={clsx(
-                        "rounded-lg shadow-pop px-4 py-3 text-sm max-w-sm border",
-                        t.kind === "success" && "bg-emerald-50 border-emerald-200 text-emerald-900",
-                        t.kind === "error"   && "bg-red-50 border-red-200 text-red-900",
-                        t.kind === "info"    && "bg-ink-50 border-ink-200 text-ink-900",
-                    )}
-                    role="status"
-                >
-                    {t.text}
-                </div>
+                    item={t}
+                    onDismiss={() => dismiss(t.id)}
+                    onPauseChange={(p) => setPaused(t.id, p)}
+                />
             ))}
+            <style>{`
+                @keyframes toastIn {
+                    0%   { opacity: 0; transform: translateX(40px) scale(0.96); }
+                    60%  { opacity: 1; }
+                    100% { opacity: 1; transform: none; }
+                }
+                @keyframes toastTimer {
+                    from { transform: scaleX(1); }
+                    to   { transform: scaleX(0); }
+                }
+                @keyframes toastIcon {
+                    from { transform: scale(0.4); opacity: 0; }
+                    to   { transform: scale(1);   opacity: 1; }
+                }
+            `}</style>
         </div>
     );
+}
+
+function ToastCard({ item, onDismiss, onPauseChange }: {
+    item: ToastItem & { paused?: boolean; startedAt: number };
+    onDismiss: () => void;
+    onPauseChange: (paused: boolean) => void;
+}) {
+    const dur = item.duration ?? TOAST_DEFAULTS[item.kind];
+    const palette: Record<ToastKind, { bar: string; bg: string; border: string; text: string; icon: string; iconBg: string }> = {
+        success: { bar: "bg-emerald-500", bg: "bg-white",  border: "border-emerald-200", text: "text-ink-900", icon: "text-emerald-600", iconBg: "bg-emerald-100" },
+        error:   { bar: "bg-red-500",     bg: "bg-white",  border: "border-red-200",     text: "text-ink-900", icon: "text-red-600",     iconBg: "bg-red-100"     },
+        warn:    { bar: "bg-amber-500",   bg: "bg-white",  border: "border-amber-200",   text: "text-ink-900", icon: "text-amber-600",   iconBg: "bg-amber-100"   },
+        info:    { bar: "bg-blue-500",    bg: "bg-white",  border: "border-ink-200",     text: "text-ink-900", icon: "text-blue-600",    iconBg: "bg-blue-100"    },
+    };
+    const p = palette[item.kind];
+    const icon = item.kind === "success" ? "✓"
+               : item.kind === "error"   ? "✕"
+               : item.kind === "warn"    ? "!"
+               : "i";
+
+    return (
+        <div
+            role={item.kind === "error" ? "alert" : "status"}
+            className={clsx(
+                "pointer-events-auto relative flex items-start gap-3 max-w-sm min-w-[280px] rounded-xl shadow-2xl border overflow-hidden pr-2 pl-1.5 py-2.5",
+                p.bg, p.border, p.text,
+            )}
+            style={{ animation: "toastIn 280ms cubic-bezier(.16,1,.3,1) both" }}
+            onMouseEnter={() => onPauseChange(true)}
+            onMouseLeave={() => onPauseChange(false)}
+        >
+            {/* Color bar on the left */}
+            <span className={clsx("absolute left-0 top-0 bottom-0 w-1", p.bar)} />
+
+            {/* Icon */}
+            <div
+                className={clsx("shrink-0 ml-1.5 mt-0.5 h-7 w-7 rounded-full grid place-items-center font-bold text-sm", p.icon, p.iconBg)}
+                style={{ animation: "toastIcon 360ms cubic-bezier(.16,1,.3,1) both" }}
+                aria-hidden
+            >
+                {icon}
+            </div>
+
+            {/* Text */}
+            <div className="min-w-0 flex-1 py-0.5">
+                {item.title && <div className="text-sm font-semibold leading-tight">{item.title}</div>}
+                <div className={clsx("text-sm leading-snug", item.title && "mt-0.5 text-ink-600")}>{item.text}</div>
+                {item.action && (
+                    <button
+                        type="button"
+                        onClick={() => { item.action!.onClick(); onDismiss(); }}
+                        className={clsx("mt-1.5 text-xs font-semibold underline-offset-2 hover:underline", p.icon)}
+                    >
+                        {item.action.label}
+                    </button>
+                )}
+            </div>
+
+            {/* Dismiss button */}
+            <button
+                type="button"
+                onClick={onDismiss}
+                aria-label="Dismiss"
+                className="shrink-0 mt-0.5 h-6 w-6 rounded-md text-ink-400 hover:text-ink-700 hover:bg-ink-100 grid place-items-center text-xs"
+            >
+                ×
+            </button>
+
+            {/* Progress bar at the bottom — pauses on hover */}
+            {dur > 0 && (
+                <span
+                    className={clsx("absolute bottom-0 left-0 right-0 h-0.5 origin-left", p.bar)}
+                    style={{
+                        animation: `toastTimer ${dur}ms linear forwards`,
+                        animationPlayState: item.paused ? "paused" : "running",
+                    }}
+                />
+            )}
+        </div>
+    );
+}
+
+/* ── PerformanceScorecard ───────────────────────────────────────────── */
+
+/**
+ * Hero card for Overview. The "you did good" emotional pay-off.
+ * Headline number = % lighter, animated counter. Two sub-gauges: bandwidth
+ * saved + estimated LCP impact. Tiny context line projects savings on a
+ * 5,000-visitor base so the user can relate the number to euros.
+ */
+export function PerformanceScorecard({
+    bytesIn, bytesOut, converted,
+}: {
+    bytesIn: number;
+    bytesOut: number;
+    converted: number;
+}) {
+    const ref = useRef<HTMLDivElement>(null);
+    const [shown, setShown] = useState(false);
+    useEffect(() => {
+        if (!ref.current) return;
+        const io = new IntersectionObserver(([e]) => {
+            if (e?.isIntersecting) { setShown(true); io.disconnect(); }
+        }, { threshold: 0.3 });
+        io.observe(ref.current);
+        return () => io.disconnect();
+    }, []);
+
+    const saved = Math.max(0, bytesIn - bytesOut);
+    const savedPct = bytesIn > 0 ? Math.round((1 - bytesOut / bytesIn) * 100) : 0;
+    // Rough LCP improvement model: assume hero photo is ~30% of bytes_in.
+    // Saving X% of weight ≈ X * 0.03 seconds shaved off LCP on a 4G-class line.
+    const lcpShaved = Math.min(3.0, savedPct * 0.03);
+    // CDN cost projection: 5,000 visitors × ~3 image-page-views avg × bytes saved per page.
+    // Result is monthly bandwidth savings in MB → divide by 1024 to GB → multiply by €0.04/GB (Bunny CDN typical).
+    const monthlyGbSaved = (saved * 5000 * 3) / (1024 * 1024 * 1024);
+    const monthlyEur = monthlyGbSaved * 0.04;
+
+    const lightPct  = useTween(shown ? savedPct : 0, 1100);
+    const savedB    = useTween(shown ? saved : 0, 1300);
+    const lcpDisp   = useTween(shown ? lcpShaved * 10 : 0, 1100); // tween *10 so we get one decimal
+
+    if (converted === 0) {
+        // Empty state — gentler card so the new user isn't faced with a giant zero
+        return (
+            <div ref={ref} className="rounded-2xl border border-ink-200 bg-gradient-to-br from-ink-50 via-white to-blue-50/50 p-6">
+                <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-blue-100 grid place-items-center text-blue-600 text-xl">⚡</div>
+                    <div>
+                        <div className="text-base font-semibold text-ink-900">Ready to make your site faster.</div>
+                        <div className="text-sm text-ink-600">Upload an image or run a Bulk to see your savings here.</div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div
+            ref={ref}
+            className="relative overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50/70 via-white to-blue-50/50 p-6 sm:p-8"
+        >
+            {/* Subtle decorative grid */}
+            <div aria-hidden className="absolute inset-0 pointer-events-none opacity-[0.04]" style={{
+                backgroundImage: "linear-gradient(0deg, transparent 24%, currentColor 25%, currentColor 26%, transparent 27%, transparent 74%, currentColor 75%, currentColor 76%, transparent 77%), linear-gradient(90deg, transparent 24%, currentColor 25%, currentColor 26%, transparent 27%, transparent 74%, currentColor 75%, currentColor 76%, transparent 77%)",
+                backgroundSize: "32px 32px",
+            }} />
+
+            <div className="relative grid gap-6 sm:grid-cols-[auto_1fr] items-center">
+                {/* Big headline number */}
+                <div className="text-center sm:text-left">
+                    <div className="text-xs font-mono uppercase tracking-wider text-emerald-700 mb-1">YOUR PERFORMANCE</div>
+                    <div className="flex items-baseline gap-2 justify-center sm:justify-start">
+                        <span className="text-6xl sm:text-7xl font-bold text-ink-900 tabular-nums leading-none tracking-tight">
+                            {Math.round(lightPct)}<span className="text-emerald-600">%</span>
+                        </span>
+                        <span className="text-base font-semibold text-ink-700 mb-1">lighter</span>
+                    </div>
+                    <div className="text-sm text-ink-600 mt-2">
+                        Across <strong className="text-ink-900">{converted.toLocaleString()}</strong> converted image{converted > 1 ? "s" : ""}
+                    </div>
+                </div>
+
+                {/* Two sub-gauges */}
+                <div className="grid grid-cols-2 gap-3">
+                    <Gauge
+                        kind="bandwidth"
+                        label="Bandwidth saved"
+                        value={formatBytes(savedB)}
+                        fillPct={Math.min(100, savedPct)}
+                        shown={shown}
+                    />
+                    <Gauge
+                        kind="lcp"
+                        label="Est. LCP impact"
+                        value={`−${(lcpDisp / 10).toFixed(1)}s`}
+                        fillPct={Math.min(100, (lcpShaved / 3) * 100)}
+                        shown={shown}
+                    />
+                </div>
+            </div>
+
+            {/* Projection line — only shown when meaningful */}
+            {monthlyEur > 0.5 && (
+                <div className="relative mt-5 pt-4 border-t border-emerald-100/80 flex items-start gap-2 text-sm text-ink-600">
+                    <span className="text-emerald-600">💡</span>
+                    <span>
+                        At <strong className="text-ink-900">5,000 monthly visitors</strong>, that&apos;s
+                        <strong className="text-ink-900"> ~{monthlyGbSaved.toFixed(1)} GB</strong> of bandwidth
+                        saved per month — about
+                        <strong className="text-emerald-700"> €{monthlyEur.toFixed(2)}/mo</strong> off a typical CDN bill.
+                    </span>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function Gauge({ kind, label, value, fillPct, shown }: {
+    kind: "bandwidth" | "lcp";
+    label: string;
+    value: string;
+    fillPct: number;
+    shown: boolean;
+}) {
+    const grad = kind === "bandwidth"
+        ? "from-emerald-400 to-emerald-600"
+        : "from-blue-400 to-blue-600";
+    const ring = kind === "bandwidth" ? "text-emerald-600" : "text-blue-600";
+    const icon = kind === "bandwidth"
+        ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 18 0 9 9 0 1 0 -18 0" /><path d="M12 8 V12 L15 15" /></svg>
+        : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 L4 14 H11 L10 22 L20 10 H13 L14 2 Z" /></svg>;
+
+    return (
+        <div className="rounded-xl bg-white border border-ink-200 p-4 relative overflow-hidden">
+            <div className="flex items-center gap-2 text-xs text-ink-500 font-medium mb-2">
+                <span className={ring}>{icon}</span>
+                <span>{label}</span>
+            </div>
+            <div className="text-2xl font-bold text-ink-900 tabular-nums">{value}</div>
+
+            {/* Fill bar */}
+            <div className="mt-3 h-1.5 rounded-full bg-ink-100 overflow-hidden">
+                <div
+                    className={clsx("h-full bg-gradient-to-r rounded-full", grad)}
+                    style={{
+                        width: shown ? fillPct + "%" : "0%",
+                        transition: "width 1100ms cubic-bezier(.16,1,.3,1)",
+                    }}
+                />
+            </div>
+        </div>
+    );
+}
+
+// Inline tween hook used by the scorecard (number-only, returns a number)
+function useTween(target: number, duration = 800): number {
+    const [value, setValue] = useState(0);
+    const fromRef = useRef(0);
+    useEffect(() => {
+        const from = fromRef.current;
+        const start = performance.now();
+        let raf = 0;
+        const tick = (now: number) => {
+            const t = Math.min(1, (now - start) / duration);
+            const eased = 1 - Math.pow(1 - t, 3);
+            const v = from + (target - from) * eased;
+            setValue(v);
+            if (t < 1) raf = requestAnimationFrame(tick);
+            else fromRef.current = target;
+        };
+        raf = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(raf);
+    }, [target, duration]);
+    return value;
+}
+
+// formatBytes: re-export the helper (the api.ts version takes a number)
+function formatBytes(n: number): string {
+    if (!Number.isFinite(n) || n <= 0) return "0 B";
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    const i = Math.min(units.length - 1, Math.floor(Math.log(n) / Math.log(1024)));
+    return `${(n / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
 /**

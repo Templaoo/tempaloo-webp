@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.6.2
+Stable tag: 0.7.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -145,6 +145,10 @@ Example — skip conversion for any attachment in the `private/` upload subfolde
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 0.7.0 =
+* New: Performance scorecard hero on the Overview tab — big "X% lighter" headline with animated counter, two sub-gauges (bandwidth saved, estimated LCP impact), and a CDN-bill projection at 5,000 visitors/month.
+* New: Toast system v2 — typed icons, optional title + description, optional action button, auto-dismiss progress bar at the bottom (pauses on hover), stacks up to 4 visible. Backward-compatible with the old `toast(kind, text)` API.
 
 = 0.6.2 =
 * Fix: Bulk page no longer flashes "Scan & start" before showing the real state on reload — replaced with a skeleton during the initial bulk-status fetch. Mid-job reloads land directly on the running view.
