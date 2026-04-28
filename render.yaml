@@ -1,0 +1,70 @@
+# Render Blueprint — Tempaloo
+#
+# Declares scheduled jobs. The existing API web service stays managed
+# manually in the Render dashboard (declaring it here would risk
+# duplicating it). Render detects this file on push and prompts you
+# in the dashboard to provision/update the cron(s) it defines.
+#
+# How to apply:
+#   1. Commit + push this file (already done by Claude).
+#   2. In Render dashboard: New + → Blueprint → connect this repo.
+#   3. Render shows the planned cron(s); click "Apply".
+#   4. For each `sync: false` env var, enter the value (same as the
+#      API service — DATABASE_URL, BREVO_API_KEY, EMAIL_FROM,
+#      EMAIL_FROM_NAME, optionally EMAIL_REPLY_TO + WEB_BASE_URL).
+#
+# Tip: copy/paste env values from the existing API service, or move
+# all shared envs into an `envVarGroup` later (see Render docs).
+
+services:
+  # Trial-ending email reminder — runs daily at 09:00 UTC.
+  # Finds licenses where current_period_end is between 60h and 84h
+  # away, fires the trial-ending email exactly-once via the
+  # notifications_sent UNIQUE constraint. Safe to re-run.
+  - type: cron
+    name: tempaloo-trial-ending
+    runtime: node
+    plan: starter        # cheapest plan; the job runs ~5s for hundreds of trials
+    region: frankfurt    # same region as Neon Postgres → low DB latency
+    rootDir: api
+    buildCommand: npm install && npm run build
+    schedule: "0 9 * * *"
+    startCommand: node dist/jobs/trial-ending.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false      # paste from your API service env
+      - key: BREVO_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        value: julia.paterson@tempaloo.com
+      - key: EMAIL_FROM_NAME
+        value: Julia Paterson
+      - key: EMAIL_REPLY_TO
+        sync: false      # optional; set to support@tempaloo.com if you have it
+      - key: WEB_BASE_URL
+        value: https://tempaloo.com
+
+  # Unlimited fair-use watcher — already exists in dashboard, but
+  # re-declaring it here keeps the blueprint complete + reproducible.
+  # If you've never created it manually, Render will provision it now.
+  # If it already exists with the same name, Render adopts it.
+  - type: cron
+    name: tempaloo-unlimited-watch
+    runtime: node
+    plan: starter
+    region: frankfurt
+    rootDir: api
+    buildCommand: npm install && npm run build
+    schedule: "0 7 * * *"   # 07:00 UTC daily
+    startCommand: node dist/jobs/unlimited-watch.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: UNLIMITED_FAIR_USE
+        value: "500000"
+      - key: UNLIMITED_NOTIFY_WEBHOOK
+        sync: false      # optional Slack-compatible webhook URL
