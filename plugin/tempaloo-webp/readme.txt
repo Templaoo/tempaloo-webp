@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.6.1
+Stable tag: 0.6.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -145,6 +145,13 @@ Example — skip conversion for any attachment in the `private/` upload subfolde
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 0.6.2 =
+* Fix: Bulk page no longer flashes "Scan & start" before showing the real state on reload — replaced with a skeleton during the initial bulk-status fetch. Mid-job reloads land directly on the running view.
+* Fix: Free users hitting the daily cap mid-bulk no longer see a misleading celebration. Each terminal state has its own pane (done / paused-quota / paused-daily / canceled) with messaging tailored to it.
+* New: PausedView with a clear "what happens next" panel — countdown until the daily cap resets at 00:00 UTC, explicit answer to "will it auto-resume?" (no, click Resume tomorrow OR upgrade), and a progress bar showing how far the original job got.
+* New: Cross-fade pane transitions (320ms cubic-bezier) so going between states feels continuous.
+* Improved: Completion celebration stays open longer (12s auto-dismiss vs 6s, with a manual Done button always available).
 
 = 0.6.1 =
 * New: Restore originals now opens a custom React modal (3-state machine: confirm → running → done) instead of the native browser confirm. Includes a "type RESTORE to confirm" guardrail, animated decompression visual, and a clear what-will-and-won't-be-deleted breakdown.
