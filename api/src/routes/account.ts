@@ -109,6 +109,28 @@ export default async function accountRoutes(app: FastifyInstance) {
         );
         const usageMap = new Map(usageRows.map((r) => [r.license_id, Number(r.images_used)]));
 
+        // Daily usage for the last 30 days — feeds the dashboard sparkline.
+        // GROUP BY day, then we materialize the gap-filled timeline client-side.
+        const { rows: dailyRows } = await query<{ license_id: string; day: Date; n: number }>(
+            `SELECT license_id,
+                    DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')::date AS day,
+                    COUNT(*)::int AS n
+               FROM usage_logs
+              WHERE license_id = ANY($1::uuid[])
+                AND created_at >= NOW() - INTERVAL '30 days'
+                AND status = 'success'
+              GROUP BY license_id, day
+              ORDER BY license_id, day`,
+            [ids],
+        );
+        const dailyMap = new Map<string, { day: string; n: number }[]>();
+        for (const r of dailyRows) {
+            const key = r.license_id;
+            const arr = dailyMap.get(key) ?? [];
+            arr.push({ day: r.day.toISOString().slice(0, 10), n: Number(r.n) });
+            dailyMap.set(key, arr);
+        }
+
         // Active sites per license.
         const { rows: siteRows } = await query<{
             license_id: string; site_url: string; site_host: string; last_seen_at: Date | null;
@@ -152,6 +174,7 @@ export default async function accountRoutes(app: FastifyInstance) {
                         host: s.site_host,
                         lastSeenAt: s.last_seen_at,
                     })),
+                    daily30: dailyMap.get(l.license_id) ?? [],
                     currentPeriodEnd: l.current_period_end,
                     createdAt: l.created_at,
                 };

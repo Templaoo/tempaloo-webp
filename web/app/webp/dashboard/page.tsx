@@ -8,7 +8,12 @@ import { DashboardScorecard } from "@/components/dashboard/DashboardScorecard";
 import { UpgradeCardSmart } from "@/components/dashboard/UpgradeCardSmart";
 import { LogoMark } from "@/components/Logo";
 
+// Authenticated content — never let any layer (browser, ISP proxy,
+// Vercel edge) cache it. Without this, after sign-out the user could
+// hit Back and see their old dashboard pulled from disk cache.
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
 
 export const metadata = {
     title: "Dashboard — Tempaloo WebP",

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { LogoMark } from "@/components/Logo";
 
 type State = "signing-out" | "done" | "error";
@@ -12,12 +12,14 @@ type State = "signing-out" | "done" | "error";
  * /api/auth/sign-out (which Better Auth refuses for CSRF reasons).
  *
  * On mount: POST to the auth endpoint with the right Content-Type, then
- * redirect to ?return=<path> (defaults to "/"). Always works whether
- * the user is hitting this from a link, the dashboard button, or the
- * plugin admin opening it in a new tab.
+ * HARD-redirect (window.location.replace) to ?return=<path>. We can't
+ * use Next's router.replace() here because the App Router would keep
+ * the Server Component cache from before the sign-out, and the user
+ * would land on /webp/dashboard still appearing logged in until they
+ * manually refresh. A full document navigation forces fresh server
+ * data + fresh cookie evaluation.
  */
 export function LogoutClient() {
-    const router = useRouter();
     const params = useSearchParams();
     const returnTo = params.get("return") || "/";
     const [state, setState] = useState<State>("signing-out");
@@ -41,8 +43,13 @@ export function LogoutClient() {
                     return;
                 }
                 setState("done");
-                // Tiny pause so the success state is visible before we redirect.
-                setTimeout(() => router.replace(safeReturn(returnTo)), 600);
+                // Hard navigation so Next.js doesn't reuse cached Server
+                // Component output from before the cookies were dropped.
+                setTimeout(() => {
+                    if (typeof window !== "undefined") {
+                        window.location.replace(safeReturn(returnTo));
+                    }
+                }, 600);
             } catch (e) {
                 if (cancelled) return;
                 setErrMsg(e instanceof Error ? e.message : "Network error");
@@ -50,7 +57,7 @@ export function LogoutClient() {
             }
         })();
         return () => { cancelled = true; };
-    }, [returnTo, router]);
+    }, [returnTo]);
 
     return (
         <main style={mainStyle}>

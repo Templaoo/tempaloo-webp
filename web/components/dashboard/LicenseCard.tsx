@@ -20,6 +20,8 @@ export interface DashLicense {
         imagesRemaining: number;
     };
     sites: { url: string; host: string; lastSeenAt: string | null }[];
+    /** Last 30 days of usage, gap-filled client-side. */
+    daily30?: { day: string; n: number }[];
     currentPeriodEnd: string | null;
     createdAt: string;
 }
@@ -112,7 +114,12 @@ export function LicenseCard({ license }: { license: DashLicense }) {
             </div>
 
             <div className="lc-body">
-                <QuotaGauge used={license.quota.imagesUsed} limit={license.plan.imagesPerMonth} pct={pct} />
+                <div style={{ display: "flex", flexDirection: "column", gap: 16, alignItems: "center" }}>
+                    <QuotaGauge used={license.quota.imagesUsed} limit={license.plan.imagesPerMonth} pct={pct} />
+                    {license.daily30 && license.daily30.some((d) => d.n > 0) && (
+                        <Sparkline daily={license.daily30} />
+                    )}
+                </div>
 
                 <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 20 }}>
                     <div>
@@ -146,7 +153,7 @@ export function LicenseCard({ license }: { license: DashLicense }) {
                         ) : (
                             <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }}>
                                 {sites.map((s) => (
-                                    <li key={s.host} className="surface-card" style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 12 }}>
+                                    <li key={s.host} className="surface-card" style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 8 }}>
                                         <div style={{ minWidth: 0, flex: 1 }}>
                                             <div style={{ fontSize: 13, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.host}</div>
                                             <div style={{ fontSize: 11.5, color: "var(--ink-3)", marginTop: 2 }}>
@@ -154,6 +161,16 @@ export function LicenseCard({ license }: { license: DashLicense }) {
                                                 {errorHost === s.host && <span style={{ marginLeft: 8, color: "var(--danger)" }}>— retry</span>}
                                             </div>
                                         </div>
+                                        <a
+                                            href={wpAdminUrl(s.url, s.host)}
+                                            target="_blank"
+                                            rel="noopener"
+                                            title="Open WP admin → Tempaloo WebP page"
+                                            className="btn btn-ghost btn-sm"
+                                            style={{ height: 28, padding: "0 10px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}
+                                        >
+                                            WP admin <span aria-hidden>↗</span>
+                                        </a>
                                         <button
                                             onClick={() => setConfirmHost(s.host)}
                                             disabled={removing === s.host}
@@ -330,6 +347,78 @@ function timeAgo(d: Date): string {
     if (hours < 24) return `${hours}h ago`;
     const days = Math.round(hours / 24);
     return `${days}d ago`;
+}
+
+/**
+ * Compact 30-day sparkline. Gap-fills missing days, normalizes to the
+ * card's left rail width, draws a smooth cubic-Bezier path so the
+ * trend reads at a glance. Tooltip on hover via native <title>.
+ */
+function Sparkline({ daily }: { daily: { day: string; n: number }[] }) {
+    // Build a contiguous 30-day window ending today, filling zeros.
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    const lookup = new Map(daily.map((d) => [d.day, d.n]));
+    const points: { day: string; n: number }[] = [];
+    for (let i = 29; i >= 0; i--) {
+        const d = new Date(today);
+        d.setUTCDate(d.getUTCDate() - i);
+        const key = d.toISOString().slice(0, 10);
+        points.push({ day: key, n: lookup.get(key) ?? 0 });
+    }
+    const max = Math.max(1, ...points.map((p) => p.n));
+    const total7 = points.slice(-7).reduce((a, p) => a + p.n, 0);
+    const W = 132, H = 36, PAD = 2;
+
+    // Build the area + line path with smoothed segments
+    const stepX = (W - PAD * 2) / (points.length - 1);
+    const yFor = (n: number) => H - PAD - ((n / max) * (H - PAD * 2));
+    const linePts = points.map((p, i) => [PAD + i * stepX, yFor(p.n)] as const);
+
+    const linePath = linePts
+        .map(([x, y], i) => (i === 0 ? `M ${x} ${y}` : `L ${x} ${y}`))
+        .join(" ");
+    const areaPath = `${linePath} L ${linePts[linePts.length - 1][0]} ${H - PAD} L ${linePts[0][0]} ${H - PAD} Z`;
+
+    return (
+        <div style={{ width: 132, lineHeight: 1.2 }}>
+            <div style={{ fontSize: 10, color: "var(--ink-3)", fontFamily: "var(--font-geist-mono), monospace", letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 4, textAlign: "center" }}>
+                30-day usage
+            </div>
+            <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} style={{ display: "block" }} aria-label={`30-day usage sparkline · ${total7} converted in last 7 days`}>
+                <defs>
+                    <linearGradient id={`spark-grad-${daily.length}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%"   stopColor="var(--success)" stopOpacity="0.35" />
+                        <stop offset="100%" stopColor="var(--success)" stopOpacity="0" />
+                    </linearGradient>
+                </defs>
+                <path d={areaPath} fill={`url(#spark-grad-${daily.length})`} />
+                <path d={linePath} fill="none" stroke="var(--success)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                {linePts.map(([x, y], i) => (
+                    <circle key={i} cx={x} cy={y} r={i === linePts.length - 1 ? 2.5 : 1.2} fill="var(--success)">
+                        <title>{points[i].day} · {points[i].n} converted</title>
+                    </circle>
+                ))}
+            </svg>
+            <div style={{ fontSize: 11, color: "var(--ink-3)", textAlign: "center", marginTop: 2 }}>
+                <strong style={{ color: "var(--ink)" }}>{total7.toLocaleString()}</strong> last 7 days
+            </div>
+        </div>
+    );
+}
+
+/**
+ * Build the WP admin deep-link to our settings page from a stored
+ * site_url. Falls back to bare https://{host}/wp-admin/ if site_url
+ * is malformed.
+ */
+function wpAdminUrl(siteUrl: string, host: string): string {
+    try {
+        const u = new URL(siteUrl);
+        return `${u.origin}/wp-admin/admin.php?page=tempaloo-webp`;
+    } catch {
+        return `https://${host}/wp-admin/admin.php?page=tempaloo-webp`;
+    }
 }
 
 function EyeIcon() {
