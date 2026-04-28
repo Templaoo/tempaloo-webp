@@ -1,5 +1,7 @@
 import type { FastifyRequest } from "fastify";
 import { query } from "../db.js";
+import { sendTransactional } from "./email.js";
+import { adminCriticalAlertEmail } from "./email-templates.js";
 
 /**
  * Append-only audit log writer.
@@ -62,6 +64,64 @@ export async function auditLog(opts: AuditOpts): Promise<void> {
     } catch (e) {
         opts.req.log.error({ e, action: opts.action }, "audit log write failed");
     }
+
+    // Fire critical alerts AFTER the audit row is persisted. Failures are
+    // logged-only — a Brevo hiccup must not stop the action that triggered
+    // this audit entry.
+    if ((opts.severity ?? "info") === "critical") {
+        fireCriticalAlert(opts, email, ip, ua).catch((e) =>
+            opts.req.log.error({ e, action: opts.action }, "critical alert email failed"),
+        );
+    }
+}
+
+/**
+ * Email every active OWNER admin when a critical audit event lands.
+ * Debounced: if the same `action` was alerted in the last 5 minutes,
+ * skip — otherwise a brute-force burst would generate one email per
+ * failed attempt.
+ */
+const recentAlertCache = new Map<string, number>();
+const DEBOUNCE_MS = 5 * 60 * 1000;
+
+async function fireCriticalAlert(opts: AuditOpts, email: string, ip: string, ua: string): Promise<void> {
+    const debounceKey = `${opts.action}::${email}`;
+    const now = Date.now();
+    const last = recentAlertCache.get(debounceKey);
+    if (last && now - last < DEBOUNCE_MS) return;
+    recentAlertCache.set(debounceKey, now);
+
+    // Cleanup old entries lazily — the cache is intentionally process-local
+    // (one alert per worker per 5min is acceptable; we'd rather over-notify
+    // than store debounce state in DB on every audit write).
+    if (recentAlertCache.size > 1000) {
+        const cutoff = now - DEBOUNCE_MS;
+        for (const [k, t] of recentAlertCache) if (t < cutoff) recentAlertCache.delete(k);
+    }
+
+    const { rows } = await query<{ email: string }>(
+        `SELECT email FROM admin_users
+          WHERE is_active = TRUE AND role = 'owner'`,
+    );
+    if (rows.length === 0) return;
+
+    const meta = {
+        ...opts.metadata,
+        targetType: opts.targetType ?? null,
+        targetId: opts.targetId ?? null,
+        userAgent: ua,
+        reason: opts.reason ?? null,
+    };
+
+    await Promise.all(rows.map((r) =>
+        sendTransactional(adminCriticalAlertEmail({
+            to: r.email,
+            action: opts.action,
+            actorEmail: email,
+            ip,
+            metadata: meta,
+        })),
+    ));
 }
 
 /**

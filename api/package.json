@@ -13,9 +13,11 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "job:unlimited-watch": "tsx src/jobs/unlimited-watch.ts",
+    "job:trial-ending": "node dist/jobs/trial-ending.js",
     "migrate": "node scripts/migrate.mjs",
     "reset:dev": "node scripts/reset-dev.mjs",
-    "admin:create": "node scripts/admin-create.mjs"
+    "admin:create": "node scripts/admin-create.mjs",
+    "admin:revoke-sessions": "node scripts/admin-revoke-sessions.mjs"
   },
   "dependencies": {
     "@fastify/helmet": "^11.1.1",

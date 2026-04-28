@@ -1,10 +1,13 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyBaseLogger } from "fastify";
 import sharp from "sharp";
 import { z } from "zod";
-import { authMiddleware, currentPeriod } from "../auth.js";
+import { authMiddleware, currentPeriod, type LicenseContext } from "../auth.js";
 import { config } from "../config.js";
 import { query } from "../db.js";
 import { err } from "../errors.js";
+import { sendTransactional } from "../lib/email.js";
+import { quotaExceededEmail, quotaWarnEmail } from "../lib/email-templates.js";
+import { claimNotification, currentMonthBucket } from "../lib/notifications.js";
 
 const optionsSchema = z.object({
     format: z.enum(["webp", "avif"]).default("webp"),
@@ -146,6 +149,13 @@ export default async function convertRoute(app: FastifyInstance) {
         const used = qRows[0]?.used ?? 0;
         const limit = qRows[0]?.limit ?? license.imagesPerMonth;
 
+        // Fire-and-forget quota warn/exceeded — exactly-once per month per
+        // license (claimNotification gates the actual send). Skipped for
+        // unlimited plans (limit=-1) and for the free 250-image plan when
+        // we'd spam users on cheap quotas (still warns at 100%, just not 80%).
+        triggerQuotaEmails(license, used, limit, req.log).catch((e) =>
+            req.log.error({ e }, "quota email trigger failed"));
+
         reply
             .header("X-Quota-Used", used)
             .header("X-Quota-Limit", limit)
@@ -266,6 +276,9 @@ export default async function convertRoute(app: FastifyInstance) {
         const used = qRows[0]?.used ?? 0;
         const limit = qRows[0]?.limit ?? license.imagesPerMonth;
 
+        triggerQuotaEmails(license, used, limit, req.log).catch((e) =>
+            req.log.error({ e }, "quota email trigger failed"));
+
         reply
             .header("Content-Type", fmt === "avif" ? "image/avif" : "image/webp")
             .header("X-Quota-Used", used)
@@ -276,4 +289,50 @@ export default async function convertRoute(app: FastifyInstance) {
             .header("X-Duration-Ms", durationMs);
         return reply.send(output);
     });
+}
+
+/**
+ * Quota email trigger.
+ *
+ * Fires:
+ *   · quota-warn      when usedPct crosses 80% (once per month per license)
+ *   · quota-exceeded  when usedPct hits 100%   (once per month per license)
+ *
+ * Uses claimNotification → exactly-once even if N batches arrive
+ * concurrently right at the threshold. The DB UNIQUE constraint
+ * arbitrates the race — only one INSERT wins.
+ *
+ * Skipped on unlimited plans (limit = -1) and when used < 80%.
+ *
+ * Resolves user email + plan name on-demand to avoid widening the
+ * convert hot-path query (this branch only runs near thresholds).
+ */
+async function triggerQuotaEmails(license: LicenseContext, used: number, limit: number, log: FastifyBaseLogger): Promise<void> {
+    if (limit === -1 || used < Math.floor(limit * 0.8)) return;
+
+    const period = currentMonthBucket();
+    const usedPct = Math.min(100, Math.floor((used / limit) * 100));
+    const exceeded = used >= limit;
+    const kind = exceeded ? "quota-exceeded" : "quota-warn";
+
+    const won = await claimNotification(license.licenseId, kind, period, { usedPct, used, limit });
+    if (!won) return;
+
+    const { rows } = await query<{ email: string; plan_name: string }>(
+        `SELECT u.email, p.name AS plan_name
+           FROM licenses l
+           JOIN users u ON u.id = l.user_id
+           JOIN plans p ON p.id = l.plan_id
+          WHERE l.id = $1`,
+        [license.licenseId],
+    );
+    const r = rows[0];
+    if (!r) return;
+
+    const ctx = {
+        email: r.email, planName: r.plan_name,
+        usedPct, imagesUsed: used, imagesQuota: limit,
+    };
+    sendTransactional(exceeded ? quotaExceededEmail(ctx) : quotaWarnEmail(ctx), log)
+        .catch((e) => log.error({ e, kind }, "quota email send failed"));
 }

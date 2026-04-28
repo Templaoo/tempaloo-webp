@@ -297,6 +297,47 @@ Upgrade and unused images roll over: ${dashUrl}
     };
 }
 
+// ─── Admin internal alerts ──────────────────────────────────────────
+
+export function adminCriticalAlertEmail(ctx: { to: string; action: string; actorEmail: string; ip: string; metadata: Record<string, unknown> }): SendOpts {
+    const meta = JSON.stringify(ctx.metadata, null, 2);
+    const auditUrl = `${config.WEB_BASE_URL}/admin/audit?severity=critical`;
+    const html = shell({
+        title: `ADMIN ALERT: ${ctx.action}`,
+        preheader: `Critical admin event by ${ctx.actorEmail} from ${ctx.ip}`,
+        bodyHtml: `
+            <h1 style="margin:0 0 12px;font-size:20px;font-weight:600;letter-spacing:-0.02em;color:${BRAND.danger};">⚠ Critical admin event</h1>
+            ${p(`A <strong>severity=critical</strong> event was just recorded in the admin audit log:`)}
+            <table style="width:100%;border-collapse:collapse;margin:8px 0 16px;font-size:13px;">
+                <tr><td style="padding:6px 0;color:${BRAND.ink3};width:120px;">Action</td><td style="padding:6px 0;font-family:ui-monospace,monospace;color:${BRAND.ink};">${escape(ctx.action)}</td></tr>
+                <tr><td style="padding:6px 0;color:${BRAND.ink3};">Actor</td><td style="padding:6px 0;color:${BRAND.ink};">${escape(ctx.actorEmail)}</td></tr>
+                <tr><td style="padding:6px 0;color:${BRAND.ink3};">IP</td><td style="padding:6px 0;font-family:ui-monospace,monospace;color:${BRAND.ink};">${escape(ctx.ip)}</td></tr>
+            </table>
+            ${code(meta)}
+            ${btn(auditUrl, "Open audit log →")}
+            ${p(`If this wasn't you, run <code style="background:${BRAND.bg2};padding:2px 6px;border-radius:4px;">npm run admin:revoke-sessions</code> immediately to invalidate every active admin session.`)}
+        `,
+    });
+    return {
+        to: ctx.to,
+        subject: `⚠ Tempaloo admin alert — ${ctx.action}`,
+        html,
+        text: `Critical admin event:
+
+  Action:  ${ctx.action}
+  Actor:   ${ctx.actorEmail}
+  IP:      ${ctx.ip}
+
+Metadata:
+${meta}
+
+Audit log: ${auditUrl}
+
+If this wasn't you: cd api && npm run admin:revoke-sessions`,
+        tag: "admin-alert",
+    };
+}
+
 export function subscriptionCancelledEmail(ctx: LicenseCtx): SendOpts {
     const html = shell({
         title: `Your subscription has been cancelled`,
