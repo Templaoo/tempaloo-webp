@@ -6,6 +6,7 @@ import { ZodError } from "zod";
 import { config } from "./config.js";
 import { ApiError } from "./errors.js";
 import accountRoutes from "./routes/account.js";
+import adminAuthRoutes from "./routes/admin/auth.js";
 import convertRoute from "./routes/convert.js";
 import licenseRoutes from "./routes/license.js";
 import plansRoute from "./routes/plans.js";
@@ -73,6 +74,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
             await api.register(plansRoute);
             await api.register(webhooksRoute);
             await api.register(accountRoutes);
+            await api.register(adminAuthRoutes);
         },
         { prefix: "/v1" },
     );

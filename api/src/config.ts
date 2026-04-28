@@ -17,6 +17,19 @@ const schema = z.object({
     UNLIMITED_FAIR_USE: z.coerce.number().int().positive().default(500_000),
     UNLIMITED_NOTIFY_WEBHOOK: z.string().url().optional(),
     BULK_DAILY_LIMIT_FREE: z.coerce.number().int().positive().default(50),
+
+    // ─── Admin backoffice ───────────────────────────────────────────
+    // 32+ char passphrase — derives the AES-GCM key for TOTP secrets.
+    // Loss = all enrolled TOTPs unrecoverable; rotate ⇒ force re-enroll.
+    ADMIN_TOTP_KEY: z.string().min(16).optional(),
+    // Cookie name for admin session. Different from the customer cookie.
+    ADMIN_COOKIE_NAME: z.string().default("tempaloo_admin_sid"),
+    // Session lifetime in minutes — 30 by default, tighten to 15 in prod.
+    ADMIN_SESSION_TTL_MIN: z.coerce.number().int().positive().default(30),
+    // Comma-separated CIDR allowlist for the /admin/* surface (web layer).
+    // The API layer mostly trusts the cookie, but accepts an optional
+    // ALLOWLIST too for defense-in-depth.
+    ADMIN_IP_ALLOWLIST: z.string().optional(),
 });
 
 const parsed = schema.safeParse(process.env);

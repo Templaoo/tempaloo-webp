@@ -14,7 +14,8 @@
     "test": "vitest run",
     "job:unlimited-watch": "tsx src/jobs/unlimited-watch.ts",
     "migrate": "node scripts/migrate.mjs",
-    "reset:dev": "node scripts/reset-dev.mjs"
+    "reset:dev": "node scripts/reset-dev.mjs",
+    "admin:create": "node scripts/admin-create.mjs"
   },
   "dependencies": {
     "@fastify/helmet": "^11.1.1",
@@ -22,8 +23,10 @@
     "@fastify/rate-limit": "^9.1.0",
     "@freemius/checkout": "^1.4.1",
     "@freemius/sdk": "^0.3.0",
+    "argon2": "^0.44.0",
     "dotenv": "^16.4.5",
     "fastify": "^4.29.1",
+    "otpauth": "^9.5.1",
     "pg": "^8.13.0",
     "sharp": "^0.33.5",
     "zod": "^3.23.8"
