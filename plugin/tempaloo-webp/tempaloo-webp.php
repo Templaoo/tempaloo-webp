@@ -3,7 +3,7 @@
  * Plugin Name:       Tempaloo WebP – Image Optimizer & AVIF Converter
  * Plugin URI:        https://tempaloo.com/webp
  * Description:       Convert images to WebP & AVIF automatically. Faster sites, no setup.
- * Version:           0.6.0
+ * Version:           0.6.1
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Tempaloo
@@ -15,7 +15,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'TEMPALOO_WEBP_VERSION', '0.6.0' );
+define( 'TEMPALOO_WEBP_VERSION', '0.6.1' );
 define( 'TEMPALOO_WEBP_FILE', __FILE__ );
 define( 'TEMPALOO_WEBP_DIR', plugin_dir_path( __FILE__ ) );
 define( 'TEMPALOO_WEBP_URL', plugin_dir_url( __FILE__ ) );

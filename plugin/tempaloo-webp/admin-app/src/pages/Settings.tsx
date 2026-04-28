@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api, type AppState } from "../api";
-import { Button, Card, CardHeader, Switch, toast } from "../components/ui";
+import { Button, Card, CardHeader, DecompressionWave, FilesStream, Input, Modal, Switch, toast } from "../components/ui";
 
 // Three quality presets — covers ~95% of use cases without exposing
 // the slider's full range. The slider stays for power users.
@@ -17,11 +17,17 @@ const RESIZE_PRESETS: { label: string; width: number }[] = [
     { label: "3840", width: 3840 },
 ];
 
+type RestoreStage = "idle" | "confirm" | "running" | "done";
+
 export default function Settings({ state, onState }: { state: AppState; onState: (s: AppState) => void }) {
     const [s, setS] = useState(state.settings);
     const [saving, setSaving] = useState(false);
-    const [restoring, setRestoring] = useState(false);
+    const [restoreStage, setRestoreStage] = useState<RestoreStage>("idle");
+    const [restoreConfirmText, setRestoreConfirmText] = useState("");
+    const [restoreResult, setRestoreResult] = useState<{ restored: number; filesRemoved: number } | null>(null);
     const dirty = JSON.stringify(s) !== JSON.stringify(state.settings);
+
+    const convertedCount = state.savings?.converted ?? 0;
 
     const save = async () => {
         setSaving(true);
@@ -36,29 +42,31 @@ export default function Settings({ state, onState }: { state: AppState; onState:
         }
     };
 
-    const restore = async () => {
-        const converted = state.savings?.converted ?? 0;
-        if (converted === 0) {
+    const openRestore = () => {
+        if (convertedCount === 0) {
             toast("info", "Nothing to restore — no images converted yet.");
             return;
         }
-        // Browser confirm() is plain but it's the WP-admin convention and
-        // doesn't pull in a modal lib. Good enough for a destructive action
-        // gated behind capability check.
-        if (!window.confirm(
-            `Delete the .webp/.avif files for ${converted} converted images?\n\n` +
-            `Your originals (.jpg / .png / .gif) are NOT touched. The plugin will ` +
-            `re-convert images on the next upload or bulk run.`
-        )) return;
-        setRestoring(true);
+        setRestoreConfirmText("");
+        setRestoreResult(null);
+        setRestoreStage("confirm");
+    };
+
+    const closeRestore = () => {
+        if (restoreStage === "running") return; // prevent close mid-deletion
+        setRestoreStage("idle");
+    };
+
+    const runRestore = async () => {
+        setRestoreStage("running");
         try {
             const res = await api.restore();
             onState(res.state);
-            toast("success", `Restored ${res.restored} images (${res.filesRemoved} files removed).`);
+            setRestoreResult({ restored: res.restored, filesRemoved: res.filesRemoved });
+            setRestoreStage("done");
         } catch (e) {
             toast("error", e instanceof Error ? e.message : "Restore failed");
-        } finally {
-            setRestoring(false);
+            setRestoreStage("confirm");
         }
     };
 
@@ -193,17 +201,28 @@ export default function Settings({ state, onState }: { state: AppState; onState:
                 <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
                     <Button
                         variant="secondary"
-                        onClick={restore}
-                        loading={restoring}
-                        disabled={(state.savings?.converted ?? 0) === 0}
+                        onClick={openRestore}
+                        disabled={convertedCount === 0}
                     >
-                        Restore {state.savings?.converted ? `(${state.savings.converted} images)` : "originals"}
+                        Restore {convertedCount ? `(${convertedCount.toLocaleString()} images)` : "originals"}
                     </Button>
                     <span className="text-xs text-ink-500">
                         Safe: only the converted siblings are removed. You can re-run a Bulk conversion afterward.
                     </span>
                 </div>
             </Card>
+
+            {/* ─── Restore modal — 3-state machine ───────────────────────── */}
+            <RestoreModal
+                stage={restoreStage}
+                onClose={closeRestore}
+                onConfirm={runRestore}
+                onDone={() => setRestoreStage("idle")}
+                convertedCount={convertedCount}
+                confirmText={restoreConfirmText}
+                onConfirmTextChange={setRestoreConfirmText}
+                result={restoreResult}
+            />
 
             <div className="flex justify-end gap-2 sticky bottom-4">
                 <Button variant="secondary" onClick={() => setS(state.settings)} disabled={!dirty || saving}>Reset</Button>
@@ -238,5 +257,147 @@ function FormatOption({ value, current, onSelect, title, subtitle, disabled }: {
             <div className="text-sm font-semibold text-ink-900">{title}</div>
             <div className="text-xs text-ink-500 mt-0.5">{subtitle}</div>
         </button>
+    );
+}
+
+/* ── Restore modal — confirm → running → done ───────────────────────── */
+function RestoreModal({
+    stage, onClose, onConfirm, onDone, convertedCount, confirmText, onConfirmTextChange, result,
+}: {
+    stage: RestoreStage;
+    onClose: () => void;
+    onConfirm: () => void;
+    onDone: () => void;
+    convertedCount: number;
+    confirmText: string;
+    onConfirmTextChange: (v: string) => void;
+    result: { restored: number; filesRemoved: number } | null;
+}) {
+    const open = stage !== "idle";
+    const isConfirm = stage === "confirm";
+    const isRunning = stage === "running";
+    const isDone    = stage === "done";
+
+    const canConfirm = confirmText.trim().toUpperCase() === "RESTORE";
+
+    const title = isDone
+        ? "Restore complete"
+        : isRunning
+            ? "Restoring…"
+            : "Restore originals?";
+
+    return (
+        <Modal
+            open={open}
+            onClose={onClose}
+            title={title}
+            size="lg"
+            variant={isDone ? "success" : "danger"}
+        >
+            {/* CONFIRM stage */}
+            {isConfirm && (
+                <div className="space-y-5">
+                    <DecompressionWave />
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="rounded-lg border border-red-200 bg-red-50 p-3.5">
+                            <div className="flex items-start gap-2">
+                                <span className="text-red-600 text-base leading-none mt-0.5">⚠</span>
+                                <div>
+                                    <div className="text-sm font-semibold text-red-900">Will be deleted</div>
+                                    <ul className="text-xs text-red-800 mt-1 space-y-1">
+                                        <li>• ~{(convertedCount * 7).toLocaleString()} <code className="bg-white/60 px-1 rounded">.webp</code> / <code className="bg-white/60 px-1 rounded">.avif</code> files</li>
+                                        <li>• The <code className="bg-white/60 px-1 rounded">tempaloo_webp</code> meta block on {convertedCount.toLocaleString()} attachments</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3.5">
+                            <div className="flex items-start gap-2">
+                                <span className="text-emerald-600 text-base leading-none mt-0.5">🛡</span>
+                                <div>
+                                    <div className="text-sm font-semibold text-emerald-900">Will NOT be touched</div>
+                                    <ul className="text-xs text-emerald-800 mt-1 space-y-1">
+                                        <li>• Your <code className="bg-white/60 px-1 rounded">.jpg</code> / <code className="bg-white/60 px-1 rounded">.png</code> / <code className="bg-white/60 px-1 rounded">.gif</code> originals</li>
+                                        <li>• Your monthly quota (refunds aren&apos;t given)</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-ink-900 mb-1.5">
+                            Type <code className="bg-ink-100 px-1.5 py-0.5 rounded font-mono text-[12px]">RESTORE</code> to confirm:
+                        </label>
+                        <Input
+                            value={confirmText}
+                            onChange={(e) => onConfirmTextChange(e.target.value)}
+                            placeholder="RESTORE"
+                            className="font-mono uppercase"
+                            autoFocus
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter" && canConfirm) onConfirm();
+                            }}
+                        />
+                    </div>
+
+                    <div className="flex justify-end gap-2">
+                        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+                        <Button variant="danger" onClick={onConfirm} disabled={!canConfirm}>
+                            Restore {convertedCount.toLocaleString()} attachments
+                        </Button>
+                    </div>
+                </div>
+            )}
+
+            {/* RUNNING stage */}
+            {isRunning && (
+                <div className="py-2 space-y-4">
+                    <div className="flex items-center gap-3">
+                        <div className="relative w-10 h-10">
+                            <div className="absolute inset-0 rounded-full border-4 border-amber-200" />
+                            <div className="absolute inset-0 rounded-full border-4 border-amber-500 border-t-transparent animate-spin" />
+                        </div>
+                        <div>
+                            <div className="text-sm font-semibold text-ink-900">Removing converted siblings…</div>
+                            <div className="text-xs text-ink-500">Originals on disk are untouched.</div>
+                        </div>
+                    </div>
+                    <FilesStream count={12} kind="restore" />
+                </div>
+            )}
+
+            {/* DONE stage */}
+            {isDone && result && (
+                <div className="py-2 space-y-4">
+                    <div className="flex items-center gap-3">
+                        <div className="h-12 w-12 rounded-full bg-emerald-100 grid place-items-center text-emerald-600 text-2xl">
+                            ✓
+                        </div>
+                        <div>
+                            <div className="text-base font-semibold text-ink-900">All clean.</div>
+                            <div className="text-sm text-ink-600">
+                                <strong className="text-ink-900">{result.restored.toLocaleString()}</strong> attachment{result.restored !== 1 ? "s" : ""} restored ·
+                                <strong className="text-ink-900">{" "}{result.filesRemoved.toLocaleString()}</strong> sibling file{result.filesRemoved !== 1 ? "s" : ""} removed
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="rounded-lg border border-ink-200 bg-ink-50 p-4 text-sm text-ink-700">
+                        <div className="font-semibold text-ink-900 mb-1.5">What&apos;s next?</div>
+                        <ul className="text-xs text-ink-600 space-y-1.5">
+                            <li>→ Re-run <strong>Bulk</strong> to regenerate WebP/AVIF with current settings</li>
+                            <li>→ Or change quality / format settings first, then run Bulk</li>
+                            <li>→ Or just leave it — your originals serve as-is from now on</li>
+                        </ul>
+                    </div>
+
+                    <div className="flex justify-end">
+                        <Button onClick={onDone}>Close</Button>
+                    </div>
+                </div>
+            )}
+        </Modal>
     );
 }

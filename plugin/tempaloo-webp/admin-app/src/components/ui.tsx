@@ -392,6 +392,463 @@ export function ProgressRing({ value, size = 140, label, sub }: { value: number;
     );
 }
 
+/**
+ * CompressionFactory — animated 3-stage pipeline that loops infinitely while
+ * mounted. Use it during bulk runs (anywhere a "we're working" feel helps),
+ * or in pre-flight modals to telegraph what's about to happen.
+ *
+ * Stage 1: original photo card pulses in with size badge.
+ * Stage 2: 8 colored particles stream right into a "grinder" zone with
+ *          diagonal stripe animation + pulsing core.
+ * Stage 3: fewer (4) particles emerge into a smaller compressed card.
+ *
+ * Whole sequence loops every 3.6s. GPU-only animations (transform + opacity).
+ */
+export function CompressionFactory({ height = 110 }: { height?: number }) {
+    return (
+        <div
+            className="relative w-full overflow-hidden rounded-xl border border-ink-200 bg-gradient-to-br from-blue-50/60 via-white to-emerald-50/60"
+            style={{ height }}
+            aria-hidden
+        >
+            <div className="cf-stage">
+                {/* IN — original photo card */}
+                <div className="cf-card cf-card-in">
+                    <div className="cf-photo cf-photo-orig">
+                        <span className="cf-sun" />
+                        <span className="cf-mountain" />
+                    </div>
+                    <div className="cf-meta">
+                        <span className="cf-badge cf-badge-jpg">JPG</span>
+                        <span className="cf-size">1.24&nbsp;MB</span>
+                    </div>
+                </div>
+
+                {/* PIPELINE — particles flow */}
+                <div className="cf-pipe">
+                    {Array.from({ length: 8 }, (_, i) => (
+                        <span key={`p-${i}`} className="cf-particle cf-particle-in" style={{ animationDelay: `${i * 0.18}s` }} />
+                    ))}
+                </div>
+
+                {/* GRINDER — animated compressor */}
+                <div className="cf-grinder" aria-label="compressor">
+                    <span className="cf-grinder-core" />
+                    <span className="cf-grinder-stripes" />
+                </div>
+
+                {/* OUT pipe — fewer particles */}
+                <div className="cf-pipe cf-pipe-out">
+                    {Array.from({ length: 4 }, (_, i) => (
+                        <span key={`p-out-${i}`} className="cf-particle cf-particle-out" style={{ animationDelay: `${1.4 + i * 0.22}s` }} />
+                    ))}
+                </div>
+
+                {/* OUT — compressed photo card */}
+                <div className="cf-card cf-card-out">
+                    <div className="cf-photo cf-photo-webp">
+                        <span className="cf-sun" />
+                        <span className="cf-mountain" />
+                    </div>
+                    <div className="cf-meta">
+                        <span className="cf-badge cf-badge-webp">WEBP</span>
+                        <span className="cf-size cf-size-good">412&nbsp;KB</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Saved % pill that pops in at the end of each loop */}
+            <span className="cf-saved">−67%</span>
+
+            <style>{cfCss}</style>
+        </div>
+    );
+}
+
+const cfCss = `
+.cf-stage {
+    position: absolute; inset: 0;
+    display: grid;
+    grid-template-columns: 64px 1fr 60px 1fr 64px;
+    gap: 6px;
+    align-items: center;
+    padding: 14px 16px;
+}
+.cf-card {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    transform-origin: center;
+}
+.cf-card-in  { animation: cfCardIn 3.6s cubic-bezier(.16,1,.3,1) infinite; }
+.cf-card-out { animation: cfCardOut 3.6s cubic-bezier(.16,1,.3,1) infinite; }
+@keyframes cfCardIn  {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    70%      { opacity: 0.4; transform: scale(0.92); }
+    85%      { opacity: 1; transform: scale(1); }
+}
+@keyframes cfCardOut {
+    0%, 60% { opacity: 0; transform: scale(0.5) translateX(-12px); }
+    78%     { opacity: 1; transform: scale(1) translateX(0); }
+    100%    { opacity: 1; transform: scale(1); }
+}
+.cf-photo {
+    position: relative;
+    width: 64px; height: 44px;
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid rgba(0,0,0,0.08);
+    background: linear-gradient(180deg, #e8d4b0 0%, #d4895a 55%, #8b3a1a 100%);
+}
+.cf-photo-webp {
+    width: 50px; height: 36px;
+    background: linear-gradient(180deg, #e8d4b0 0%, #d4895a 55%, #8b3a1a 100%);
+}
+.cf-sun {
+    position: absolute; top: 6px; right: 10px;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: radial-gradient(#fff5cf 30%, transparent 70%);
+}
+.cf-photo-webp .cf-sun { width: 10px; height: 10px; top: 4px; right: 7px; }
+.cf-mountain {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: 60%;
+    background:
+        linear-gradient(135deg, transparent 50%, #1a0e08 50%) 0 100% / 30px 14px no-repeat,
+        linear-gradient(225deg, transparent 50%, #0f0805 50%) 100% 100% / 35px 16px no-repeat,
+        #160d05;
+    border-top: 1px solid #1a0e08;
+}
+.cf-meta {
+    display: inline-flex; gap: 4px; align-items: center;
+    font-family: ui-monospace, monospace;
+    font-size: 9px;
+}
+.cf-badge {
+    padding: 1px 4px;
+    border-radius: 2px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+.cf-badge-jpg  { background: #fee2e2; color: #b91c1c; }
+.cf-badge-webp { background: #d1fae5; color: #047857; }
+.cf-size       { color: #475569; font-weight: 600; }
+.cf-size-good  { color: #059669; }
+
+.cf-pipe {
+    position: relative;
+    height: 100%;
+    overflow: hidden;
+}
+.cf-particle {
+    position: absolute;
+    top: 50%;
+    left: -8px;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    transform: translateY(-50%);
+    opacity: 0;
+}
+.cf-particle-in  { background: linear-gradient(135deg, #f97316, #fb923c); animation: cfParticle 3.6s linear infinite; }
+.cf-particle-out { background: linear-gradient(135deg, #10b981, #34d399); animation: cfParticleOut 3.6s linear infinite; }
+@keyframes cfParticle {
+    0%   { transform: translate(0, -50%) scale(0.6); opacity: 0; }
+    8%   { opacity: 1; }
+    35%  { transform: translate(calc(100% + 16px), -50%) scale(1); opacity: 1; }
+    40%  { opacity: 0; transform: translate(calc(100% + 16px), -50%) scale(0); }
+    100% { opacity: 0; }
+}
+@keyframes cfParticleOut {
+    0%, 38%   { opacity: 0; transform: translate(0, -50%) scale(0); }
+    45%       { opacity: 1; transform: translate(0, -50%) scale(1); }
+    72%       { transform: translate(calc(100% + 16px), -50%) scale(1); opacity: 1; }
+    78%, 100% { opacity: 0; transform: translate(calc(100% + 16px), -50%) scale(0); }
+}
+
+.cf-grinder {
+    position: relative;
+    height: 56px;
+    border-radius: 8px;
+    background: #0f172a;
+    border: 1px solid #1e293b;
+    overflow: hidden;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
+}
+.cf-grinder-stripes {
+    position: absolute; inset: 0;
+    background:
+        repeating-linear-gradient(45deg,
+            rgba(255,255,255,0.08) 0 4px,
+            transparent 4px 8px);
+    animation: cfStripes 0.8s linear infinite;
+}
+@keyframes cfStripes {
+    to { background-position: 16px 0; }
+}
+.cf-grinder-core {
+    position: absolute; top: 50%; left: 50%;
+    width: 28px; height: 28px;
+    margin: -14px 0 0 -14px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #60a5fa, #1e40af);
+    box-shadow: 0 0 12px rgba(59, 130, 246, 0.5), inset 0 -4px 8px rgba(0,0,0,0.3);
+    animation: cfCorePulse 1.2s ease-in-out infinite;
+}
+@keyframes cfCorePulse {
+    0%, 100% { transform: scale(1); box-shadow: 0 0 12px rgba(59, 130, 246, 0.5), inset 0 -4px 8px rgba(0,0,0,0.3); }
+    50%      { transform: scale(1.15); box-shadow: 0 0 22px rgba(59, 130, 246, 0.8), inset 0 -4px 8px rgba(0,0,0,0.3); }
+}
+.cf-saved {
+    position: absolute;
+    top: 8px; right: 12px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    font-family: ui-monospace, monospace;
+    font-size: 10px;
+    font-weight: 700;
+    box-shadow: 0 4px 8px rgba(16, 185, 129, 0.3);
+    opacity: 0;
+    transform: scale(0.6);
+    animation: cfSavedPop 3.6s cubic-bezier(.16,1,.3,1) infinite;
+}
+@keyframes cfSavedPop {
+    0%, 70%  { opacity: 0; transform: scale(0.6); }
+    80%, 95% { opacity: 1; transform: scale(1); }
+    100%     { opacity: 0; transform: scale(0.9); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cf-stage * { animation: none !important; }
+    .cf-card-out { opacity: 1; transform: none; }
+    .cf-saved { opacity: 1; transform: none; }
+}
+`;
+
+/**
+ * DecompressionWave — the inverse visual for Restore. Shows compressed file
+ * dissolving back to original via a wave / scanline effect. Calmer + warmer
+ * palette than CompressionFactory (orange/amber, not blue/green).
+ */
+export function DecompressionWave({ height = 110 }: { height?: number }) {
+    return (
+        <div
+            className="relative w-full overflow-hidden rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50/70 via-white to-orange-50/70"
+            style={{ height }}
+            aria-hidden
+        >
+            <div className="dw-stage">
+                {/* Compressed file (left, fading out) */}
+                <div className="dw-card dw-card-in">
+                    <div className="dw-photo dw-photo-small">
+                        <span className="dw-sun" />
+                    </div>
+                    <span className="dw-meta">
+                        <span className="dw-badge dw-badge-webp">WEBP</span>
+                        <span>412 KB</span>
+                    </span>
+                </div>
+
+                {/* Wave / arrow */}
+                <div className="dw-arrow">
+                    <span className="dw-wave dw-wave-1" />
+                    <span className="dw-wave dw-wave-2" />
+                    <span className="dw-wave dw-wave-3" />
+                    <span className="dw-arrow-head">↺</span>
+                </div>
+
+                {/* Original photo (right, expanding back) */}
+                <div className="dw-card dw-card-out">
+                    <div className="dw-photo dw-photo-orig">
+                        <span className="dw-sun" />
+                    </div>
+                    <span className="dw-meta">
+                        <span className="dw-badge dw-badge-jpg">JPG</span>
+                        <span>1.24 MB</span>
+                    </span>
+                    <span className="dw-shield" title="Original — never deleted">🛡</span>
+                </div>
+            </div>
+
+            <span className="dw-tag">Originals never touched</span>
+
+            <style>{dwCss}</style>
+        </div>
+    );
+}
+
+const dwCss = `
+.dw-stage {
+    position: absolute; inset: 0;
+    display: grid;
+    grid-template-columns: 1fr 80px 1fr;
+    gap: 8px; padding: 14px 16px;
+    align-items: center;
+}
+.dw-card {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    position: relative;
+}
+.dw-card-in  { animation: dwIn 3s ease-in-out infinite; }
+.dw-card-out { animation: dwOut 3s ease-in-out infinite; }
+@keyframes dwIn  {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: 0.35; transform: scale(0.92); filter: grayscale(0.4); }
+}
+@keyframes dwOut {
+    0%, 30% { opacity: 0.6; transform: scale(0.92); }
+    65%, 100% { opacity: 1; transform: scale(1); }
+}
+.dw-photo {
+    position: relative;
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid rgba(0,0,0,0.08);
+    background: linear-gradient(180deg, #f9c47a, #d8845a 55%, #5a2e16);
+}
+.dw-photo-small { width: 50px; height: 36px; }
+.dw-photo-orig  { width: 64px; height: 44px; }
+.dw-sun {
+    position: absolute; top: 5px; right: 8px;
+    width: 12px; height: 12px;
+    background: radial-gradient(#fff5c6, transparent 70%);
+    border-radius: 50%;
+}
+.dw-meta {
+    display: inline-flex; gap: 4px; align-items: center;
+    font: 600 9px ui-monospace, monospace;
+}
+.dw-badge      { padding: 1px 4px; border-radius: 2px; letter-spacing: 0.04em; font-weight: 700; }
+.dw-badge-webp { background: #d1fae5; color: #047857; }
+.dw-badge-jpg  { background: #fee2e2; color: #b91c1c; }
+.dw-shield     { position: absolute; top: -6px; right: -8px; font-size: 12px; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.2)); }
+
+.dw-arrow { position: relative; height: 56px; display: grid; place-items: center; }
+.dw-wave {
+    position: absolute;
+    width: 60px;
+    height: 22px;
+    border: 2px solid #f59e0b;
+    border-radius: 50%;
+    border-color: #f59e0b transparent transparent transparent;
+    top: 50%; left: 50%;
+    transform-origin: center;
+    transform: translate(-50%, -50%);
+    opacity: 0;
+}
+.dw-wave-1 { animation: dwWave 2s ease-out infinite; animation-delay: 0s; }
+.dw-wave-2 { animation: dwWave 2s ease-out infinite; animation-delay: 0.5s; }
+.dw-wave-3 { animation: dwWave 2s ease-out infinite; animation-delay: 1s; }
+@keyframes dwWave {
+    0%   { transform: translate(-50%, -50%) scale(0.4); opacity: 0.9; }
+    100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
+}
+.dw-arrow-head {
+    position: relative;
+    z-index: 2;
+    color: #d97706;
+    font-size: 22px;
+    font-weight: 700;
+    background: white;
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    display: grid; place-items: center;
+    border: 1.5px solid #f59e0b;
+    box-shadow: 0 2px 4px rgba(245, 158, 11, 0.25);
+}
+.dw-tag {
+    position: absolute;
+    bottom: 6px; left: 50%;
+    transform: translateX(-50%);
+    font-family: ui-monospace, monospace;
+    font-size: 9.5px;
+    color: #92400e;
+    background: rgba(255, 251, 235, 0.9);
+    padding: 1px 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+@media (prefers-reduced-motion: reduce) {
+    .dw-card-in, .dw-card-out, .dw-wave { animation: none !important; opacity: 1 !important; transform: translate(-50%, -50%) !important; }
+}
+`;
+
+/**
+ * FilesStream — horizontal scrolling tape of fake/real file cards. Used as
+ * a "live processing feed" during bulk runs to give a sense of motion
+ * beyond the progress ring.
+ */
+export function FilesStream({ count = 12, kind = "compress" }: { count?: number; kind?: "compress" | "restore" }) {
+    const names = ["sunset.jpg", "portrait.png", "product-01.jpg", "hero-bg.png", "team-photo.jpg", "logo-mark.png", "banner-spring.jpg", "icon-set.png", "cover-issue.jpg", "thumb-card.jpg", "feature.png", "homepage-hero.jpg"];
+    const items = Array.from({ length: count }, (_, i) => names[i % names.length]);
+    const isCompress = kind === "compress";
+    return (
+        <div className="fs-strip" aria-hidden>
+            <div className="fs-track">
+                {[...items, ...items].map((name, i) => (
+                    <div key={i} className={`fs-card ${isCompress ? "fs-card-c" : "fs-card-r"}`}>
+                        <div className="fs-thumb" />
+                        <div className="fs-info">
+                            <div className="fs-name">{name}</div>
+                            <div className="fs-sub">
+                                {isCompress
+                                    ? <><span className="fs-old">1.2 MB</span> → <span className="fs-new">412 KB</span></>
+                                    : <><span className="fs-rm">.webp removed</span></>}
+                            </div>
+                        </div>
+                        {isCompress
+                            ? <span className="fs-tick">✓</span>
+                            : <span className="fs-x">↺</span>}
+                    </div>
+                ))}
+            </div>
+            <style>{`
+                .fs-strip {
+                    overflow: hidden;
+                    width: 100%;
+                    mask-image: linear-gradient(90deg, transparent 0%, black 8%, black 92%, transparent 100%);
+                    -webkit-mask-image: linear-gradient(90deg, transparent 0%, black 8%, black 92%, transparent 100%);
+                }
+                .fs-track {
+                    display: flex; gap: 8px;
+                    width: max-content;
+                    animation: fsScroll 22s linear infinite;
+                }
+                @keyframes fsScroll { to { transform: translateX(-50%); } }
+                .fs-card {
+                    display: flex; align-items: center; gap: 8px;
+                    padding: 6px 10px 6px 6px;
+                    border-radius: 8px;
+                    background: white;
+                    border: 1px solid rgb(229 231 235);
+                    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+                    min-width: 180px;
+                    flex-shrink: 0;
+                }
+                .fs-card-c { border-left: 3px solid #10b981; }
+                .fs-card-r { border-left: 3px solid #f59e0b; }
+                .fs-thumb {
+                    width: 28px; height: 28px;
+                    border-radius: 4px;
+                    background: linear-gradient(135deg, #f9c47a, #d8845a, #5a2e16);
+                    flex-shrink: 0;
+                }
+                .fs-info { min-width: 0; flex: 1; }
+                .fs-name { font: 600 11px ui-sans-serif, system-ui; color: #1f2937; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                .fs-sub  { font: 400 10px ui-monospace, monospace; color: #6b7280; }
+                .fs-old  { color: #9ca3af; text-decoration: line-through; }
+                .fs-new  { color: #059669; font-weight: 600; }
+                .fs-rm   { color: #d97706; font-style: italic; }
+                .fs-tick { color: #10b981; font-weight: 700; font-size: 14px; }
+                .fs-x    { color: #f59e0b; font-weight: 700; font-size: 14px; }
+                @media (prefers-reduced-motion: reduce) {
+                    .fs-track { animation: none; }
+                }
+            `}</style>
+        </div>
+    );
+}
+
 export function Tabs<T extends string>({ value, onChange, items }: {
     value: T;
     onChange: (v: T) => void;

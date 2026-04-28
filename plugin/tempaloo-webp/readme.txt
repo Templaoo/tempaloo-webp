@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.6.0
+Stable tag: 0.6.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -145,6 +145,12 @@ Example — skip conversion for any attachment in the `private/` upload subfolde
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 0.6.1 =
+* New: Restore originals now opens a custom React modal (3-state machine: confirm → running → done) instead of the native browser confirm. Includes a "type RESTORE to confirm" guardrail, animated decompression visual, and a clear what-will-and-won't-be-deleted breakdown.
+* New: Animated CompressionFactory mockup in the Bulk pre-flight modal — pulsing core, particle stream, JPG → WebP visual.
+* New: Animated FilesStream tape during bulk runs and restore — gives a sense of motion beyond the progress ring.
+* New: 3 reusable UI primitives: CompressionFactory (blue/green factory), DecompressionWave (amber wave for restore), FilesStream (horizontal scrolling card tape).
 
 = 0.6.0 =
 * New: Bulk pre-flight modal — shows quota, daily-cap and API health checks before starting, with an estimated runtime.

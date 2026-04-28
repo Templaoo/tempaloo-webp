@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { bulk, type AppState, type BulkStatus } from "../api";
-import { Badge, Button, Card, CardHeader, Confetti, Modal, ProgressRing, toast } from "../components/ui";
+import { Badge, Button, Card, CardHeader, CompressionFactory, Confetti, FilesStream, Modal, ProgressRing, toast } from "../components/ui";
 
 const EMPTY_STATUS: BulkStatus = {
     status: "idle", total: 0, processed: 0, succeeded: 0, failed: 0, errors: [],
@@ -314,8 +314,11 @@ function PreflightModal({
                     Long jobs survive page refreshes — you can close this tab and come back.
                 </span>
             }
-            size="md"
+            size="lg"
         >
+            <div className="mb-5">
+                <CompressionFactory />
+            </div>
             <div className="space-y-2.5 mb-5">
                 {checks.list.map((c) => (
                     <div key={c.label} className="flex items-start gap-3 px-3 py-2.5 rounded-lg bg-ink-50/70">
@@ -377,6 +380,14 @@ function RunningView({ status, pct, eta, onCancel }: {
 
                     <Button variant="ghost" size="sm" onClick={onCancel}>Cancel job</Button>
                 </div>
+            </div>
+
+            {/* Live "files passing through" tape — symbolic, gives a sense of motion */}
+            <div className="mt-5 pt-4 border-t border-ink-100">
+                <div className="text-[10px] font-mono uppercase tracking-wider text-ink-400 mb-2">
+                    LIVE · processing in batches
+                </div>
+                <FilesStream count={12} kind="compress" />
             </div>
         </Card>
     );
