@@ -189,6 +189,7 @@ class Tempaloo_WebP_REST {
         Tempaloo_WebP_Plugin::update_settings( [
             'license_key'      => $key,
             'license_valid'    => true,
+            'license_status'   => isset( $res['data']['status'] ) ? (string) $res['data']['status'] : 'active',
             'plan'             => isset( $res['data']['plan'] ) ? (string) $res['data']['plan'] : '',
             'supports_avif'    => ! empty( $res['data']['supports_avif'] ),
             'images_limit'     => isset( $res['data']['images_limit'] ) ? (int) $res['data']['images_limit'] : 0,
@@ -289,6 +290,10 @@ class Tempaloo_WebP_REST {
                 'valid'         => ! empty( $s['license_valid'] ),
                 'key'           => (string) $s['license_key'],
                 'plan'          => (string) $s['plan'],
+                // Drives the inactive-license banner in the React app.
+                // Default 'unknown' on legacy installs that haven't run
+                // the daily verify cron yet — treated as harmless by UI.
+                'status'        => (string) ( $s['license_status'] ?? 'unknown' ),
                 'supportsAvif'  => ! empty( $s['supports_avif'] ),
                 'imagesLimit'   => (int) $s['images_limit'],
                 'sitesLimit'    => (int) $s['sites_limit'],

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, boot, fetchPlans, type AppState, type Plan } from "./api";
 import { Badge, SkeletonStyles, Tabs, Toasts, toast } from "./components/ui";
+import { LicenseAlertBanner } from "./components/LicenseAlertBanner";
 import Overview from "./pages/Overview";
 import Bulk from "./pages/Bulk";
 import Settings from "./pages/Settings";
@@ -195,6 +196,10 @@ export default function App() {
         <div className="tempaloo-wrap">
             <Toasts />
             <SkeletonStyles />
+
+            {/* In-plugin license-inactive banner — always visible (no dismiss).
+                The dismissable surface is the global wp-admin notice. */}
+            <LicenseAlertBanner status={state.license.status} />
 
             {/* Top bar */}
             <header className="flex items-center justify-between mb-6">

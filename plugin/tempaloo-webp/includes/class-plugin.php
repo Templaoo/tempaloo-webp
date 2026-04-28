@@ -18,6 +18,10 @@ final class Tempaloo_WebP_Plugin {
         return [
             'license_key'     => '',
             'license_valid'   => false,
+            // 'active' | 'trialing' | 'past_due' | 'canceled' | 'expired' | 'unknown'
+            // Set by daily verify cron + activation. Drives the WP admin
+            // notice in class-license-watch + the React banner.
+            'license_status'  => 'unknown',
             'plan'            => '',
             'supports_avif'   => false,
             'images_limit'    => 0,
@@ -70,6 +74,7 @@ final class Tempaloo_WebP_Plugin {
         ( new Tempaloo_WebP_REST() )->register();
         ( new Tempaloo_WebP_Retry_Queue() )->register();
         Tempaloo_WebP_Activity::register();
+        Tempaloo_WebP_License_Watch::register();
 
         // Resize-on-upload: pipe the user's setting into WP core's built-in
         // big-image threshold (since WP 5.3). Returning 0 disables the

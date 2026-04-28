@@ -33,10 +33,51 @@ const generateBody = z.object({
 });
 
 export default async function licenseRoutes(app: FastifyInstance) {
-    // Verify/activate: called by plugin on activation.
-    // Idempotent: same site on same license is accepted; different site triggers site-limit check.
-    app.post("/license/verify", async (req) => {
+    // Verify/activate: called by plugin on activation AND on a daily cron
+    // for re-verification. We cannot use the strict `resolveLicense` path
+    // here — it throws 401 for expired/canceled licenses, which is exactly
+    // the state the plugin needs to LEARN about (so it can show the
+    // "Your license expired" notice). So we do a lenient lookup and return:
+    //   · valid:true                            → license active or trialing
+    //   · valid:false + status:'expired'|'canceled'|'past_due' → known but inactive
+    //   · 401                                    → license_key not found at all
+    app.post("/license/verify", async (req, reply) => {
         const body = verifyBody.parse(req.body);
+
+        const { rows } = await query<{
+            license_id: string; plan_code: string; plan_name: string;
+            images_per_month: number; max_sites: number; supports_avif: boolean;
+            status: string; current_period_end: Date | null;
+        }>(
+            `SELECT l.id AS license_id, p.code AS plan_code, p.name AS plan_name,
+                    p.images_per_month, p.max_sites, p.supports_avif,
+                    l.status::text AS status, l.current_period_end
+               FROM licenses l
+               JOIN plans p ON p.id = l.plan_id
+              WHERE l.license_key = $1
+              LIMIT 1`,
+            [body.license_key],
+        );
+        const row = rows[0];
+        if (!row) return reply.code(401).send({ error: { code: "unauthorized", message: "Unknown license key" } });
+
+        // Lenient path: surface the known-bad status to the plugin so it
+        // can render the right CTA, without granting any privileges.
+        if (row.status !== "active" && row.status !== "trialing") {
+            return {
+                valid: false,
+                plan: row.plan_code,
+                plan_name: row.plan_name,
+                status: row.status,
+                supports_avif: row.supports_avif,
+                images_limit: row.images_per_month,
+                sites_limit: row.max_sites,
+                period_end: row.current_period_end?.toISOString() ?? null,
+            };
+        }
+
+        // Active / trialing: re-fetch via the strict path so we run the
+        // same site-limit / activation logic as before.
         const license = await resolveLicense(body.license_key);
         const host = normalizeHost(body.site_url);
 
