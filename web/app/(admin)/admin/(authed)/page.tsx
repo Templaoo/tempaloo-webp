@@ -1,6 +1,9 @@
 import { adminGet } from "@/lib/admin/api";
 import { PageHeader, MetricCard } from "@/components/admin/Shell";
+import { EmailTestPanel } from "@/components/admin/EmailTestPanel";
 import { eur, num } from "@/lib/admin/format";
+
+interface MeResp { ok: boolean; user?: { email: string } }
 
 export const dynamic = "force-dynamic";
 
@@ -19,8 +22,12 @@ interface Overview {
 }
 
 export default async function AdminDashboardPage() {
-    const data = await adminGet<Overview>("/admin/metrics/overview");
+    const [data, me] = await Promise.all([
+        adminGet<Overview>("/admin/metrics/overview"),
+        adminGet<MeResp>("/admin/auth/me").catch(() => ({ ok: false } as MeResp)),
+    ]);
     const arpu = data.paying_users > 0 ? data.mrr_cents / data.paying_users : 0;
+    const myEmail = me.user?.email ?? "";
 
     return (
         <>
@@ -44,6 +51,8 @@ export default async function AdminDashboardPage() {
                 <div className="eyebrow">LICENSES CREATED · LAST 30 DAYS</div>
                 <DailyChart series={data.licenses_per_day} />
             </section>
+
+            <EmailTestPanel defaultTo={myEmail} />
         </>
     );
 }
