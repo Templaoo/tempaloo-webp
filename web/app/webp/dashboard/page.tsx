@@ -4,6 +4,8 @@ import { fetchLicensesByEmail } from "@/lib/account";
 import { getCurrentUser } from "@/lib/auth";
 import { LicenseCard } from "@/components/dashboard/LicenseCard";
 import { StatsRow } from "@/components/dashboard/StatsRow";
+import { DashboardScorecard } from "@/components/dashboard/DashboardScorecard";
+import { UpgradeCardSmart } from "@/components/dashboard/UpgradeCardSmart";
 import { LogoMark } from "@/components/Logo";
 
 export const dynamic = "force-dynamic";
@@ -51,11 +53,18 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
                     </p>
                 </section>
 
-                <section className="rise rise-delay-1" style={{ marginBottom: 32 }}>
+                {/* Hero scorecard — emotional payoff above the chrome */}
+                {licenses.length > 0 && (
+                    <section className="rise rise-delay-1" style={{ marginBottom: 24 }}>
+                        <DashboardScorecard licenses={licenses} />
+                    </section>
+                )}
+
+                <section className="rise rise-delay-2" style={{ marginBottom: 32 }}>
                     <StatsRow licenses={licenses} />
                 </section>
 
-                <section className="rise rise-delay-2" style={{ display: "grid", gridTemplateColumns: "minmax(0, 2fr) minmax(280px, 1fr)", gap: 20 }}>
+                <section className="rise rise-delay-3" style={{ display: "grid", gridTemplateColumns: "minmax(0, 2fr) minmax(280px, 1fr)", gap: 20 }}>
                     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                         {licenses.length === 0 ? (
                             <EmptyState email={user.email} />
@@ -64,8 +73,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
                         )}
                     </div>
                     <aside style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                        <UpgradeCard hasPaid={licenses.some((l) => l.plan.code !== "free")} />
-                        <BillingCard />
+                        <UpgradeCardSmart licenses={licenses} />
+                        <BillingCard hasPaid={licenses.some((l) => l.plan.code !== "free")} />
                         <SupportCard />
                     </aside>
                 </section>
@@ -120,57 +129,41 @@ function EmptyState({ email }: { email: string }) {
             <p style={{ margin: "0 auto", maxWidth: 440, fontSize: 14, color: "var(--ink-3)", lineHeight: 1.5 }}>
                 We couldn&apos;t find a license for <span style={{ color: "var(--ink)" }}>{email}</span>. Generate one — it takes 10 seconds.
             </p>
-            <a href="/webp/activate" className="btn btn-primary" style={{ marginTop: 24 }}>
+            <Link href="/webp/activate" className="btn btn-primary" style={{ marginTop: 24, display: "inline-flex" }}>
                 Generate a key →
-            </a>
-        </div>
-    );
-}
-
-function UpgradeCard({ hasPaid }: { hasPaid: boolean }) {
-    if (hasPaid) {
-        return (
-            <div className="surface-card" style={{ padding: 18 }}>
-                <div className="eyebrow">PLAN</div>
-                <div style={{ marginTop: 8, fontSize: 14, fontWeight: 500, color: "var(--ink)" }}>You&apos;re on a paid plan</div>
-                <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "var(--ink-3)", lineHeight: 1.5 }}>
-                    Manage your subscription from the billing section.
-                </p>
-            </div>
-        );
-    }
-    return (
-        <div style={{ padding: 20, borderRadius: 10, background: "var(--ink)", color: "var(--bg)", position: "relative", overflow: "hidden" }}>
-            <div className="eyebrow" style={{ color: "var(--ink-3)" }}>UPGRADE</div>
-            <div className="h-display" style={{ marginTop: 10, fontSize: 20, fontWeight: 600, letterSpacing: "-0.02em", lineHeight: 1.2 }}>
-                Ship lighter pages<br />on more sites.
-            </div>
-            <ul style={{ margin: "14px 0 16px", padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 5, fontSize: 12.5, color: "rgba(237,237,237,0.75)" }}>
-                <li>— AVIF + larger quotas</li>
-                <li>— Multi-site licences</li>
-                <li>— Priority support</li>
-            </ul>
-            <Link
-                href="/webp/activate?plan=growth"
-                style={{ display: "inline-flex", alignItems: "center", height: 32, padding: "0 12px", borderRadius: 6, background: "var(--bg)", color: "var(--ink)", fontSize: 12.5, fontWeight: 500 }}
-            >
-                See plans →
             </Link>
         </div>
     );
 }
 
-function BillingCard() {
+function BillingCard({ hasPaid }: { hasPaid: boolean }) {
+    // Free users: nothing to bill yet, the card just teases the upgrade flow.
+    // Paid users: link out to the Freemius user portal where invoices live.
     return (
         <div className="surface-card" style={{ padding: 18 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div className="eyebrow">BILLING</div>
-                <span className="font-mono" style={{ fontSize: 10, padding: "2px 6px", borderRadius: 4, background: "var(--bg-2)", color: "var(--ink-3)", fontWeight: 500 }}>SOON</span>
+            <div className="eyebrow">BILLING</div>
+            <div style={{ marginTop: 8, fontSize: 14, fontWeight: 500, color: "var(--ink)" }}>
+                {hasPaid ? "Invoices & payment" : "Nothing to bill yet"}
             </div>
-            <div style={{ marginTop: 8, fontSize: 14, fontWeight: 500, color: "var(--ink)" }}>Invoices &amp; payment</div>
-            <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "var(--ink-3)", lineHeight: 1.5 }}>
-                Your invoices will appear here once paid plans are live. Payments are handled securely by Freemius.
+            <p style={{ margin: "4px 0 12px", fontSize: 12.5, color: "var(--ink-3)", lineHeight: 1.5 }}>
+                {hasPaid
+                    ? "Manage your subscription, payment method and invoices from the Freemius customer portal."
+                    : "You're on the Free plan — no payment method needed. Upgrade above whenever you're ready."}
             </p>
+            {hasPaid ? (
+                <a
+                    href="https://users.freemius.com/"
+                    target="_blank"
+                    rel="noopener"
+                    className="btn btn-ghost btn-sm"
+                >
+                    Open Freemius portal ↗
+                </a>
+            ) : (
+                <Link href="/webp#pricing" className="btn btn-ghost btn-sm">
+                    See pricing →
+                </Link>
+            )}
         </div>
     );
 }
@@ -181,10 +174,10 @@ function SupportCard() {
             <div className="eyebrow">SUPPORT</div>
             <div style={{ marginTop: 8, fontSize: 14, fontWeight: 500, color: "var(--ink)" }}>We answer fast</div>
             <p style={{ margin: "4px 0 10px", fontSize: 12.5, color: "var(--ink-3)", lineHeight: 1.5 }}>
-                Docs, troubleshooting and direct contact.
+                Docs, troubleshooting and direct contact — we read every message.
             </p>
             <div style={{ display: "flex", gap: 8 }}>
-                <a href="/webp" className="btn btn-ghost btn-sm">Docs</a>
+                <Link href="/docs" className="btn btn-ghost btn-sm">Docs</Link>
                 <a href="mailto:support@tempaloo.com" className="btn btn-ghost btn-sm">Email</a>
             </div>
         </div>

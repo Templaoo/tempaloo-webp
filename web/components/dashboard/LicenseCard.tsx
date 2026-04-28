@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 
 export interface DashLicense {
     id: string;
@@ -29,6 +30,20 @@ export function LicenseCard({ license }: { license: DashLicense }) {
     const [sites, setSites] = useState(license.sites);
     const [removing, setRemoving] = useState<string | null>(null);
     const [errorHost, setErrorHost] = useState<string | null>(null);
+    const [confirmHost, setConfirmHost] = useState<string | null>(null);
+
+    // Lock body scroll while the deactivate modal is open
+    useEffect(() => {
+        if (!confirmHost) return;
+        const prev = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+        const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setConfirmHost(null); };
+        window.addEventListener("keydown", onKey);
+        return () => {
+            document.body.style.overflow = prev;
+            window.removeEventListener("keydown", onKey);
+        };
+    }, [confirmHost]);
 
     const masked = `${license.licenseKey.slice(0, 8)}${"•".repeat(24)}${license.licenseKey.slice(-8)}`;
     const unlimited = license.plan.imagesPerMonth === -1;
@@ -46,7 +61,7 @@ export function LicenseCard({ license }: { license: DashLicense }) {
     };
 
     const deactivate = async (host: string) => {
-        if (!confirm(`Deactivate ${host}? The plugin on this site will stop converting until reactivated.`)) return;
+        setConfirmHost(null);
         setRemoving(host);
         setErrorHost(null);
         try {
@@ -90,9 +105,9 @@ export function LicenseCard({ license }: { license: DashLicense }) {
                     </p>
                 </div>
                 {license.plan.code === "free" && (
-                    <a href="/webp/activate?plan=growth" className="btn btn-primary btn-sm">
+                    <Link href="/webp/activate?plan=growth" className="btn btn-primary btn-sm" style={{ display: "inline-flex" }}>
                         Upgrade →
-                    </a>
+                    </Link>
                 )}
             </div>
 
@@ -140,7 +155,7 @@ export function LicenseCard({ license }: { license: DashLicense }) {
                                             </div>
                                         </div>
                                         <button
-                                            onClick={() => deactivate(s.host)}
+                                            onClick={() => setConfirmHost(s.host)}
                                             disabled={removing === s.host}
                                             className="btn btn-ghost btn-sm"
                                             style={{ height: 28, padding: "0 10px", fontSize: 12 }}
@@ -153,12 +168,114 @@ export function LicenseCard({ license }: { license: DashLicense }) {
                         )}
                         {slotsFull && (
                             <p style={{ margin: "10px 0 0", fontSize: 12, color: "var(--ink-3)" }}>
-                                Deactivate one to add a new site, or <a href="/webp/activate?plan=growth" style={{ color: "var(--ink)", fontWeight: 500, textDecoration: "underline" }}>upgrade for more slots</a>.
+                                Deactivate one to add a new site, or <Link href="/webp/activate?plan=growth" style={{ color: "var(--ink)", fontWeight: 500, textDecoration: "underline" }}>upgrade for more slots</Link>.
                             </p>
                         )}
                     </div>
                 </div>
             </div>
+
+            {/* Deactivate confirmation modal — replaces window.confirm() */}
+            {confirmHost && (
+                <DeactivateModal
+                    host={confirmHost}
+                    onCancel={() => setConfirmHost(null)}
+                    onConfirm={() => deactivate(confirmHost)}
+                />
+            )}
+        </div>
+    );
+}
+
+function DeactivateModal({ host, onCancel, onConfirm }: {
+    host: string;
+    onCancel: () => void;
+    onConfirm: () => void;
+}) {
+    return (
+        <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Deactivate site"
+            style={{
+                position: "fixed", inset: 0, zIndex: 100,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                padding: 16,
+                animation: "lcModalIn 200ms ease forwards",
+            }}
+        >
+            <button
+                aria-label="Close"
+                onClick={onCancel}
+                style={{
+                    position: "absolute", inset: 0,
+                    background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)",
+                    border: "none", cursor: "pointer", padding: 0,
+                }}
+            />
+            <div
+                style={{
+                    position: "relative", width: "100%", maxWidth: 460,
+                    background: "var(--surface)",
+                    border: "1px solid var(--line-2)",
+                    borderTop: "3px solid var(--danger)",
+                    borderRadius: 14,
+                    padding: "24px 26px",
+                    boxShadow: "0 24px 48px -16px rgba(0,0,0,0.4)",
+                    animation: "lcCardIn 240ms cubic-bezier(.16,1,.3,1) forwards",
+                }}
+                onClick={(e) => e.stopPropagation()}
+            >
+                <h3 style={{ margin: 0, fontSize: 17, fontWeight: 600, color: "var(--ink)", letterSpacing: "-0.015em" }}>
+                    Deactivate this site?
+                </h3>
+                <code className="font-mono" style={{
+                    display: "block", marginTop: 10, padding: "8px 10px",
+                    background: "var(--bg-2)", border: "1px solid var(--line)",
+                    borderRadius: 6, fontSize: 12.5, color: "var(--ink)",
+                    wordBreak: "break-all",
+                }}>
+                    {host}
+                </code>
+                <p style={{ margin: "14px 0 0", fontSize: 13.5, color: "var(--ink-2)", lineHeight: 1.55 }}>
+                    The plugin on this site will <strong>stop converting new uploads</strong> immediately.
+                    Existing converted images stay where they are.
+                </p>
+                <p style={{ margin: "8px 0 0", fontSize: 12.5, color: "var(--ink-3)", lineHeight: 1.5 }}>
+                    Reactivate any time by re-entering the license key in the plugin.
+                </p>
+                <div style={{ marginTop: 22, display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                    <button
+                        onClick={onCancel}
+                        style={{
+                            height: 36, padding: "0 14px", borderRadius: 8,
+                            background: "transparent", color: "var(--ink-2)",
+                            border: "1px solid var(--line-2)",
+                            fontSize: 13, fontWeight: 500, cursor: "pointer",
+                        }}
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={onConfirm}
+                        style={{
+                            height: 36, padding: "0 16px", borderRadius: 8,
+                            background: "var(--danger)", color: "white",
+                            border: "1px solid var(--danger)",
+                            fontSize: 13, fontWeight: 500, cursor: "pointer",
+                        }}
+                    >
+                        Deactivate site
+                    </button>
+                </div>
+            </div>
+            <style>{`
+                @keyframes lcModalIn { from { opacity: 0 } to { opacity: 1 } }
+                @keyframes lcCardIn  {
+                    from { opacity: 0; transform: translateY(8px) scale(0.96) }
+                    to   { opacity: 1; transform: none }
+                }
+            `}</style>
         </div>
     );
 }
