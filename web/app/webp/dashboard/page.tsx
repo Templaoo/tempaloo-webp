@@ -6,6 +6,8 @@ import { LicenseCard } from "@/components/dashboard/LicenseCard";
 import { StatsRow } from "@/components/dashboard/StatsRow";
 import { DashboardScorecard } from "@/components/dashboard/DashboardScorecard";
 import { UpgradeCardSmart } from "@/components/dashboard/UpgradeCardSmart";
+import { LicenseListClient } from "@/components/dashboard/LicenseListClient";
+import { ActivationConfetti, QuotaAlertBanner, ThemeToggle } from "@/components/dashboard/DashboardExtras";
 import { LogoMark } from "@/components/Logo";
 
 // Authenticated content — never let any layer (browser, ISP proxy,
@@ -46,9 +48,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
     return (
         <main style={{ minHeight: "100vh", background: "var(--bg)", color: "var(--ink)" }}>
+            <ActivationConfetti signup={!!searchParams.signup} />
             <TopBar email={user.email} name={user.name} authed={user.authed} />
 
             <div className="app-container" style={{ padding: "40px 24px 80px" }}>
+                {/* Quota alert — only renders when ≥80% on any license */}
+                <QuotaAlertBanner licenses={licenses} />
+
                 <section className="rise" style={{ marginBottom: 32 }}>
                     <h1 className="h-display" style={{ fontSize: "clamp(32px, 4vw, 44px)", fontWeight: 600, letterSpacing: "-0.035em", margin: 0, color: "var(--ink)" }}>
                         Welcome back{user.name ? `, ${user.name.split(" ")[0]}` : ""}.
@@ -70,11 +76,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
                 </section>
 
                 <section className="rise rise-delay-3" style={{ display: "grid", gridTemplateColumns: "minmax(0, 2fr) minmax(280px, 1fr)", gap: 20 }}>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                    <div style={{ minWidth: 0 }}>
                         {licenses.length === 0 ? (
                             <EmptyState email={user.email} />
                         ) : (
-                            licenses.map((l) => <LicenseCard key={l.id} license={l} />)
+                            <LicenseListClient licenses={licenses} />
                         )}
                     </div>
                     <aside style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -103,12 +109,13 @@ function TopBar({ email, name, authed }: { email: string; name?: string; authed:
                         Tempaloo<span style={{ color: "var(--ink-3)" }}> / WebP</span>
                     </span>
                 </Link>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     {!authed && (
                         <span className="font-mono" style={{ fontSize: 10.5, padding: "4px 10px", borderRadius: 999, background: "rgba(245, 165, 36, 0.15)", color: "var(--warn)", letterSpacing: "0.02em" }}>
                             · PREVIEW
                         </span>
                     )}
+                    <ThemeToggle />
                     <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "4px 12px 4px 4px", borderRadius: 999, border: "1px solid var(--line)", background: "var(--bg-2)" }}>
                         <span style={{ width: 26, height: 26, borderRadius: "50%", background: "var(--ink)", color: "var(--bg)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600 }}>{initial}</span>
                         <span style={{ fontSize: 13, color: "var(--ink)", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name ?? email}</span>
