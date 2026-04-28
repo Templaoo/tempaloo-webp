@@ -30,6 +30,16 @@ const schema = z.object({
     // The API layer mostly trusts the cookie, but accepts an optional
     // ALLOWLIST too for defense-in-depth.
     ADMIN_IP_ALLOWLIST: z.string().optional(),
+
+    // ─── Email (Brevo / Sendinblue) ─────────────────────────────────
+    // Optional in dev — when missing, emails are logged to stdout instead
+    // of being sent. Lets you boot the API without burning Brevo quota.
+    BREVO_API_KEY: z.string().optional(),
+    EMAIL_FROM: z.string().email().default("julia.paterson@tempaloo.com"),
+    EMAIL_FROM_NAME: z.string().default("Julia Paterson"),
+    EMAIL_REPLY_TO: z.string().email().optional(),
+    // Public web base for links inside emails (e.g. dashboard URL).
+    WEB_BASE_URL: z.string().url().default("https://tempaloo.com"),
 });
 
 const parsed = schema.safeParse(process.env);

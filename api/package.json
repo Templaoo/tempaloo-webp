@@ -23,6 +23,7 @@
     "@fastify/rate-limit": "^9.1.0",
     "@freemius/checkout": "^1.4.1",
     "@freemius/sdk": "^0.3.0",
+    "@getbrevo/brevo": "^5.0.4",
     "argon2": "^0.44.0",
     "dotenv": "^16.4.5",
     "fastify": "^4.29.1",

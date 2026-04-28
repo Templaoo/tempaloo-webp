@@ -2,6 +2,12 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { generateLicenseKey } from "../auth.js";
 import { query, withTx } from "../db.js";
 import { getFreemius, planCodeFromFreemius } from "../freemius.js";
+import { sendTransactional } from "../lib/email.js";
+import {
+    paymentReceivedEmail,
+    subscriptionCancelledEmail,
+    trialStartedEmail,
+} from "../lib/email-templates.js";
 
 /**
  * Freemius webhook receiver.
@@ -72,17 +78,32 @@ export default async function webhooksRoute(app: FastifyInstance) {
             const eventType = String(parsed.type ?? parsed.event ?? "unknown");
 
             // ─── Lifecycle handlers ─────────────────────────────────────
+            // Email rules:
+            //   · brand-new paid trial → trial-started email
+            //   · brand-new paid lifetime / direct-purchase → payment-received
+            //   · cancellation events → subscription-cancelled (once per license)
+            //   · payment.succeeded → payment-received receipt
+            // license.updated / extended / plan.changed never fire emails —
+            // they're noisy lifecycle events that don't need user attention.
             listener.on("license.created", async ({ objects }) => {
-                await upsertLicenseFromEvent(objects);
+                const r = await upsertLicenseFromEvent(objects);
+                if (!r || !r.wasNew) return;
+                if (r.status === "trialing" && r.trialEndsAt) {
+                    const daysLeft = Math.max(1, Math.ceil((r.trialEndsAt.getTime() - Date.now()) / 86_400_000));
+                    sendTransactional(trialStartedEmail({
+                        email: r.userEmail, firstName: r.userFirstName,
+                        licenseKey: r.licenseKey, planName: r.planName,
+                        daysLeft, trialEndsOn: r.trialEndsAt.toISOString().slice(0, 10),
+                    }), req.log).catch((e) => req.log.error({ e }, "trial email failed"));
+                }
             });
-            listener.on("license.updated", async ({ objects }) => {
-                await upsertLicenseFromEvent(objects);
-            });
-            listener.on("license.extended", async ({ objects }) => {
-                await upsertLicenseFromEvent(objects);
-            });
+            listener.on("license.updated",  async ({ objects }) => { await upsertLicenseFromEvent(objects); });
+            listener.on("license.extended", async ({ objects }) => { await upsertLicenseFromEvent(objects); });
+            listener.on("license.plan.changed", async ({ objects }) => { await upsertLicenseFromEvent(objects); });
+
             listener.on("license.cancelled", async ({ objects }) => {
                 await markLicenseStatus(objects, "canceled");
+                await sendCancelEmailFor(objects, req.log);
             });
             listener.on("license.expired", async ({ objects }) => {
                 await markLicenseStatus(objects, "expired");
@@ -92,13 +113,21 @@ export default async function webhooksRoute(app: FastifyInstance) {
                 // objects.subscription.license_id, NOT objects.license.id.
                 // Fall back to either so we don't silently drop the cancel.
                 await markLicenseStatus(objects, "canceled");
-            });
-            listener.on("license.plan.changed", async ({ objects }) => {
-                await upsertLicenseFromEvent(objects);
+                await sendCancelEmailFor(objects, req.log);
             });
             listener.on("license.deleted", async ({ objects }) => {
                 await markLicenseStatus(objects, "canceled");
+                await sendCancelEmailFor(objects, req.log);
             });
+
+            // Payment receipts. Freemius fires this on successful charge —
+            // initial purchase, trial-to-paid conversion, every renewal.
+            // Cast the listener type since the SDK enum doesn't include
+            // every event name we care about.
+            (listener.on as unknown as (e: string, h: (p: { objects: WebhookObjects & { payment?: { gross?: number; currency?: string; created?: string } } }) => Promise<void>) => void)(
+                "payment.succeeded",
+                async ({ objects }) => { await sendPaymentEmailFor(objects, req.log); },
+            );
 
             // ─── Idempotence guard (BEFORE handing off to the SDK) ──────
             // We try to claim the event_id row first. If it already exists
@@ -226,13 +255,31 @@ function isTrialing(lic: WebhookLicense): boolean {
     return false;
 }
 
-async function upsertLicenseFromEvent(objects: unknown) {
+/**
+ * Returns enough state for the caller to fire the right transactional
+ * email after the upsert. `wasNew` distinguishes a brand-new license
+ * (welcome / trial-started) from an update (no email).
+ */
+interface UpsertResult {
+    wasNew: boolean;
+    status: "canceled" | "trialing" | "active";
+    planName: string;
+    licenseKey: string;
+    userEmail: string;
+    userFirstName?: string;
+    trialEndsAt: Date | null;
+}
+
+async function upsertLicenseFromEvent(objects: unknown): Promise<UpsertResult | null> {
     const o = objects as WebhookObjects;
     const lic = o?.license;
     const usr = o?.user;
-    if (!lic?.id || !usr?.email) return;
+    if (!lic?.id || !usr?.email) return null;
+    const userEmail = usr.email;
+    const userFirstName = usr.first ?? undefined;
 
     const planCode = planCodeFromFreemius(lic.plan?.name);
+    const planName = lic.plan?.name ?? planCode;
 
     // Status priority: cancelled wins, then trial, then active.
     let status: "canceled" | "trialing" | "active";
@@ -242,8 +289,9 @@ async function upsertLicenseFromEvent(objects: unknown) {
 
     const billing = lic.billing_cycle === 12 ? "annual" : lic.billing_cycle === 1 ? "monthly" : "lifetime";
     const periodEnd = lic.expiration ? new Date(lic.expiration) : null;
+    const trialEndsAt = lic.trial_ends ? new Date(lic.trial_ends) : null;
 
-    await withTx(async (client) => {
+    return withTx(async (client) => {
         const { rows: userRows } = await client.query<{ id: string }>(
             `INSERT INTO users (email, freemius_user_id) VALUES ($1, $2)
              ON CONFLICT (email) DO UPDATE SET freemius_user_id = EXCLUDED.freemius_user_id, updated_at = NOW()
@@ -259,26 +307,42 @@ async function upsertLicenseFromEvent(objects: unknown) {
         const planId = planRows[0]?.id;
         if (!planId) throw new Error(`Plan ${planCode} not found`);
 
-        const { rowCount } = await client.query(
+        const { rows: updated } = await client.query<{ license_key: string }>(
             `UPDATE licenses
                 SET plan_id = $2, status = $3::license_status,
                     billing = $4::billing_cycle, current_period_end = $5,
                     canceled_at = CASE WHEN $3 = 'canceled' THEN NOW() ELSE canceled_at END,
                     updated_at = NOW()
-              WHERE freemius_license_id = $1`,
+              WHERE freemius_license_id = $1
+              RETURNING license_key`,
             [Number(lic.id), planId, status, billing, periodEnd],
         );
-        if (!rowCount) {
-            // Defensive: catch the rare race where two webhooks for the
-            // same license arrive concurrently. The UNIQUE constraint on
-            // freemius_license_id will reject the second insert; ignore it.
-            await client.query(
+
+        let licenseKey: string;
+        let wasNew = false;
+        if (updated.length === 0) {
+            // Defensive: ON CONFLICT covers the rare concurrent-delivery
+            // race. RETURNING gives us the persisted key whether we
+            // inserted or the conflicted row already existed.
+            licenseKey = generateLicenseKey();
+            const { rows: ins } = await client.query<{ license_key: string; xmax: number }>(
                 `INSERT INTO licenses (user_id, plan_id, license_key, freemius_license_id, status, billing, current_period_end)
                  VALUES ($1, $2, $3, $4, $5::license_status, $6::billing_cycle, $7)
-                 ON CONFLICT (freemius_license_id) DO NOTHING`,
-                [userId, planId, generateLicenseKey(), Number(lic.id), status, billing, periodEnd],
+                 ON CONFLICT (freemius_license_id) DO UPDATE SET updated_at = NOW()
+                 RETURNING license_key, xmax::text::int AS xmax`,
+                [userId, planId, licenseKey, Number(lic.id), status, billing, periodEnd],
             );
+            licenseKey = ins[0]!.license_key;
+            // xmax = 0 on a true insert; >0 if the ON CONFLICT path ran.
+            wasNew = ins[0]!.xmax === 0;
+        } else {
+            licenseKey = updated[0]!.license_key;
         }
+
+        return {
+            wasNew, status, planName, licenseKey,
+            userEmail, userFirstName, trialEndsAt,
+        };
     });
 }
 
@@ -294,6 +358,64 @@ async function markLicenseStatus(objects: unknown, status: "canceled" | "expired
           WHERE freemius_license_id = $1`,
         [licId, status],
     );
+}
+
+// ─── Email triggers (post-DB) ───────────────────────────────────────
+
+interface MinLog { error: (...a: unknown[]) => void; info: (...a: unknown[]) => void }
+
+/**
+ * Looks up enough info from the DB to send a cancellation email.
+ * We don't trust the webhook payload alone — `objects.user.email` might
+ * be missing on subscription.* events, but the joined user row always has it.
+ */
+async function sendCancelEmailFor(objects: unknown, log: MinLog): Promise<void> {
+    const o = objects as WebhookObjects;
+    const licId = resolveLicenseId(o);
+    if (licId == null) return;
+    const { rows } = await query<{ email: string; license_key: string; plan_name: string; first?: string }>(
+        `SELECT u.email, l.license_key, p.name AS plan_name
+           FROM licenses l
+           JOIN users u ON u.id = l.user_id
+           JOIN plans p ON p.id = l.plan_id
+          WHERE l.freemius_license_id = $1
+          LIMIT 1`,
+        [licId],
+    );
+    const r = rows[0];
+    if (!r) return;
+    sendTransactional(subscriptionCancelledEmail({
+        email: r.email, firstName: o?.user?.first ?? undefined,
+        licenseKey: r.license_key, planName: r.plan_name,
+    }), log).catch((e) => log.error({ e }, "cancel email failed"));
+}
+
+interface PaymentEvent { payment?: { gross?: number; currency?: string; created?: string } }
+
+async function sendPaymentEmailFor(objects: unknown, log: MinLog): Promise<void> {
+    const o = objects as WebhookObjects & PaymentEvent;
+    const licId = resolveLicenseId(o);
+    if (licId == null || !o.payment) return;
+    const { rows } = await query<{ email: string; plan_name: string; current_period_end: Date | null }>(
+        `SELECT u.email, p.name AS plan_name, l.current_period_end
+           FROM licenses l
+           JOIN users u ON u.id = l.user_id
+           JOIN plans p ON p.id = l.plan_id
+          WHERE l.freemius_license_id = $1
+          LIMIT 1`,
+        [licId],
+    );
+    const r = rows[0];
+    if (!r) return;
+    const grossCents = Math.round(Number(o.payment.gross ?? 0) * 100);
+    if (grossCents <= 0) return;
+    sendTransactional(paymentReceivedEmail({
+        email: r.email, firstName: o?.user?.first ?? undefined,
+        planName: r.plan_name,
+        amountCents: grossCents,
+        currency: (o.payment.currency ?? "EUR").toUpperCase(),
+        nextBillingOn: r.current_period_end?.toISOString().slice(0, 10),
+    }), log).catch((e) => log.error({ e }, "payment email failed"));
 }
 
 // Re-export used in tests so we can call them without going through HTTP.

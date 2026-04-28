@@ -3,6 +3,8 @@ import { z } from "zod";
 import { authMiddleware, generateLicenseKey, resolveLicense } from "../auth.js";
 import { query, withTx } from "../db.js";
 import { err } from "../errors.js";
+import { sendTransactional } from "../lib/email.js";
+import { welcomeFreeEmail } from "../lib/email-templates.js";
 
 function normalizeHost(siteUrl: string): string {
     try {
@@ -133,6 +135,14 @@ export default async function licenseRoutes(app: FastifyInstance) {
                      VALUES ($1, $2, $3, 'active', 'free')`,
                     [userId, planId, licenseKey],
                 );
+
+                // Fire welcome email — fire-and-forget so a Brevo hiccup
+                // never makes the signup itself fail. The wrapper logs
+                // failures internally; we don't await on the response.
+                sendTransactional(
+                    welcomeFreeEmail({ email: body.email, licenseKey, planName: "Free" }),
+                    req.log,
+                ).catch((e) => req.log.error({ e }, "welcome email send failed"));
 
                 return reply.code(201).send({
                     license_key: licenseKey,
