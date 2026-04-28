@@ -49,6 +49,8 @@ export interface AppState {
         // 0 = off; otherwise the max width in px above which uploads are
         // resized before conversion (hooks into core's big_image_size_threshold).
         resizeMaxWidth: number;
+        // Map of post-type slug -> quality 1..100. Empty object = no overrides.
+        cptQuality: Record<string, number>;
     };
     savings: null | {
         bytesIn: number;
@@ -85,7 +87,7 @@ export const boot: BootState =
             quotaExceededAt: null,
             apiHealth: { ok: true, failedAt: 0, code: "", message: "", attempts: 0 },
             retryQueue: { pending: 0, dueNow: 0, nextRetryAt: 0 },
-            settings: { quality: 82, outputFormat: "webp", autoConvert: true, serveWebp: true, resizeMaxWidth: 2560 },
+            settings: { quality: 82, outputFormat: "webp", autoConvert: true, serveWebp: true, resizeMaxWidth: 2560, cptQuality: {} },
             savings: null,
         },
     };
@@ -159,7 +161,22 @@ export const api = {
         restFetch<{ state: AppState; restored: number; filesRemoved: number }>(
             "/restore", { method: "POST", body: JSON.stringify({ ids: ids ?? [] }) }
         ),
+    activity: () =>
+        restFetch<{ events: ActivityEvent[] }>("/activity?limit=200"),
+    clearActivity: () =>
+        restFetch<{ ok: boolean }>("/activity", { method: "DELETE" }),
+    cpts: () =>
+        restFetch<{ cpts: { slug: string; label: string }[] }>("/cpts"),
 };
+
+export interface ActivityEvent {
+    id: number;
+    at: number;
+    type: "convert" | "convert_failed" | "bulk" | "license" | "restore" | "retry" | "upload";
+    level: "success" | "info" | "warn" | "error";
+    message: string;
+    meta: Record<string, unknown>;
+}
 
 // Bulk operations still use admin-ajax (existing backend, keeps parity).
 export async function ajax<T>(action: string, extra: Record<string, string> = {}): Promise<T> {

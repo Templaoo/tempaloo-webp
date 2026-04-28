@@ -41,6 +41,53 @@ class Tempaloo_WebP_REST {
                 'ids' => [ 'required' => false, 'type' => 'array' ],
             ],
         ] );
+
+        register_rest_route( self::NS, '/activity', [
+            [
+                'methods'             => 'GET',
+                'callback'            => [ $this, 'get_activity' ],
+                'permission_callback' => [ $this, 'perm_manage' ],
+            ],
+            [
+                'methods'             => 'DELETE',
+                'callback'            => [ $this, 'delete_activity' ],
+                'permission_callback' => [ $this, 'perm_manage' ],
+            ],
+        ] );
+
+        register_rest_route( self::NS, '/cpts', [
+            'methods'             => 'GET',
+            'callback'            => [ $this, 'get_cpts' ],
+            'permission_callback' => [ $this, 'perm_manage' ],
+        ] );
+    }
+
+    public function get_activity( WP_REST_Request $req ) {
+        $limit = isset( $req['limit'] ) ? max( 1, min( 200, (int) $req['limit'] ) ) : 100;
+        return rest_ensure_response( [ 'events' => Tempaloo_WebP_Activity::recent( $limit ) ] );
+    }
+
+    public function delete_activity() {
+        Tempaloo_WebP_Activity::clear();
+        return rest_ensure_response( [ 'ok' => true ] );
+    }
+
+    /**
+     * Returns the public custom-post-types on the site so the per-CPT
+     * quality picker can render dropdowns without the user typing slugs.
+     */
+    public function get_cpts() {
+        $types = get_post_types( [ 'public' => true ], 'objects' );
+        $list = [];
+        foreach ( $types as $slug => $obj ) {
+            // Skip attachment + nav_menu_item — they're irrelevant for image quality
+            if ( in_array( $slug, [ 'attachment', 'nav_menu_item', 'revision' ], true ) ) continue;
+            $list[] = [
+                'slug'  => $slug,
+                'label' => isset( $obj->labels->name ) ? (string) $obj->labels->name : $slug,
+            ];
+        }
+        return rest_ensure_response( [ 'cpts' => $list ] );
     }
 
     /**
@@ -102,6 +149,11 @@ class Tempaloo_WebP_REST {
             $restored++;
         }
 
+        Tempaloo_WebP_Activity::log( 'restore', 'warn',
+            sprintf( __( 'Restored %d attachments · %d files removed', 'tempaloo-webp' ), $restored, $files_removed ),
+            [ 'restored' => $restored, 'files_removed' => $files_removed ]
+        );
+
         return rest_ensure_response( [
             'state'        => $this->state_response()->get_data(),
             'restored'     => $restored,
@@ -143,6 +195,10 @@ class Tempaloo_WebP_REST {
             'sites_limit'      => isset( $res['data']['sites_limit'] ) ? (int) $res['data']['sites_limit'] : 0,
             'last_verified_at' => time(),
         ] );
+        Tempaloo_WebP_Activity::log( 'license', 'success',
+            sprintf( __( 'License activated · %s plan', 'tempaloo-webp' ), strtoupper( (string) ( $res['data']['plan'] ?? 'free' ) ) ),
+            [ 'plan' => (string) ( $res['data']['plan'] ?? 'free' ) ]
+        );
         return $this->state_response();
     }
 
@@ -167,6 +223,17 @@ class Tempaloo_WebP_REST {
             // 0 = off; clamp the max so a typo can't turn off the resize
             // feature by setting an absurd value (we top out at 8K).
             $patch['resize_max_width'] = $w <= 0 ? 0 : max( 320, min( 7680, $w ) );
+        }
+        if ( array_key_exists( 'cptQuality', $p ) && is_array( $p['cptQuality'] ) ) {
+            $clean = [];
+            foreach ( $p['cptQuality'] as $slug => $q ) {
+                $slug = sanitize_key( (string) $slug );
+                $q = (int) $q;
+                if ( $slug && $q > 0 && $q <= 100 ) {
+                    $clean[ $slug ] = $q;
+                }
+            }
+            $patch['cpt_quality'] = $clean;
         }
         if ( ! empty( $patch ) ) {
             Tempaloo_WebP_Plugin::update_settings( $patch );
@@ -236,6 +303,7 @@ class Tempaloo_WebP_REST {
                 'autoConvert'    => ! empty( $s['auto_convert'] ),
                 'serveWebp'      => ! empty( $s['serve_webp'] ),
                 'resizeMaxWidth' => (int) ( $s['resize_max_width'] ?? 0 ),
+                'cptQuality'     => is_array( $s['cpt_quality'] ?? null ) ? $s['cpt_quality'] : (object) [],
             ],
             'savings'  => $this->compute_savings(),
         ] );

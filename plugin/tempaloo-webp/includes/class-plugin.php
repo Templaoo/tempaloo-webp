@@ -30,6 +30,10 @@ final class Tempaloo_WebP_Plugin {
             // Hooks into core's big_image_size_threshold filter; the user's
             // original is kept as a -scaled-original copy by WordPress itself.
             'resize_max_width' => 2560,
+            // Per-CPT quality overrides: { post_type_slug: int 1..100 }.
+            // Applied via the tempaloo_quality_for filter — devs who set this
+            // setting don't have to write a single line of PHP.
+            'cpt_quality'      => (object) [],
             'last_verified_at' => 0,
         ];
     }
@@ -65,6 +69,7 @@ final class Tempaloo_WebP_Plugin {
         ( new Tempaloo_WebP_Bulk() )->register();
         ( new Tempaloo_WebP_REST() )->register();
         ( new Tempaloo_WebP_Retry_Queue() )->register();
+        Tempaloo_WebP_Activity::register();
 
         // Resize-on-upload: pipe the user's setting into WP core's built-in
         // big-image threshold (since WP 5.3). Returning 0 disables the
@@ -74,5 +79,20 @@ final class Tempaloo_WebP_Plugin {
             $w = isset( $s['resize_max_width'] ) ? (int) $s['resize_max_width'] : 0;
             return $w > 0 ? $w : false; // false → disable, per WP docs
         }, 10, 1 );
+
+        // Per-CPT quality overrides: when an attachment is attached to a
+        // post of type X and X has a saved override, use that quality.
+        add_filter( 'tempaloo_quality_for', static function ( $quality, $attachment_id ) {
+            $s = self::get_settings();
+            $map = is_array( $s['cpt_quality'] ?? null ) ? $s['cpt_quality'] : (array) ( $s['cpt_quality'] ?? [] );
+            if ( empty( $map ) ) return $quality;
+            $parent = wp_get_post_parent_id( (int) $attachment_id );
+            if ( ! $parent ) return $quality;
+            $type = get_post_type( $parent );
+            if ( $type && isset( $map[ $type ] ) && $map[ $type ] > 0 ) {
+                return (int) $map[ $type ];
+            }
+            return $quality;
+        }, 10, 2 );
     }
 }

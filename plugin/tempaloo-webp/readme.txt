@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.7.1
+Stable tag: 0.8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -145,6 +145,11 @@ Example — skip conversion for any attachment in the `private/` upload subfolde
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 0.8.0 =
+* New: Activity log tab — chronological event timeline (last 200 events: conversions, license changes, restores, retries) with level filters (success/info/warn/error), CSV export for client invoicing, clear-log action.
+* New: Sites tab (visible only on multi-site plans) — current site card, quota visualisation, link to manage all sites on tempaloo.com/dashboard.
+* New: Per-content-type quality presets in Settings — pick Inherit / Normal / Aggressive / Ultra per detected public CPT (post, page, product, …). Powered by the existing `tempaloo_quality_for` filter, no PHP needed from you.
 
 = 0.7.1 =
 * Fix: missing `useRef` import in ui.tsx broke the admin app entirely on 0.7.0 (`ReferenceError: useRef is not defined`). The PerformanceScorecard / useTween hook needed it. Restored.

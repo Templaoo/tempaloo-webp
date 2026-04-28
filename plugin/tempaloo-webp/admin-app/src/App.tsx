@@ -5,8 +5,10 @@ import Overview from "./pages/Overview";
 import Bulk from "./pages/Bulk";
 import Settings from "./pages/Settings";
 import Upgrade from "./pages/Upgrade";
+import Activity from "./pages/Activity";
+import Sites from "./pages/Sites";
 
-type Tab = "overview" | "bulk" | "settings" | "upgrade";
+type Tab = "overview" | "bulk" | "activity" | "sites" | "settings" | "upgrade";
 
 function daysUntil(iso: string): number | null {
     if (!iso) return null;
@@ -227,6 +229,11 @@ export default function App() {
                         items={[
                             { value: "overview", label: "Overview", icon: <IconOverview /> },
                             { value: "bulk",     label: "Bulk",     icon: <IconBulk /> },
+                            { value: "activity", label: "Activity", icon: <IconActivity /> },
+                            // Sites tab only shown when the plan allows multiple sites
+                            ...(state.license.valid && state.license.sitesLimit !== 1
+                                ? [{ value: "sites" as Tab, label: "Sites", icon: <IconSites /> }]
+                                : []),
                             { value: "settings", label: "Settings", icon: <IconSettings /> },
                             { value: "upgrade",  label: "Upgrade",  icon: <IconUpgrade /> },
                         ]}
@@ -269,6 +276,8 @@ export default function App() {
                     <QuotaBanner state={state} onUpgrade={() => setTab("upgrade")} />
                     {tab === "overview" && <Overview state={state} onState={setState} freeQuota={freeQuota} onGoToUpgrade={() => setTab("upgrade")} />}
                     {tab === "bulk"     && <Bulk state={state} onUpgrade={() => setTab("upgrade")} />}
+                    {tab === "activity" && <Activity />}
+                    {tab === "sites"    && <Sites state={state} onUpgrade={() => setTab("upgrade")} />}
                     {tab === "settings" && <Settings state={state} onState={setState} />}
                     {tab === "upgrade"  && <Upgrade state={state} />}
                 </main>
@@ -328,6 +337,21 @@ function IconSettings() {
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="3" />
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.14.46.56.99 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+    );
+}
+function IconActivity() {
+    return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 12 H7 L10 4 L14 20 L17 12 H21" />
+        </svg>
+    );
+}
+function IconSites() {
+    return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M3 12 H21 M12 3 C8 8 8 16 12 21 M12 3 C16 8 16 16 12 21" />
         </svg>
     );
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, type AppState } from "../api";
 import { Button, Card, CardHeader, DecompressionWave, FilesStream, Input, Modal, Switch, toast } from "../components/ui";
 
@@ -22,6 +22,11 @@ type RestoreStage = "idle" | "confirm" | "running" | "done";
 export default function Settings({ state, onState }: { state: AppState; onState: (s: AppState) => void }) {
     const [s, setS] = useState(state.settings);
     const [saving, setSaving] = useState(false);
+    const [cpts, setCpts] = useState<{ slug: string; label: string }[] | null>(null);
+
+    useEffect(() => {
+        api.cpts().then((r) => setCpts(r.cpts)).catch(() => setCpts([]));
+    }, []);
     const [restoreStage, setRestoreStage] = useState<RestoreStage>("idle");
     const [restoreConfirmText, setRestoreConfirmText] = useState("");
     const [restoreResult, setRestoreResult] = useState<{ restored: number; filesRemoved: number } | null>(null);
@@ -173,6 +178,75 @@ export default function Settings({ state, onState }: { state: AppState; onState:
                     original is preserved as a <code className="text-[11px] bg-ink-100 px-1 rounded">-scaled-original</code> sibling
                     so nothing is lost.
                 </p>
+            </Card>
+
+            <Card>
+                <CardHeader
+                    title="Per-content-type quality"
+                    description="Override quality for images attached to specific post types. Useful when product photos need crispness and blog illustrations don't."
+                />
+                {cpts === null ? (
+                    <div className="space-y-2">
+                        {[0, 1, 2].map((i) => <div key={i} className="h-12 bg-ink-100 rounded-lg animate-pulse" />)}
+                    </div>
+                ) : cpts.length === 0 ? (
+                    <p className="text-sm text-ink-500">No public custom post types detected on this site.</p>
+                ) : (
+                    <>
+                        <div className="space-y-2 max-w-2xl">
+                            {cpts.map((cpt) => {
+                                const current = s.cptQuality[cpt.slug] ?? 0;
+                                const isCustom = current > 0 && ![85, 75, 60].includes(current);
+                                return (
+                                    <div key={cpt.slug} className="flex items-center gap-3 p-3 rounded-lg border border-ink-200 bg-white">
+                                        <div className="min-w-0 flex-1">
+                                            <div className="text-sm font-medium text-ink-900">{cpt.label}</div>
+                                            <div className="text-[11px] text-ink-500 font-mono">{cpt.slug}</div>
+                                        </div>
+                                        <div className="flex gap-1 shrink-0">
+                                            {[
+                                                { label: "Inherit", q: 0 },
+                                                { label: "Normal", q: 85 },
+                                                { label: "Aggr.",   q: 75 },
+                                                { label: "Ultra",   q: 60 },
+                                            ].map((opt) => {
+                                                const active = current === opt.q;
+                                                return (
+                                                    <button
+                                                        key={opt.label}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const next = { ...s.cptQuality };
+                                                            if (opt.q === 0) delete next[cpt.slug];
+                                                            else next[cpt.slug] = opt.q;
+                                                            setS({ ...s, cptQuality: next });
+                                                        }}
+                                                        className={
+                                                            "h-8 px-3 rounded-md text-xs font-medium transition border " +
+                                                            (active
+                                                                ? "bg-ink-900 text-white border-ink-900"
+                                                                : "bg-white text-ink-600 border-ink-200 hover:border-ink-300")
+                                                        }
+                                                    >
+                                                        {opt.label}
+                                                        {opt.q > 0 && active && <span className="ml-1 opacity-70">q={opt.q}</span>}
+                                                    </button>
+                                                );
+                                            })}
+                                            {isCustom && (
+                                                <span className="self-center text-[11px] font-mono text-ink-500 ml-1">q={current}</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        <p className="text-xs text-ink-500 mt-3">
+                            <strong>Inherit</strong> uses the global quality from the slider above. Otherwise the chosen preset wins
+                            for any image attached to a post of that type. Powered by the <code className="text-[11px] bg-ink-100 px-1 rounded">tempaloo_quality_for</code> filter.
+                        </p>
+                    </>
+                )}
             </Card>
 
             <Card>
