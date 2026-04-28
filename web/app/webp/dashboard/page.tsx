@@ -100,9 +100,9 @@ function TopBar({ email, name, authed }: { email: string; name?: string; authed:
                         <span style={{ fontSize: 13, color: "var(--ink)", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name ?? email}</span>
                     </div>
                     {authed ? (
-                        <a href="/api/auth/sign-out" style={{ fontSize: 12.5, color: "var(--ink-3)" }}>Sign out</a>
+                        <Link href="/webp/logout?return=/webp" style={{ fontSize: 12.5, color: "var(--ink-3)" }}>Sign out</Link>
                     ) : (
-                        <a href="/webp/activate" style={{ fontSize: 12.5, color: "var(--ink-3)" }}>Sign in</a>
+                        <Link href="/webp/activate" style={{ fontSize: 12.5, color: "var(--ink-3)" }}>Sign in</Link>
                     )}
                 </div>
             </div>
