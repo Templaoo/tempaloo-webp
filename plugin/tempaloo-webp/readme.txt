@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.5.1
+Stable tag: 0.6.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -145,6 +145,15 @@ Example — skip conversion for any attachment in the `private/` upload subfolde
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 0.6.0 =
+* New: Bulk pre-flight modal — shows quota, daily-cap and API health checks before starting, with an estimated runtime.
+* New: Live processing view during bulk runs — animated progress ring, live-rate ETA, success/failed/remaining counters.
+* New: Completion celebration with confetti + 3 next-step CTAs when a bulk job finishes.
+* New: Cancel-job confirmation modal (no more accidental cancels).
+* New: Smart upgrade nudge in Overview — only appears for engaged Free users (>=40% quota used), dismissible for 30 days, projects when you'll hit the cap.
+* New: License key is now locked & masked once active. A "Change" button opens a verify-and-switch modal — kills the footgun where users could wipe their key by tapping the input.
+* Improved: shared Modal + Confetti + ProgressRing primitives in the admin UI.
 
 = 0.5.1 =
 * New: three developer hooks documented in the new "Developer hooks" section.

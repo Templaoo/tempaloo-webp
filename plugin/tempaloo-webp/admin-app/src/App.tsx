@@ -267,7 +267,7 @@ export default function App() {
                     />
                     <RetryQueueBanner state={state} onRunRetry={runRetry} busy={retrying} />
                     <QuotaBanner state={state} onUpgrade={() => setTab("upgrade")} />
-                    {tab === "overview" && <Overview state={state} onState={setState} freeQuota={freeQuota} />}
+                    {tab === "overview" && <Overview state={state} onState={setState} freeQuota={freeQuota} onGoToUpgrade={() => setTab("upgrade")} />}
                     {tab === "bulk"     && <Bulk state={state} onUpgrade={() => setTab("upgrade")} />}
                     {tab === "settings" && <Settings state={state} onState={setState} />}
                     {tab === "upgrade"  && <Upgrade state={state} />}

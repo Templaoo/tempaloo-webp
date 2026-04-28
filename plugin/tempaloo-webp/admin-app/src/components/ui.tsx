@@ -224,6 +224,174 @@ export function Toasts() {
     );
 }
 
+/**
+ * Modal — accessible, focus-trapped, escape-to-close, scale+fade animation.
+ * Use for any destructive or commit-now action where the native browser
+ * confirm() would feel cheap.
+ */
+export function Modal({
+    open, onClose, title, description, children, size = "md", variant = "neutral",
+}: {
+    open: boolean;
+    onClose: () => void;
+    title: string;
+    description?: ReactNode;
+    children: ReactNode;
+    size?: "sm" | "md" | "lg";
+    variant?: "neutral" | "danger" | "success";
+}) {
+    useEffect(() => {
+        if (!open) return;
+        const prev = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+        const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+        window.addEventListener("keydown", onKey);
+        return () => {
+            document.body.style.overflow = prev;
+            window.removeEventListener("keydown", onKey);
+        };
+    }, [open, onClose]);
+
+    if (!open) return null;
+
+    const widths = { sm: "max-w-sm", md: "max-w-lg", lg: "max-w-2xl" };
+    const accent = {
+        neutral: "border-ink-200",
+        danger:  "border-red-300 ring-2 ring-red-100",
+        success: "border-emerald-300 ring-2 ring-emerald-100",
+    }[variant];
+
+    return (
+        <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={title}
+            className="fixed inset-0 z-[10000] flex items-center justify-center p-4"
+            style={{ animation: "tempaloo-fadein 180ms ease forwards" }}
+        >
+            <button
+                type="button"
+                aria-label="Close"
+                onClick={onClose}
+                className="absolute inset-0 bg-black/55 backdrop-blur-sm cursor-pointer border-0"
+            />
+            <div
+                className={clsx(
+                    "relative w-full bg-white rounded-2xl shadow-2xl border p-6",
+                    widths[size],
+                    accent,
+                )}
+                style={{ animation: "tempaloo-popin 220ms cubic-bezier(.16,1,.3,1) forwards", maxHeight: "calc(100vh - 32px)", overflowY: "auto" }}
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="mb-4">
+                    <h3 className="text-lg font-semibold text-ink-900 tracking-tight">{title}</h3>
+                    {description && <div className="mt-1 text-sm text-ink-500">{description}</div>}
+                </div>
+                {children}
+            </div>
+            <style>{`
+                @keyframes tempaloo-fadein { from { opacity: 0 } to { opacity: 1 } }
+                @keyframes tempaloo-popin {
+                    from { opacity: 0; transform: translateY(8px) scale(0.96) }
+                    to   { opacity: 1; transform: none }
+                }
+            `}</style>
+        </div>
+    );
+}
+
+/**
+ * CSS-only confetti burst. Renders 24 particles falling with random offsets,
+ * lifecycle = 1.6s. Safe inside any container that is `position: relative`.
+ * Skips render entirely under prefers-reduced-motion.
+ */
+export function Confetti({ active }: { active: boolean }) {
+    const [reduced, setReduced] = useState(false);
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        setReduced(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    }, []);
+    if (!active || reduced) return null;
+    const colors = ["#10b981", "#3b82f6", "#f59e0b", "#ec4899", "#8b5cf6", "#06b6d4"];
+    return (
+        <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+            {Array.from({ length: 24 }, (_, i) => {
+                const left = (i / 24) * 100 + (Math.random() - 0.5) * 8;
+                const delay = Math.random() * 250;
+                const duration = 1300 + Math.random() * 600;
+                const rotate = Math.random() * 720 - 360;
+                const color = colors[i % colors.length];
+                const w = 6 + Math.random() * 6;
+                const h = 8 + Math.random() * 8;
+                return (
+                    <span
+                        key={i}
+                        style={{
+                            position: "absolute",
+                            top: -16,
+                            left: left + "%",
+                            width: w, height: h,
+                            background: color,
+                            borderRadius: 2,
+                            opacity: 0,
+                            animation: `tempaloo-confetti ${duration}ms cubic-bezier(.16,1,.3,1) ${delay}ms forwards`,
+                            ["--tempaloo-rot" as never]: rotate + "deg",
+                        }}
+                    />
+                );
+            })}
+            <style>{`
+                @keyframes tempaloo-confetti {
+                    0%   { opacity: 0; transform: translateY(-30px) rotate(0deg) }
+                    10%  { opacity: 1 }
+                    100% { opacity: 0; transform: translateY(420px) rotate(var(--tempaloo-rot, 360deg)) }
+                }
+            `}</style>
+        </div>
+    );
+}
+
+/**
+ * SVG progress ring with a tweened percentage in the center.
+ * Reused by the bulk live view + future onboarding flows.
+ */
+export function ProgressRing({ value, size = 140, label, sub }: { value: number; size?: number; label?: string; sub?: string }) {
+    const stroke = 10;
+    const radius = (size - stroke) / 2;
+    const C = 2 * Math.PI * radius;
+    const safe = Math.max(0, Math.min(100, value));
+    return (
+        <div className="relative" style={{ width: size, height: size }}>
+            <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+                <circle cx={size / 2} cy={size / 2} r={radius} stroke="rgb(229 231 235)" strokeWidth={stroke} fill="none" />
+                <circle
+                    cx={size / 2} cy={size / 2} r={radius}
+                    stroke="url(#tempaloo-ring-grad)"
+                    strokeWidth={stroke}
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeDasharray={C}
+                    strokeDashoffset={C * (1 - safe / 100)}
+                    transform={`rotate(-90 ${size / 2} ${size / 2})`}
+                    style={{ transition: "stroke-dashoffset .35s cubic-bezier(.4,0,.2,1)" }}
+                />
+                <defs>
+                    <linearGradient id="tempaloo-ring-grad" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%" stopColor="#10b981" />
+                        <stop offset="100%" stopColor="#3b82f6" />
+                    </linearGradient>
+                </defs>
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                <div className="text-3xl font-bold text-ink-900 tabular-nums">{Math.round(safe)}%</div>
+                {label && <div className="text-xs text-ink-500 mt-0.5">{label}</div>}
+                {sub && <div className="text-[10px] text-ink-400 mt-0.5 font-mono">{sub}</div>}
+            </div>
+        </div>
+    );
+}
+
 export function Tabs<T extends string>({ value, onChange, items }: {
     value: T;
     onChange: (v: T) => void;
