@@ -25,7 +25,7 @@
     "@freemius/sdk": "^0.3.0",
     "@getbrevo/brevo": "^5.0.4",
     "argon2": "^0.44.0",
-    "dotenv": "^16.4.5",
+    "dotenv": "^17.4.2",
     "fastify": "^4.29.1",
     "otpauth": "^9.5.1",
     "pg": "^8.13.0",
