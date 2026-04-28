@@ -2,6 +2,12 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { query } from "../../db.js";
 import { auditLog } from "../../lib/audit.js";
+import { sendTransactional } from "../../lib/email.js";
+import {
+    paymentReceivedEmail, quotaExceededEmail, quotaWarnEmail,
+    subscriptionCancelledEmail, trialEndingEmail, trialStartedEmail,
+    welcomeFreeEmail,
+} from "../../lib/email-templates.js";
 import { requireAdmin } from "../../middleware/require-admin.js";
 
 /**
@@ -508,6 +514,46 @@ export default async function adminDataRoutes(app: FastifyInstance) {
         page_size: z.coerce.number().int().min(1).max(200).default(100),
     });
 
+    // ─── /admin/email/test ──────────────────────────────────────────
+    // Fire any transactional template to any recipient — for QA without
+    // creating real signups in the DB. Audited at warn so we always know
+    // an admin sent a fake email (could otherwise be confused for prod).
+    const emailTestBody = z.object({
+        to: z.string().email(),
+        template: z.enum([
+            "welcome-free", "trial-started", "trial-ending",
+            "payment-received", "quota-warn", "quota-exceeded",
+            "subscription-cancelled",
+        ]),
+    });
+    app.post("/admin/email/test", guard, async (req, reply) => {
+        const parsed = emailTestBody.safeParse(req.body);
+        if (!parsed.success) {
+            return reply.code(400).send({ error: { code: "bad_body", message: "to + template required", details: parsed.error.flatten() } });
+        }
+        const { to, template } = parsed.data;
+
+        const sample = sampleCtx(to);
+        let payload;
+        switch (template) {
+            case "welcome-free":           payload = welcomeFreeEmail(sample); break;
+            case "trial-started":          payload = trialStartedEmail(sample); break;
+            case "trial-ending":           payload = trialEndingEmail(sample); break;
+            case "payment-received":       payload = paymentReceivedEmail(sample); break;
+            case "quota-warn":             payload = quotaWarnEmail(sample); break;
+            case "quota-exceeded":         payload = quotaExceededEmail(sample); break;
+            case "subscription-cancelled": payload = subscriptionCancelledEmail(sample); break;
+        }
+
+        const result = await sendTransactional(payload, req.log);
+        await auditLog({
+            admin: req.admin!, req,
+            action: "email.test", severity: "warn",
+            metadata: { to, template, ok: result.ok, reason: result.reason ?? null },
+        });
+        return reply.code(result.ok ? 200 : 502).send({ ok: result.ok, reason: result.reason, messageId: result.messageId });
+    });
+
     app.get("/admin/audit", guard, async (req, reply) => {
         const parsed = auditQuery.safeParse(req.query);
         if (!parsed.success) {
@@ -541,4 +587,27 @@ export default async function adminDataRoutes(app: FastifyInstance) {
 
         return { entries: rows, page, page_size };
     });
+}
+
+/**
+ * Realistic but obviously-fake context for /admin/email/test.
+ * Uses a clearly-test license key + plan so the recipient can tell at
+ * a glance that this isn't a real notification.
+ */
+function sampleCtx(toEmail: string) {
+    const fakeKey = "TEST00000000000000000000000000000000000000000000000000000000TEST";
+    return {
+        email: toEmail,
+        firstName: "Otmane",
+        licenseKey: fakeKey,
+        planName: "Growth",
+        daysLeft: 3,
+        trialEndsOn: new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10),
+        amountCents: 1200,
+        currency: "EUR",
+        nextBillingOn: new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10),
+        usedPct: 80,
+        imagesUsed: 20_000,
+        imagesQuota: 25_000,
+    };
 }
