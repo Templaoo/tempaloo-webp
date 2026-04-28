@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { LogoMark } from "@/components/Logo";
 import { adminGet, AdminApiError } from "@/lib/admin/api";
 import { LogoutButton } from "@/components/admin/LogoutButton";
-import { headers } from "next/headers";
+import { cookies } from "next/headers";
 
 // Admin pages are authenticated content — never let any layer (browser,
 // CDN edge, ISP proxy) cache them. The middleware adds Cache-Control,
@@ -23,35 +23,39 @@ interface Me {
 }
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
-    // The login page is also under /admin, but it skips the chrome.
-    // We detect that here so we can render plain children for it.
-    const path = headers().get("x-invoke-path") ?? headers().get("x-pathname") ?? "";
-    const isLogin = path.endsWith("/admin/login");
+    // No reliable way to read the request pathname from a Server-Component
+    // layout in App Router, so we infer "is this the login page" by the
+    // *absence* of the admin cookie. The middleware guarantees:
+    //   · no cookie → only /admin/login is reachable
+    //   · cookie    → all other /admin/* pages are reachable
+    // So no-cookie ≡ login page from the layout's perspective.
+    const adminCookieName = process.env.ADMIN_COOKIE_NAME ?? "tempaloo_admin_sid";
+    const hasCookie = !!cookies().get(adminCookieName);
 
-    let me: Me["user"] | undefined;
-    if (!isLogin) {
-        try {
-            const res = await adminGet<Me>("/admin/auth/me");
-            me = res.user;
-        } catch (e) {
-            if (e instanceof AdminApiError && (e.status === 401 || e.status === 403)) {
-                // Middleware should have caught this, but render a minimal
-                // "expired" notice rather than throwing to the user.
-                return (
-                    <main style={shellStyle}>
-                        <div className="surface-card" style={{ padding: 32, maxWidth: 420, margin: "120px auto", textAlign: "center" }}>
-                            <h2 style={{ margin: 0, fontSize: 18 }}>Session expired</h2>
-                            <p style={{ marginTop: 8, color: "var(--ink-3)" }}>Please sign in again.</p>
-                            <Link href="/admin/login" className="btn btn-primary btn-sm" style={{ marginTop: 16, display: "inline-flex" }}>Sign in</Link>
-                        </div>
-                    </main>
-                );
-            }
-            throw e;
-        }
+    if (!hasCookie) {
+        return <main style={shellStyle}>{children}</main>;
     }
 
-    if (isLogin) return <main style={shellStyle}>{children}</main>;
+    let me: Me["user"] | undefined;
+    try {
+        const res = await adminGet<Me>("/admin/auth/me");
+        me = res.user;
+    } catch (e) {
+        if (e instanceof AdminApiError && (e.status === 401 || e.status === 403)) {
+            // Cookie present but rejected by API (revoked, expired, MFA pending).
+            // Render a minimal "expired" panel pointing back to login.
+            return (
+                <main style={shellStyle}>
+                    <div className="surface-card" style={{ padding: 32, maxWidth: 420, margin: "120px auto", textAlign: "center" }}>
+                        <h2 style={{ margin: 0, fontSize: 18 }}>Session expired</h2>
+                        <p style={{ marginTop: 8, color: "var(--ink-3)" }}>Please sign in again.</p>
+                        <Link href="/admin/login" className="btn btn-primary btn-sm" style={{ marginTop: 16, display: "inline-flex" }}>Sign in</Link>
+                    </div>
+                </main>
+            );
+        }
+        throw e;
+    }
 
     return (
         <main style={shellStyle}>
