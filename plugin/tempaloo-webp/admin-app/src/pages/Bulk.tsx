@@ -572,7 +572,7 @@ function CompletionCard({ status, onDismiss, onUpgrade, isFree }: {
     isFree: boolean;
 }) {
     return (
-        <Card className="relative overflow-hidden bg-gradient-to-br from-emerald-50 via-white to-blue-50 border-emerald-300">
+        <Card className="relative overflow-hidden bg-gradient-to-br from-emerald-50 via-white to-brand-50 border-emerald-300">
             <Confetti active />
             <div className="relative text-center py-4">
                 <div className="inline-flex h-14 w-14 rounded-full bg-emerald-100 items-center justify-center mb-3 mx-auto">

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, boot, fetchPlans, type AppState, type Plan } from "./api";
-import { Badge, Tabs, Toasts, toast } from "./components/ui";
+import { Badge, SkeletonStyles, Tabs, Toasts, toast } from "./components/ui";
 import Overview from "./pages/Overview";
 import Bulk from "./pages/Bulk";
 import Settings from "./pages/Settings";
@@ -194,6 +194,7 @@ export default function App() {
     return (
         <div className="tempaloo-wrap">
             <Toasts />
+            <SkeletonStyles />
 
             {/* Top bar */}
             <header className="flex items-center justify-between mb-6">
@@ -211,9 +212,10 @@ export default function App() {
                     </Badge>
                     <a
                         className="text-xs font-medium text-ink-500 hover:text-ink-900"
-                        href="https://tempaloo.com/webp"
+                        href="https://tempaloo.com/webp/dashboard"
                         target="_blank"
                         rel="noopener"
+                        title="Open the web dashboard — sign in if needed"
                     >
                         Dashboard ↗
                     </a>
@@ -274,7 +276,14 @@ export default function App() {
                     />
                     <RetryQueueBanner state={state} onRunRetry={runRetry} busy={retrying} />
                     <QuotaBanner state={state} onUpgrade={() => setTab("upgrade")} />
-                    {tab === "overview" && <Overview state={state} onState={setState} freeQuota={freeQuota} onGoToUpgrade={() => setTab("upgrade")} />}
+                    {tab === "overview" && <Overview
+                        state={state}
+                        onState={setState}
+                        freeQuota={freeQuota}
+                        onGoToUpgrade={() => setTab("upgrade")}
+                        onGoToBulk={() => setTab("bulk")}
+                        onGoToActivity={() => setTab("activity")}
+                    />}
                     {tab === "bulk"     && <Bulk state={state} onUpgrade={() => setTab("upgrade")} />}
                     {tab === "activity" && <Activity />}
                     {tab === "sites"    && <Sites state={state} onUpgrade={() => setTab("upgrade")} />}

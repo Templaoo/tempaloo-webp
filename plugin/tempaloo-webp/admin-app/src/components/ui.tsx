@@ -187,6 +187,52 @@ export function Progress({ value, label }: { value: number; label?: string }) {
     );
 }
 
+/**
+ * Skeleton — uniform shimmer block, used during initial fetches across
+ * Activity / Sites / Upgrade / etc. so loading states feel consistent
+ * (one primitive instead of every page rolling its own .animate-pulse).
+ */
+export function Skeleton({ className, height, width, circle }: {
+    className?: string;
+    height?: number | string;
+    width?: number | string;
+    circle?: boolean;
+}) {
+    const style: React.CSSProperties = {};
+    if (height !== undefined) style.height = typeof height === "number" ? `${height}px` : height;
+    if (width !== undefined)  style.width  = typeof width  === "number" ? `${width}px`  : width;
+    return (
+        <div
+            aria-hidden
+            className={clsx(
+                "tempaloo-skel",
+                circle ? "rounded-full" : "rounded-lg",
+                className,
+            )}
+            style={style}
+        />
+    );
+}
+
+export function SkeletonStyles() {
+    return (
+        <style>{`
+            .tempaloo-skel {
+                background: linear-gradient(90deg, #f1f5f9 0%, #e2e8f0 50%, #f1f5f9 100%);
+                background-size: 200% 100%;
+                animation: tempalooSkel 1.4s ease-in-out infinite;
+            }
+            @keyframes tempalooSkel {
+                from { background-position: 200% 0; }
+                to   { background-position: -200% 0; }
+            }
+            @media (prefers-reduced-motion: reduce) {
+                .tempaloo-skel { animation: none; background: #e2e8f0; }
+            }
+        `}</style>
+    );
+}
+
 /* ── Toast system v2 ────────────────────────────────────────────────── */
 
 export type ToastKind = "success" | "error" | "info" | "warn";
@@ -295,7 +341,7 @@ function ToastCard({ item, onDismiss, onPauseChange }: {
         success: { bar: "bg-emerald-500", bg: "bg-white",  border: "border-emerald-200", text: "text-ink-900", icon: "text-emerald-600", iconBg: "bg-emerald-100" },
         error:   { bar: "bg-red-500",     bg: "bg-white",  border: "border-red-200",     text: "text-ink-900", icon: "text-red-600",     iconBg: "bg-red-100"     },
         warn:    { bar: "bg-amber-500",   bg: "bg-white",  border: "border-amber-200",   text: "text-ink-900", icon: "text-amber-600",   iconBg: "bg-amber-100"   },
-        info:    { bar: "bg-blue-500",    bg: "bg-white",  border: "border-ink-200",     text: "text-ink-900", icon: "text-blue-600",    iconBg: "bg-blue-100"    },
+        info:    { bar: "bg-brand-500",   bg: "bg-white",  border: "border-ink-200",     text: "text-ink-900", icon: "text-brand-600",   iconBg: "bg-brand-50"    },
     };
     const p = palette[item.kind];
     const icon = item.kind === "success" ? "✓"
@@ -408,9 +454,9 @@ export function PerformanceScorecard({
     if (converted === 0) {
         // Empty state — gentler card so the new user isn't faced with a giant zero
         return (
-            <div ref={ref} className="rounded-2xl border border-ink-200 bg-gradient-to-br from-ink-50 via-white to-blue-50/50 p-6">
+            <div ref={ref} className="rounded-2xl border border-ink-200 bg-gradient-to-br from-ink-50 via-white to-brand-50/40 p-6">
                 <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-blue-100 grid place-items-center text-blue-600 text-xl">⚡</div>
+                    <div className="h-10 w-10 rounded-full bg-brand-50 grid place-items-center text-brand-600 text-xl">⚡</div>
                     <div>
                         <div className="text-base font-semibold text-ink-900">Ready to make your site faster.</div>
                         <div className="text-sm text-ink-600">Upload an image or run a Bulk to see your savings here.</div>
@@ -423,7 +469,7 @@ export function PerformanceScorecard({
     return (
         <div
             ref={ref}
-            className="relative overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50/70 via-white to-blue-50/50 p-6 sm:p-8"
+            className="relative overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50/70 via-white to-brand-50/40 p-6 sm:p-8"
         >
             {/* Subtle decorative grid */}
             <div aria-hidden className="absolute inset-0 pointer-events-none opacity-[0.04]" style={{
@@ -490,8 +536,8 @@ function Gauge({ kind, label, value, fillPct, shown }: {
 }) {
     const grad = kind === "bandwidth"
         ? "from-emerald-400 to-emerald-600"
-        : "from-blue-400 to-blue-600";
-    const ring = kind === "bandwidth" ? "text-emerald-600" : "text-blue-600";
+        : "from-brand-400 to-brand-600";
+    const ring = kind === "bandwidth" ? "text-emerald-600" : "text-brand-600";
     const icon = kind === "bandwidth"
         ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 18 0 9 9 0 1 0 -18 0" /><path d="M12 8 V12 L15 15" /></svg>
         : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 L4 14 H11 L10 22 L20 10 H13 L14 2 Z" /></svg>;
@@ -637,7 +683,8 @@ export function Confetti({ active }: { active: boolean }) {
         setReduced(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
     }, []);
     if (!active || reduced) return null;
-    const colors = ["#10b981", "#3b82f6", "#f59e0b", "#ec4899", "#8b5cf6", "#06b6d4"];
+    // Brand-aligned: emerald, brand-500, amber, brand-700, ink-400, emerald-700
+    const colors = ["#10b981", "#3b6cff", "#f59e0b", "#1e42b8", "#94a3b8", "#047857"];
     return (
         <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
             {Array.from({ length: 24 }, (_, i) => {
@@ -703,7 +750,7 @@ export function ProgressRing({ value, size = 140, label, sub }: { value: number;
                 <defs>
                     <linearGradient id="tempaloo-ring-grad" x1="0" y1="0" x2="1" y2="1">
                         <stop offset="0%" stopColor="#10b981" />
-                        <stop offset="100%" stopColor="#3b82f6" />
+                        <stop offset="100%" stopColor="#2a57e6" />
                     </linearGradient>
                 </defs>
             </svg>
@@ -731,7 +778,7 @@ export function ProgressRing({ value, size = 140, label, sub }: { value: number;
 export function CompressionFactory({ height = 110 }: { height?: number }) {
     return (
         <div
-            className="relative w-full overflow-hidden rounded-xl border border-ink-200 bg-gradient-to-br from-blue-50/60 via-white to-emerald-50/60"
+            className="relative w-full overflow-hidden rounded-xl border border-ink-200 bg-gradient-to-br from-brand-50/50 via-white to-emerald-50/50"
             style={{ height }}
             aria-hidden
         >
@@ -913,13 +960,13 @@ const cfCss = `
     width: 28px; height: 28px;
     margin: -14px 0 0 -14px;
     border-radius: 50%;
-    background: radial-gradient(circle at 35% 30%, #60a5fa, #1e40af);
-    box-shadow: 0 0 12px rgba(59, 130, 246, 0.5), inset 0 -4px 8px rgba(0,0,0,0.3);
+    background: radial-gradient(circle at 35% 30%, #5688ff, #1a3891);
+    box-shadow: 0 0 12px rgba(42, 87, 230, 0.5), inset 0 -4px 8px rgba(0,0,0,0.3);
     animation: cfCorePulse 1.2s ease-in-out infinite;
 }
 @keyframes cfCorePulse {
-    0%, 100% { transform: scale(1); box-shadow: 0 0 12px rgba(59, 130, 246, 0.5), inset 0 -4px 8px rgba(0,0,0,0.3); }
-    50%      { transform: scale(1.15); box-shadow: 0 0 22px rgba(59, 130, 246, 0.8), inset 0 -4px 8px rgba(0,0,0,0.3); }
+    0%, 100% { transform: scale(1); box-shadow: 0 0 12px rgba(42, 87, 230, 0.5), inset 0 -4px 8px rgba(0,0,0,0.3); }
+    50%      { transform: scale(1.15); box-shadow: 0 0 22px rgba(42, 87, 230, 0.8), inset 0 -4px 8px rgba(0,0,0,0.3); }
 }
 .cf-saved {
     position: absolute;

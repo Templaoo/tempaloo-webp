@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import clsx from "clsx";
 import { FREEMIUS, fetchPlans, type AppState, type PaidPlanCode, type Plan } from "../api";
-import { Badge, Button, Card, CardHeader, Progress, toast } from "../components/ui";
+import { Badge, Button, Card, CardHeader, Progress, Skeleton, toast } from "../components/ui";
 
 type Billing = "monthly" | "annual";
 
@@ -210,7 +210,21 @@ function TierSkeleton() {
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
             {[0, 1, 2, 3].map((i) => (
-                <div key={i} className="rounded-xl border border-ink-200 p-5 h-[360px] bg-ink-50/50 animate-pulse" />
+                <div key={i} className="rounded-xl border border-ink-200 p-5 space-y-3">
+                    <Skeleton height={20} width={80} />
+                    <Skeleton height={14} width="80%" />
+                    <Skeleton height={36} width={100} />
+                    <Skeleton height={1} width="100%" />
+                    <Skeleton height={12} width="65%" />
+                    <Skeleton height={12} width="55%" />
+                    <div className="space-y-1.5 pt-2">
+                        <Skeleton height={10} width="90%" />
+                        <Skeleton height={10} width="85%" />
+                        <Skeleton height={10} width="78%" />
+                        <Skeleton height={10} width="82%" />
+                    </div>
+                    <Skeleton height={36} width="100%" className="mt-4" />
+                </div>
             ))}
         </div>
     );

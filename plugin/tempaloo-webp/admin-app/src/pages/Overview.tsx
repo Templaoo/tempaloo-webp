@@ -15,11 +15,13 @@ const NUDGE_DISMISS_KEY = "tempaloo_upgrade_nudge_dismissed_until";
  *     30-day dismiss memory in localStorage so we don't pester users who
  *     said "no thanks".
  */
-export default function Overview({ state, onState, freeQuota, onGoToUpgrade }: {
+export default function Overview({ state, onState, freeQuota, onGoToUpgrade, onGoToBulk, onGoToActivity }: {
     state: AppState;
     onState: (s: AppState) => void;
     freeQuota: number | null;
     onGoToUpgrade?: () => void;
+    onGoToBulk?: () => void;
+    onGoToActivity?: () => void;
 }) {
     const [key, setKey] = useState(state.license.key);
     const [activating, setActivating] = useState(false);
@@ -150,6 +152,21 @@ export default function Overview({ state, onState, freeQuota, onGoToUpgrade }: {
                         }
                     />
                     <QuotaRing used={used} limit={limit} />
+
+                    {/* Plan capacity callout — explicit "X / Y per month" */}
+                    {state.license.valid && (
+                        <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-brand-50 border border-brand-100 px-3 py-1 text-xs font-medium text-brand-700">
+                            <span className="font-mono tabular-nums">
+                                {limit === -1
+                                    ? "Unlimited"
+                                    : `${used.toLocaleString()} / ${limit.toLocaleString()}`}
+                            </span>
+                            <span className="text-brand-600/70">
+                                {limit === -1 ? "fair use 500k/mo" : "images this month"}
+                            </span>
+                        </div>
+                    )}
+
                     <div className="mt-4 grid grid-cols-3 w-full text-center gap-2">
                         <div>
                             <div className="text-xs text-ink-500">Used</div>
@@ -164,6 +181,26 @@ export default function Overview({ state, onState, freeQuota, onGoToUpgrade }: {
                             <div className="font-semibold text-ink-900">{resetDate}</div>
                         </div>
                     </div>
+
+                    {/* Plan capacity bar — visual gauge of monthly allowance */}
+                    {state.license.valid && limit > 0 && limit !== -1 && (
+                        <div className="mt-4 w-full">
+                            <div className="text-[10px] font-mono uppercase tracking-wider text-ink-400 mb-1.5">
+                                Plan capacity
+                            </div>
+                            <div className="h-1.5 bg-ink-100 rounded-full overflow-hidden">
+                                <div
+                                    className="h-full bg-gradient-to-r from-emerald-400 to-brand-500 transition-all duration-500"
+                                    style={{ width: `${Math.min(100, usagePct)}%` }}
+                                />
+                            </div>
+                            <div className="flex justify-between text-[10px] text-ink-400 font-mono mt-1">
+                                <span>0</span>
+                                <span>{Math.round(limit / 2).toLocaleString()}</span>
+                                <span>{limit.toLocaleString()}</span>
+                            </div>
+                        </div>
+                    )}
                 </Card>
 
                 <Card className="lg:col-span-2">
@@ -199,6 +236,30 @@ export default function Overview({ state, onState, freeQuota, onGoToUpgrade }: {
                     )}
                 </Card>
             </div>
+
+            {/* ─── Quick actions ─────────────────────────────────────────── */}
+            {state.license.valid && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <QuickAction
+                        icon="↻"
+                        title="Run Bulk"
+                        sub="Convert your existing library"
+                        onClick={() => onGoToBulk?.()}
+                    />
+                    <QuickAction
+                        icon="≡"
+                        title="View activity"
+                        sub="Last 200 events · CSV export"
+                        onClick={() => onGoToActivity?.()}
+                    />
+                    <QuickAction
+                        icon="↗"
+                        title="Open dashboard"
+                        sub="Manage license · all sites"
+                        href="https://tempaloo.com/webp/dashboard"
+                    />
+                </div>
+            )}
 
             {/* ─── License panel (locked once valid) ─────────────────────── */}
             {state.license.valid && (
@@ -291,7 +352,7 @@ function UpgradeNudge({ used, limit, onDismiss, onUpgrade }: {
     const projectedPct = Math.min(100, (projected / Math.max(1, limit)) * 100);
 
     return (
-        <Card className="relative bg-gradient-to-br from-purple-50 via-pink-50/50 to-amber-50/40 border-purple-200">
+        <Card className="relative bg-gradient-to-br from-brand-50 via-white to-amber-50/40 border-brand-200">
             <button
                 type="button"
                 onClick={onDismiss}
@@ -305,7 +366,7 @@ function UpgradeNudge({ used, limit, onDismiss, onUpgrade }: {
 
             <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-6 items-center">
                 <div>
-                    <div className="text-xs font-mono uppercase tracking-wider text-purple-700 mb-1">Heads up</div>
+                    <div className="text-xs font-mono uppercase tracking-wider text-brand-700 mb-1">Heads up</div>
                     <h3 className="text-lg font-semibold text-ink-900 tracking-tight">
                         {willHitCap
                             ? `You'll hit the Free cap around day ${Math.min(daysInMonth, dayCapHit)}`
@@ -371,4 +432,30 @@ function BarRow({ label, usedPct, projPct, text, tone }: {
             </div>
         </div>
     );
+}
+
+function QuickAction({ icon, title, sub, onClick, href }: {
+    icon: string;
+    title: string;
+    sub: string;
+    onClick?: () => void;
+    href?: string;
+}) {
+    const inner = (
+        <>
+            <div className="h-9 w-9 rounded-lg bg-brand-50 grid place-items-center text-brand-600 text-base font-semibold shrink-0 group-hover:bg-brand-100 transition">
+                {icon}
+            </div>
+            <div className="min-w-0 flex-1 text-left">
+                <div className="text-sm font-semibold text-ink-900 group-hover:text-brand-700 transition">{title}</div>
+                <div className="text-xs text-ink-500 mt-0.5">{sub}</div>
+            </div>
+            <div className="text-ink-300 group-hover:text-brand-500 transition">→</div>
+        </>
+    );
+    const className = "group flex items-center gap-3 rounded-xl border border-ink-200 bg-white p-3.5 hover:border-brand-300 hover:shadow-card transition cursor-pointer";
+    if (href) {
+        return <a href={href} target="_blank" rel="noopener" className={className}>{inner}</a>;
+    }
+    return <button type="button" onClick={onClick} className={`${className} w-full text-left`}>{inner}</button>;
 }

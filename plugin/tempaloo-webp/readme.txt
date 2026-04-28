@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.8.0
+Stable tag: 0.9.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -145,6 +145,12 @@ Example — skip conversion for any attachment in the `private/` upload subfolde
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 0.9.0 =
+* Improved: Overview now shows the active plan's monthly capacity prominently — a brand-colored pill ("847 / 5,000 images this month"), a 0→max gauge under the quota ring, and a new Quick Actions row (Run Bulk · View activity · Open dashboard).
+* New: Skeleton primitive (shimmer animation) used everywhere a fetch is in flight — Activity, Sites, Upgrade, Settings (CPT list).
+* Improved: Color tokens audit — every off-brand blue/purple/pink swapped for the brand palette (brand-* / emerald-* / amber-* / red-* / ink-*). ProgressRing gradient, CompressionFactory grinder core, Confetti palette, Toast info kind, and the upgrade nudge are all on-brand now.
+* Improved: "Dashboard ↗" link in the admin header now opens /webp/dashboard directly (was the public landing). The dashboard handles the auth flow.
 
 = 0.8.0 =
 * New: Activity log tab — chronological event timeline (last 200 events: conversions, license changes, restores, retries) with level filters (success/info/warn/error), CSV export for client invoicing, clear-log action.

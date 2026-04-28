@@ -1,5 +1,5 @@
 import { boot, type AppState } from "../api";
-import { Badge, Button, Card, CardHeader } from "../components/ui";
+import { Badge, Button, Card, CardHeader, Skeleton } from "../components/ui";
 
 /**
  * Sites tab — visible only when the user is on a multi-site plan
@@ -9,6 +9,26 @@ import { Badge, Button, Card, CardHeader } from "../components/ui";
  * full list lives there, not in this plugin).
  */
 export default function Sites({ state, onUpgrade }: { state: AppState; onUpgrade?: () => void }) {
+    // While the parent is still hydrating quota counts (rare but possible
+    // right after activate), show a skeleton instead of "1 / 5" placeholder.
+    if (!state.quota) {
+        return (
+            <div className="grid gap-6">
+                <Card>
+                    <div className="space-y-4">
+                        <Skeleton height={20} width={180} />
+                        <Skeleton height={14} width="60%" />
+                        <Skeleton height={8}  width="100%" />
+                        <Skeleton height={64} width="100%" />
+                        <div className="flex gap-2">
+                            <Skeleton height={36} width={220} />
+                        </div>
+                    </div>
+                </Card>
+            </div>
+        );
+    }
+
     const sitesUsed = state.quota?.sitesUsed ?? 1;
     const sitesLimit = state.license.sitesLimit;
     const isUnlimited = sitesLimit === -1;
