@@ -118,37 +118,20 @@ export default function Overview({ state, onState, freeQuota, onGoToUpgrade, onG
 
             {/* ─── Activate (only when no valid license) ─────────────────── */}
             {!state.license.valid && (
-                <Card className="bg-gradient-to-br from-brand-50 to-white border-brand-200">
-                    <CardHeader
-                        title="Activate Tempaloo WebP"
-                        description={
-                            freeQuota === null
-                                ? "Generate a free key or paste one you already have."
-                                : `Generate a free key (${freeQuota.toLocaleString()} images / month) or paste one you already have.`
-                        }
-                        right={<Badge variant="brand">Free plan available</Badge>}
-                    />
-                    <div className="flex flex-col sm:flex-row gap-2">
-                        <Input
-                            value={key}
-                            onChange={(e) => setKey(e.target.value)}
-                            placeholder="Paste your license key"
-                            className="font-mono text-xs"
-                        />
-                        <Button variant="secondary" onClick={() => window.open(boot.activateUrl, "_blank")}>
-                            Generate a key
-                        </Button>
-                        <Button onClick={activate} loading={activating}>
-                            Activate
-                        </Button>
-                    </div>
-                    {activateError?.code === "site_limit_reached" && (
-                        <SiteLimitPanel onGoToUpgrade={onGoToUpgrade} onDismiss={() => setActivateError(null)} />
-                    )}
-                    {activateError?.code === "site_already_claimed" && (
-                        <SiteAlreadyClaimedPanel onDismiss={() => setActivateError(null)} />
-                    )}
-                </Card>
+                <ActivateHero
+                    freeQuota={freeQuota}
+                    activateUrl={boot.activateUrl}
+                    pasteKey={key}
+                    onPasteKeyChange={setKey}
+                    onActivate={activate}
+                    activating={activating}
+                />
+            )}
+            {!state.license.valid && activateError?.code === "site_limit_reached" && (
+                <SiteLimitPanel onGoToUpgrade={onGoToUpgrade} onDismiss={() => setActivateError(null)} />
+            )}
+            {!state.license.valid && activateError?.code === "site_already_claimed" && (
+                <SiteAlreadyClaimedPanel onDismiss={() => setActivateError(null)} />
             )}
 
             {/* ─── Smart upgrade nudge (engaged Free users only) ─────────── */}
@@ -367,6 +350,165 @@ export default function Overview({ state, onState, freeQuota, onGoToUpgrade, onG
 }
 
 /* ── Smart upgrade nudge ────────────────────────────────────────────── */
+/**
+ * Activation hero — replaces the previous 3-control row (input + Generate
+ * + Activate) with a single brand CTA + progressive disclosure for users
+ * who already have a key.
+ *
+ * Why one button:
+ *   The two-step "go get a key, then come back and paste" was the
+ *   slowest part of the funnel. Most users don't have a key yet —
+ *   showing them an empty input first added a "what do I type?" beat.
+ *   The new default is the action they actually want: generate a key.
+ *
+ * Animations (CSS only, no JS):
+ *   · Gradient sheen sliding across on hover (fakes a real CTA's
+ *     polish without a video file)
+ *   · Soft scale + drop-shadow lift on hover
+ *   · Sparkle SVG that gently rotates while idle (3 keyframes only,
+ *     respects prefers-reduced-motion)
+ *
+ * Progressive disclosure:
+ *   · "I already have a key →" text-link below the CTA
+ *   · Click reveals the input + small Activate button below — same
+ *     code path as before, just hidden until the user opts in.
+ */
+function ActivateHero({
+    freeQuota, activateUrl, pasteKey, onPasteKeyChange, onActivate, activating,
+}: {
+    freeQuota: number | null;
+    activateUrl: string;
+    pasteKey: string;
+    onPasteKeyChange: (v: string) => void;
+    onActivate: () => void;
+    activating: boolean;
+}) {
+    const [showPaste, setShowPaste] = useState(false);
+    const quotaLabel = freeQuota !== null
+        ? `${freeQuota.toLocaleString()} images / month, free forever`
+        : "Free plan, no card required";
+
+    return (
+        <Card className="relative overflow-hidden bg-gradient-to-br from-brand-50 via-white to-brand-50/40 border-brand-200">
+            {/* Decorative blurred orbs in the background — pure CSS,
+                fixed in place so they don't fight the content. */}
+            <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]">
+                <div className="absolute -top-16 -right-16 h-64 w-64 rounded-full bg-brand-300/30 blur-3xl" />
+                <div className="absolute -bottom-20 -left-12 h-56 w-56 rounded-full bg-brand-400/20 blur-3xl" />
+            </div>
+
+            <div className="relative">
+                <div className="flex items-start justify-between gap-3 mb-1">
+                    <h3 className="text-lg font-semibold text-ink-900">Activate Tempaloo WebP</h3>
+                    <Badge variant="brand">Free</Badge>
+                </div>
+                <p className="text-sm text-ink-600 mb-5">
+                    {quotaLabel}. Click below to create your free license — it takes 10 seconds.
+                </p>
+
+                <a
+                    href={activateUrl}
+                    target="_blank"
+                    rel="noopener"
+                    className="tempaloo-cta group relative inline-flex items-center gap-2.5 rounded-xl bg-gradient-to-br from-brand-600 to-brand-700 px-6 py-3.5 text-[15px] font-semibold text-white shadow-md hover:shadow-xl hover:scale-[1.02] active:scale-[0.99] transition-all duration-200 overflow-hidden"
+                >
+                    <span className="tempaloo-cta-sheen" aria-hidden />
+                    <SparkleIcon />
+                    <span className="relative">Get my free license key</span>
+                    <span className="relative inline-block transition-transform duration-200 group-hover:translate-x-1">→</span>
+                </a>
+
+                <div className="mt-4 text-xs text-ink-500">
+                    {showPaste ? (
+                        <button
+                            type="button"
+                            onClick={() => setShowPaste(false)}
+                            className="text-ink-500 hover:text-ink-900 underline"
+                        >
+                            Cancel
+                        </button>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={() => setShowPaste(true)}
+                            className="text-ink-500 hover:text-ink-900 underline"
+                        >
+                            I already have a license key →
+                        </button>
+                    )}
+                </div>
+
+                {showPaste && (
+                    <div className="mt-3 flex flex-col sm:flex-row gap-2">
+                        <Input
+                            value={pasteKey}
+                            onChange={(e) => onPasteKeyChange(e.target.value)}
+                            placeholder="Paste your license key"
+                            className="font-mono text-xs"
+                            autoFocus
+                        />
+                        <Button onClick={onActivate} loading={activating}>
+                            Activate
+                        </Button>
+                    </div>
+                )}
+            </div>
+
+            <style>{`
+                /* Sliding sheen effect — runs once on hover, gives the
+                   button a polished "premium" feel without being noisy. */
+                .tempaloo-cta-sheen {
+                    position: absolute; inset: 0;
+                    background: linear-gradient(
+                        100deg,
+                        transparent 25%,
+                        rgba(255,255,255,0.35) 50%,
+                        transparent 75%
+                    );
+                    background-size: 200% 100%;
+                    background-position: -100% 0;
+                    transition: background-position 0.65s cubic-bezier(.16,1,.3,1);
+                    pointer-events: none;
+                }
+                .tempaloo-cta:hover .tempaloo-cta-sheen { background-position: 200% 0; }
+
+                /* Sparkle gentle rotation (idle only — calms on hover so
+                   the sheen takes the spotlight). */
+                @keyframes tempaloo-sparkle-rot {
+                    0%, 100% { transform: rotate(-6deg) scale(1); }
+                    50%      { transform: rotate(6deg)  scale(1.1); }
+                }
+                .tempaloo-cta .tempaloo-sparkle {
+                    animation: tempaloo-sparkle-rot 3s ease-in-out infinite;
+                    transform-origin: center;
+                }
+                .tempaloo-cta:hover .tempaloo-sparkle { animation-play-state: paused; }
+
+                @media (prefers-reduced-motion: reduce) {
+                    .tempaloo-cta:hover { transform: none; }
+                    .tempaloo-cta-sheen { display: none; }
+                    .tempaloo-cta .tempaloo-sparkle { animation: none; }
+                }
+            `}</style>
+        </Card>
+    );
+}
+
+function SparkleIcon() {
+    return (
+        <svg
+            className="tempaloo-sparkle relative"
+            width="18" height="18" viewBox="0 0 24 24"
+            fill="currentColor"
+            aria-hidden
+        >
+            <path d="M12 2 L13.5 8.5 L20 10 L13.5 11.5 L12 18 L10.5 11.5 L4 10 L10.5 8.5 Z" opacity="0.95"/>
+            <circle cx="19" cy="5" r="1.4" opacity="0.7"/>
+            <circle cx="5" cy="18" r="1" opacity="0.5"/>
+        </svg>
+    );
+}
+
 function UpgradeNudge({ used, limit, onDismiss, onUpgrade }: {
     used: number;
     limit: number;
