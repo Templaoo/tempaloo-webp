@@ -429,11 +429,15 @@ export default function App() {
                                     ? "Free plan — no credit card."
                                     : `${freeQuota.toLocaleString()} images per month — no credit card.`}
                             </div>
+                            {/* Solid white bg + brand-700 text — guaranteed
+                                AAA contrast on the gradient card. The previous
+                                white/20 ghost button blended into the brand
+                                gradient on dark themes. */}
                             <a
                                 href={boot.activateUrl}
                                 target="_blank"
                                 rel="noopener"
-                                className="mt-3 inline-flex text-xs font-medium rounded-md bg-white/20 hover:bg-white/30 px-2.5 py-1"
+                                className="mt-3 inline-flex items-center text-xs font-semibold rounded-md bg-white text-brand-700 hover:bg-brand-50 px-3 py-1.5 shadow-sm transition-colors"
                             >
                                 Get my key →
                             </a>
