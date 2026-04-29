@@ -138,6 +138,11 @@ h1, h2, h3, h4 {
 .rise-delay-3 { animation-delay: 180ms; }
 .rise-delay-4 { animation-delay: 240ms; }
 
+/* Generic spinner used by PostPurchaseWaiting + any future loading state. */
+@keyframes tempaloo-spin {
+    to { transform: rotate(360deg); }
+}
+
 /* ── Respect user's motion preference (WCAG 2.3.3, legal in EU) ────────── */
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {

@@ -8,6 +8,7 @@ import { DashboardScorecard } from "@/components/dashboard/DashboardScorecard";
 import { UpgradeCardSmart } from "@/components/dashboard/UpgradeCardSmart";
 import { LicenseListClient } from "@/components/dashboard/LicenseListClient";
 import { ActivationConfetti, QuotaAlertBanner, ThemeToggle } from "@/components/dashboard/DashboardExtras";
+import { PostPurchaseWaiting } from "@/components/dashboard/PostPurchaseWaiting";
 import { LogoMark } from "@/components/Logo";
 
 // Authenticated content — never let any layer (browser, ISP proxy,
@@ -28,7 +29,7 @@ async function resolveUserEmail(searchEmail: string | undefined): Promise<{ emai
     return null;
 }
 
-export default async function DashboardPage({ searchParams }: { searchParams: { email?: string; signup?: string } }) {
+export default async function DashboardPage({ searchParams }: { searchParams: { email?: string; signup?: string; purchase?: string } }) {
     const user = await resolveUserEmail(searchParams.email);
     if (!user) redirect("/webp/activate?redirect=dashboard");
 
@@ -78,7 +79,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
                 <section className="rise rise-delay-3" style={{ display: "grid", gridTemplateColumns: "minmax(0, 2fr) minmax(280px, 1fr)", gap: 20 }}>
                     <div style={{ minWidth: 0 }}>
                         {licenses.length === 0 ? (
-                            <EmptyState email={user.email} />
+                            // Right after a Freemius checkout the webhook hasn't
+                            // landed yet — poll for ~30s with a friendly spinner
+                            // instead of falsely telling the user "no license".
+                            searchParams.purchase ? (
+                                <PostPurchaseWaiting />
+                            ) : (
+                                <EmptyState email={user.email} />
+                            )
                         ) : (
                             <LicenseListClient licenses={licenses} />
                         )}
