@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, boot, fetchPlans, type AppState, type Plan } from "./api";
 import { Badge, SkeletonStyles, Tabs, Toasts, toast } from "./components/ui";
 import { LicenseAlertBanner } from "./components/LicenseAlertBanner";
@@ -246,6 +246,29 @@ export default function App() {
     // see why their numbers tick up after a conversion without thinking
     // the page is broken.
     const [refreshing, setRefreshing] = useState(false);
+    // Manual-action lock for the polling.
+    //
+    // Bug it fixes: user pastes license key → activate succeeds → local
+    // state shows valid=true → 4–8s later the polling tick (which had
+    // a stale or in-flight request from before the activate) writes its
+    // older snapshot back, flipping valid to false. UI "reverts" — looked
+    // like activation failed, was actually a race.
+    //
+    // Solution: every manual action that mutates license/settings stamps
+    // a timestamp into this ref. The polling skips its setState when a
+    // manual action happened in the last 10s, so the polling can never
+    // clobber a fresh user-driven change. After 10s the lock expires
+    // and polling resumes normal merging.
+    const lastManualUpdateRef = useRef<number>(0);
+    const markManualUpdate = () => { lastManualUpdateRef.current = Date.now(); };
+
+    // Wrap setState so any caller that flows through onState (Activate,
+    // Disconnect, RefreshLicense, Settings save) stamps the lock for
+    // free — no per-call boilerplate.
+    const setStateLockingPolling: typeof setState = (next) => {
+        markManualUpdate();
+        setState(next);
+    };
     // Cache plans at the root so every child (Overview banner, Upgrade grid)
     // gets the same copy without re-fetching. If the feed fails we fall back
     // to null everywhere — each component handles that gracefully.
@@ -285,7 +308,16 @@ export default function App() {
             try {
                 setRefreshing(true);
                 const next = await api.refreshState();
-                if (alive) setState(next);
+                if (!alive) return;
+                // Polling cannot override a manual update made in the
+                // last 10s — see lastManualUpdateRef comment above.
+                // Without this, a fresh activate gets stomped by the
+                // next tick's older snapshot and the UI flips back to
+                // "no license" 4-8s after the success toast.
+                const sinceManual = Date.now() - lastManualUpdateRef.current;
+                if (sinceManual >= 10_000) {
+                    setState(next);
+                }
             } catch { /* silent — next tick will retry */ } finally {
                 if (alive) setRefreshing(false);
             }
@@ -314,7 +346,7 @@ export default function App() {
         setRetrying(true);
         try {
             const res = await api.runRetry();
-            setState(res.state);
+            setStateLockingPolling(res.state);
             const msg = res.ran === 0
                 ? "Nothing to retry"
                 : `${res.succeeded} converted · ${res.failed} still failing`;
@@ -357,7 +389,7 @@ export default function App() {
                         <AccountChip email={state.license.email} plan={planLabel} />
                     )}
                     {state.license.key && (
-                        <RefreshLicenseButton onUpdated={setState} />
+                        <RefreshLicenseButton onUpdated={setStateLockingPolling} />
                     )}
                     <a
                         className="text-xs font-medium text-ink-500 hover:text-ink-900"
@@ -415,7 +447,7 @@ export default function App() {
                         onRetry={async () => {
                             try {
                                 const next = await api.refreshState();
-                                setState(next);
+                                setStateLockingPolling(next);
                                 toast(next.apiHealth.ok ? "success" : "error",
                                     next.apiHealth.ok ? "API is back" : "Still unreachable");
                             } catch (e) {
@@ -427,7 +459,7 @@ export default function App() {
                     <QuotaBanner state={state} onUpgrade={() => setTab("upgrade")} />
                     {tab === "overview" && <Overview
                         state={state}
-                        onState={setState}
+                        onState={setStateLockingPolling}
                         freeQuota={freeQuota}
                         onGoToUpgrade={() => setTab("upgrade")}
                         onGoToBulk={() => setTab("bulk")}
@@ -436,7 +468,7 @@ export default function App() {
                     {tab === "bulk"     && <Bulk state={state} onUpgrade={() => setTab("upgrade")} />}
                     {tab === "activity" && <Activity />}
                     {tab === "sites"    && <Sites state={state} onUpgrade={() => setTab("upgrade")} />}
-                    {tab === "settings" && <Settings state={state} onState={setState} />}
+                    {tab === "settings" && <Settings state={state} onState={setStateLockingPolling} />}
                     {tab === "upgrade"  && <Upgrade state={state} />}
                 </main>
             </div>
