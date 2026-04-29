@@ -10,6 +10,7 @@ import {
     welcomeFreeEmail,
 } from "../../lib/email-templates.js";
 import { requireAdmin } from "../../middleware/require-admin.js";
+import { upsertLicenseFromEvent, markLicenseStatus } from "../webhooks.js";
 
 /**
  * Admin data routes — strictly READ-ONLY in v1. Every endpoint:
@@ -503,6 +504,81 @@ export default async function adminDataRoutes(app: FastifyInstance) {
             targetType: "webhook", targetId: id,
         });
         return { event };
+    });
+
+    // ─── /admin/webhooks/replay-failed ──────────────────────────────
+    // Re-processes every freemius webhook still stuck with a
+    // processing_error (sdk_status_5xx, etc.) using the current
+    // upsertLicenseFromEvent code. Idempotent: rows that succeed are
+    // marked processed_at=NOW(); rows that fail again keep the new
+    // error string so we can drill into the next failure mode.
+    //
+    // Why a button instead of a cron: stuck webhooks should be the
+    // exception, not background noise. Manually triggering this after
+    // shipping a webhook handler fix gives us a clear audit trail of
+    // who recovered what + when, and avoids burning CPU re-trying the
+    // same dead payload every minute forever.
+    app.post("/admin/webhooks/replay-failed", guard, async (req, reply) => {
+        const { rows: stuck } = await query<{ id: string; event_id: string; event_type: string; payload: unknown }>(
+            `SELECT id, event_id, event_type, payload
+               FROM webhooks_events
+              WHERE provider = 'freemius'
+                AND processing_error IS NOT NULL
+              ORDER BY received_at ASC
+              LIMIT 100`,
+        );
+
+        let ok = 0, failed = 0;
+        const errors: Array<{ event_id: string; error: string }> = [];
+
+        for (const ev of stuck) {
+            const payload = typeof ev.payload === "string" ? JSON.parse(ev.payload) : ev.payload;
+            const objects = (payload as { objects?: unknown }).objects;
+            try {
+                if (ev.event_type === "license.created"
+                    || ev.event_type === "license.updated"
+                    || ev.event_type === "license.extended"
+                    || ev.event_type === "license.plan.changed") {
+                    await upsertLicenseFromEvent(objects);
+                } else if (ev.event_type === "license.cancelled"
+                    || ev.event_type === "license.expired"
+                    || ev.event_type === "license.deleted"
+                    || ev.event_type === "subscription.cancelled") {
+                    const status = ev.event_type === "license.expired" ? "expired" : "canceled";
+                    await markLicenseStatus(objects, status);
+                } else {
+                    // Unknown type — not safe to replay automatically.
+                    errors.push({ event_id: ev.event_id, error: `unsupported_type:${ev.event_type}` });
+                    failed++;
+                    continue;
+                }
+                await query(
+                    `UPDATE webhooks_events
+                        SET processed_at = NOW(), processing_error = NULL
+                      WHERE id = $1`,
+                    [ev.id],
+                );
+                ok++;
+            } catch (e) {
+                const msg = e instanceof Error ? e.message : String(e);
+                errors.push({ event_id: ev.event_id, error: msg });
+                failed++;
+                await query(
+                    `UPDATE webhooks_events
+                        SET processing_error = $2
+                      WHERE id = $1`,
+                    [ev.id, `replay_failed:${msg.slice(0, 200)}`],
+                ).catch(() => { /* logging only */ });
+            }
+        }
+
+        await auditLog({
+            admin: req.admin!, req,
+            action: "webhooks.replay_failed", severity: "warn",
+            metadata: { total: stuck.length, ok, failed },
+        });
+
+        return reply.code(200).send({ total: stuck.length, ok, failed, errors });
     });
 
     // ─── /admin/audit ───────────────────────────────────────────────
