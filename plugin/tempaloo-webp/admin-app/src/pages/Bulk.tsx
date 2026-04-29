@@ -221,6 +221,12 @@ export default function Bulk({ state, onState, onUpgrade }: {
             api.refreshState()
                 .then((next) => onState?.(next))
                 .catch(() => { /* polling will catch up later */ });
+            // Re-run the disk scan so the breakdown card flips from
+            // "Pending: N" to "Already done: N" the moment the run
+            // finishes. Without this the report state is the snapshot
+            // taken BEFORE the bulk started and looks like nothing
+            // happened until the user manually clicks "Scan again".
+            bulk.scan().then(setReport).catch(() => { /* user can rescan manually */ });
             // Long enough to read + celebrate but not annoying
             setTimeout(() => { celebrationDismissibleRef.current = true; }, 2000);
             setTimeout(() => {

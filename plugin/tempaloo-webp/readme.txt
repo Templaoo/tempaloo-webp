@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.6.2
+Stable tag: 1.6.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -145,6 +145,9 @@ Example — skip conversion for any attachment in the `private/` upload subfolde
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 1.6.3 =
+* Fix: Bulk breakdown card now refreshes automatically the moment a run finishes. Previously the panel held the snapshot taken BEFORE the run ("Pending: 1, Already done: 0"), and only flipped to the right numbers after the user manually clicked Scan again or refreshed the page. We now re-scan from disk in `handleTerminalState` once the bulk loop reports `done` — the visible state matches the actual filesystem state without an extra click.
 
 = 1.6.2 =
 * Fix: Removed the duplicate "X images queued for retry" panel I introduced on the Overview tab in 1.6.1 — there was already a global `RetryQueueBanner` rendering the same information across every tab. The existing banner now mentions the email-on-completion (Phase 2 addition) so users see the wrap-up promise without two stacked banners.
