@@ -125,32 +125,75 @@ export default async function convertRoute(app: FastifyInstance) {
         // choose the sibling extension when writing back to disk.
         const targetFormats: ("webp" | "avif")[] = fmt === "both" ? ["webp", "avif"] : [fmt];
 
+        // Encoding strategy on a 512MB Render dyno:
+        //   * WebP is light (~10-30MB peak per encode), AVIF is heavy
+        //     (~50-150MB peak — libavif/libaom). 5 thumbnails × 2 formats
+        //     = 10 parallel Promise.all() encodes was OOM-killing the
+        //     dyno; the proxy then returned 502 to the plugin which
+        //     treated it as "all sizes failed" and the credit was lost
+        //     even though WebP would have succeeded.
+        //   * Fix: encode formats SEQUENTIALLY (webp first, then avif)
+        //     and within each format cap concurrency so the resident
+        //     set never spikes past the dyno limit. Promise.allSettled
+        //     means one bad encode doesn't poison the rest of the batch.
+        //   * AVIF effort=4 (Sharp default) is balanced. Anything lower
+        //     produces noticeably bigger files; anything higher trades
+        //     2x time for ~5% extra compression. We keep the default.
+        const AVIF_CONCURRENCY = 2;
+        const WEBP_CONCURRENCY = 4;
+
+        type EncodeResult = {
+            name: string;
+            format: "webp" | "avif";
+            input_bytes: number;
+            output_bytes: number;
+            data: string;
+        };
+
         const start = Date.now();
-        const results = (await Promise.all(
-            files.map(async (f) => {
-                const pipeline = sharp(f.buffer, { failOnError: false });
-                const perFile = await Promise.all(targetFormats.map(async (tf) => {
+        const results: EncodeResult[] = [];
+        const failures: { name: string; format: "webp" | "avif"; reason: string }[] = [];
+
+        for (const tf of targetFormats) {
+            const limit = tf === "avif" ? AVIF_CONCURRENCY : WEBP_CONCURRENCY;
+            const settled = await mapWithConcurrency(files, limit, async (f) => {
+                try {
+                    const pipeline = sharp(f.buffer, { failOnError: false });
                     const out = tf === "avif"
-                        ? await pipeline.clone().avif({ quality }).toBuffer()
-                        : await pipeline.clone().webp({ quality }).toBuffer();
+                        ? await pipeline.avif({ quality }).toBuffer()
+                        : await pipeline.webp({ quality }).toBuffer();
                     return {
-                        name: f.name,
-                        format: tf,
-                        input_bytes: f.buffer.length,
-                        output_bytes: out.length,
-                        data: out.toString("base64"),
+                        ok: true as const,
+                        value: {
+                            name: f.name,
+                            format: tf,
+                            input_bytes: f.buffer.length,
+                            output_bytes: out.length,
+                            data: out.toString("base64"),
+                        },
                     };
-                }));
-                return perFile;
-            }),
-        )).flat();
+                } catch (e) {
+                    const reason = e instanceof Error ? e.message : String(e);
+                    return { ok: false as const, name: f.name, format: tf, reason };
+                }
+            });
+            for (const r of settled) {
+                if (r.ok) results.push(r.value);
+                else {
+                    failures.push({ name: r.name, format: r.format, reason: r.reason });
+                    req.log.warn({ name: r.name, format: r.format, reason: r.reason }, "sharp encode failed");
+                }
+            }
+        }
+
         const durationMs = Date.now() - start;
 
-        // Per-format usage logs — when fmt='both' we emit one row per
-        // format so the analytics view in /admin reflects the real work
-        // Sharp did and we can spot if AVIF or WebP is suddenly slower.
+        // Per-format usage logs — only count successes so analytics
+        // reflect actual delivered output. Failed encodes are logged
+        // separately by the warn() above.
         for (const tf of targetFormats) {
             const formatRows = results.filter((r) => r.format === tf);
+            if (formatRows.length === 0) continue;
             const totalIn = formatRows.reduce((a, r) => a + r.input_bytes, 0);
             const totalOut = formatRows.reduce((a, r) => a + r.output_bytes, 0);
             query(
@@ -160,7 +203,31 @@ export default async function convertRoute(app: FastifyInstance) {
             ).catch((e) => req.log.error({ e, tf }, "usage_log insert failed"));
         }
 
-        const totalIn = results.reduce((a, r) => a + r.input_bytes, 0) / targetFormats.length;
+        // If EVERY encode failed across both formats, refund the credit
+        // — the user got literally nothing for it. Partial results
+        // (e.g. all WebP succeeded but AVIF OOM'd) are not refunded:
+        // the user got real value, the missing AVIFs surface in the
+        // next scan and bulk fills them.
+        if (results.length === 0) {
+            await query(
+                `UPDATE usage_counters SET images_used = GREATEST(0, images_used - 1)
+                  WHERE license_id = $1 AND period = $2`,
+                [license.licenseId, period],
+            ).catch((e) => req.log.error({ e }, "quota refund failed"));
+            req.log.error({ failures, files: files.length, fmt }, "every encode failed — credit refunded");
+            throw err.unprocessable(
+                `Conversion failed for every file (${failures.length} encode error(s)). The credit has been refunded.`
+            );
+        }
+
+        // input_bytes appears once per (name × format) entry; collapse to
+        // unique source files for the response so the plugin reads back
+        // a comparable "before" number rather than 2x with format=both.
+        const uniqueInputs = new Map<string, number>();
+        for (const r of results) {
+            if (!uniqueInputs.has(r.name)) uniqueInputs.set(r.name, r.input_bytes);
+        }
+        const totalIn = Array.from(uniqueInputs.values()).reduce((a, v) => a + v, 0);
         const totalOut = results.reduce((a, r) => a + r.output_bytes, 0);
 
         const { rows: qRows } = await query<{ used: number; limit: number }>(
@@ -366,4 +433,32 @@ async function triggerQuotaEmails(license: LicenseContext, used: number, limit: 
     };
     sendTransactional(exceeded ? quotaExceededEmail(ctx) : quotaWarnEmail(ctx), log)
         .catch((e) => log.error({ e, kind }, "quota email send failed"));
+}
+
+/**
+ * Bounded-concurrency parallel map. Workers pull from a shared cursor
+ * so we never exceed `limit` in-flight encodes — critical when AVIF
+ * peak heap can blow past Render's 512MB dyno if 10+ encodes race.
+ *
+ * Same shape as Promise.all but with a max-active cap. Order in the
+ * returned array matches the input order.
+ */
+async function mapWithConcurrency<T, R>(
+    items: T[],
+    limit: number,
+    fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+    if (items.length === 0) return [];
+    const results: R[] = new Array(items.length);
+    let cursor = 0;
+    const worker = async () => {
+        while (true) {
+            const i = cursor++;
+            if (i >= items.length) return;
+            results[i] = await fn(items[i]!, i);
+        }
+    };
+    const workers = Array.from({ length: Math.min(limit, items.length) }, worker);
+    await Promise.all(workers);
+    return results;
 }
