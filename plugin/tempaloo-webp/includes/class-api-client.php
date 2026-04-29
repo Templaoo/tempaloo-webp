@@ -259,7 +259,12 @@ class Tempaloo_WebP_API_Client {
         self::record_health( true );
         return [
             'ok'    => true,
-            'files' => isset( $data['files'] ) ? $data['files'] : [],
+            'files'   => isset( $data['files'] ) ? $data['files'] : [],
+            // Server-side skipped (file × format) pairs — currently
+            // only AVIF inputs over the dyno's pixel budget. The
+            // converter persists this on the attachment meta so the
+            // next bulk scan stops re-flagging known-skip pairs.
+            'skipped' => isset( $data['skipped'] ) ? $data['skipped'] : [],
             'used'  => (int) wp_remote_retrieve_header( $resp, 'x-quota-used' ),
             'limit' => (int) wp_remote_retrieve_header( $resp, 'x-quota-limit' ),
         ];

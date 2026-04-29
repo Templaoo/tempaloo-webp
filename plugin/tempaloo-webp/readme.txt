@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.5.3
+Stable tag: 1.5.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -145,6 +145,13 @@ Example — skip conversion for any attachment in the `private/` upload subfolde
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 1.5.4 =
+* Improved: AVIF size threshold raised to 6 megapixels (~2450×2450) — live API logs showed successful encodes up to 4.2 MB JPEG / ~2400×2400, so the previous 1500×1500 cap was over-rejecting. Configurable via `AVIF_MAX_PIXELS` env var on the API for higher tiers.
+* Fix: When ALL inputs in a batch are server-side-skipped (every size of an attachment too big for AVIF), the API now returns 200 with the `skipped` array instead of 422. The plugin records the skips on the meta and treats the attachment as resolved. Without this, bulk looped forever on attachments where every size exceeded the budget.
+* New: AVIF/Both bulk runs use `BATCH_SIZE=1` (was 3) — one attachment per tick. The dyno only ever holds one libavif working set at a time, removing cascade-OOM where attachment N's encode runs into attachment N-1's not-yet-released RSS. WebP-only stays at 3 (light memory profile).
+* New: Adaptive backoff in the bulk loop. After a tick whose errors include any `http_error` / `status_5xx` / `connection_reset`, the next tick waits 5s instead of 350ms (then 10s, 15s, 20s capped). Lets a just-restarted Render worker boot back up before slamming it again. Resets to 350ms on the first clean tick.
+* Fix: The plugin's API client now reads back the `skipped` array from the response (was being dropped), so the converter can persist server-side skip flags on the attachment meta.
 
 = 1.5.3 =
 * Fix: AVIF over-large inputs no longer crash the API dyno. v1.5.2 already pinned Sharp to one thread and ran AVIF sequentially, but real WordPress originals (3000×3000 photos, ~10 MP) need ~600 MB of libavif working heap, which still OOM-kills a 512 MB Render Starter dyno. The API now reads each image header (cheap, no full decode) and refuses to start an AVIF encode whose pixel count exceeds the dyno budget — returns a clean `avif_oversized_input` skip entry instead of crashing.

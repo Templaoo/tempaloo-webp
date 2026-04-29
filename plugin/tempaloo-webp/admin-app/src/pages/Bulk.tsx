@@ -155,14 +155,44 @@ export default function Bulk({ state, onState, onUpgrade }: {
         }
     };
 
+    // Adaptive backoff after a tick that surfaced infrastructure errors
+    // (status_5xx / http_error / connection_reset). Without it, a dyno
+    // that just got OOM-killed gets hit again 350ms later by the next
+    // tick — Render's worker is still booting back up, the request fails
+    // again, and the bulk loop spirals into a thundering herd of
+    // failures. 5s gives the worker time to come back healthy. Resets
+    // to the fast cadence as soon as a tick succeeds cleanly.
+    const consecutiveErrorTicksRef = useRef(0);
+
     const loop = async () => {
         if (!runningRef.current) return;
         try {
             const s = await bulk.tick();
             const norm = normalizeStatus(s);
             setStatus(norm);
+
+            // Look for infra errors in this tick's batch. We only count
+            // a tick as "infra-erroring" if at least one of the new
+            // errors carries an http/5xx code — quota_exceeded and
+            // unprocessable are the user's problem to fix, not signs
+            // the dyno is overloaded.
+            const infraErrorCodes = ["http_error", "no_output"];
+            const tickHadInfraError = (norm.errors ?? []).some((e) => {
+                const code = String(e.code ?? "");
+                return infraErrorCodes.includes(code) || code.startsWith("status_5");
+            });
+
             if (norm.status === "running") {
-                setTimeout(loop, 350);
+                if (tickHadInfraError) {
+                    consecutiveErrorTicksRef.current += 1;
+                    // Exponential-ish: 5s, 10s, 15s, 20s (capped). Gives
+                    // a struggling dyno room to settle without giving up.
+                    const delayMs = Math.min(20_000, 5_000 * consecutiveErrorTicksRef.current);
+                    setTimeout(loop, delayMs);
+                } else {
+                    consecutiveErrorTicksRef.current = 0;
+                    setTimeout(loop, 350);
+                }
             } else {
                 runningRef.current = false;
                 handleTerminalState(norm);

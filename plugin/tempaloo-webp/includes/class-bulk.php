@@ -12,7 +12,13 @@ class Tempaloo_WebP_Bulk {
 
     const STATE_OPTION = 'tempaloo_webp_bulk_state';
     const NONCE        = 'tempaloo_webp_bulk';
-    const BATCH_SIZE   = 3;
+    const BATCH_SIZE   = 3;       // default: WebP-only, light memory profile
+    const BATCH_SIZE_AVIF = 1;    // AVIF or both: one attachment per tick so the
+                                  // dyno only ever holds one libavif working set
+                                  // at a time. Slower wall-clock, but eliminates
+                                  // the cascade-OOM pattern where the second
+                                  // attachment's encode runs into the first
+                                  // attachment's not-yet-released RSS.
 
     public function register() {
         add_action( 'wp_ajax_tempaloo_webp_bulk_scan',    [ $this, 'ajax_scan' ] );
@@ -62,7 +68,16 @@ class Tempaloo_WebP_Bulk {
 
         $s = Tempaloo_WebP_Plugin::get_settings();
 
-        $batch = array_splice( $state['remaining'], 0, self::BATCH_SIZE );
+        // AVIF or 'both' is memory-heavy — drop to 1 attachment per tick.
+        // The user's tick polling stays the same (~350ms or backoff after
+        // an error), so the wall-clock impact for typical batches of 3-5
+        // attachments is one extra round-trip per attachment. Worth it to
+        // keep RSS predictable on small dynos.
+        $fmt_for_batch = isset( $s['output_format'] ) ? (string) $s['output_format'] : 'webp';
+        $batch_size = ( 'avif' === $fmt_for_batch || 'both' === $fmt_for_batch )
+            ? self::BATCH_SIZE_AVIF
+            : self::BATCH_SIZE;
+        $batch = array_splice( $state['remaining'], 0, $batch_size );
         foreach ( $batch as $attachment_id ) {
             $res = $this->convert_attachment( (int) $attachment_id, $s );
             $state['processed']++;
@@ -389,6 +404,27 @@ class Tempaloo_WebP_Bulk {
         if ( $result['converted'] > 0 ) {
             wp_update_attachment_metadata( $attachment_id, $result['metadata'] );
             return [ 'ok' => true, 'code' => 'ok', 'message' => sprintf( '%d sizes converted', $result['converted'] ) ];
+        }
+
+        // ALL inputs were server-side-skipped (typical: every size of an
+        // attachment exceeded AVIF_MAX_PIXELS so the API declined every
+        // AVIF encode). The meta still carries the skip flags from the
+        // converter — write them so the next scan honors the skip and
+        // doesn't re-queue this attachment indefinitely.
+        $skipped_count = ( ! empty( $result['metadata']['tempaloo_webp']['skipped'] ) && is_array( $result['metadata']['tempaloo_webp']['skipped'] ) )
+            ? count( $result['metadata']['tempaloo_webp']['skipped'] )
+            : 0;
+        if ( $skipped_count > 0 ) {
+            wp_update_attachment_metadata( $attachment_id, $result['metadata'] );
+            return [
+                'ok'      => true,
+                'code'    => 'all_skipped',
+                'message' => sprintf(
+                    /* translators: %d: number of (size × format) pairs the API skipped because the input was too large */
+                    __( '%d sizes skipped (oversized for current API tier)', 'tempaloo-webp' ),
+                    $skipped_count
+                ),
+            ];
         }
 
         $code    = $result['error_code'] !== '' ? $result['error_code'] : 'no_output';

@@ -178,7 +178,13 @@ export default async function convertRoute(app: FastifyInstance) {
         //
         // Move this to env (AVIF_MAX_PIXELS) when we have a paid Render
         // plan with more RAM to lift the limit on demand.
-        const AVIF_MAX_PIXELS = 2_250_000;
+        // Tuned from live usage_logs after v1.5.2 shipped: AVIF
+        // successfully encoded inputs up to ~4.2 MB JPEG / ~2400×2400
+        // px on the 512MB Render Starter dyno (3.9 sec wall clock).
+        // Anything bigger is borderline. 6 MP threshold (~2450×2450)
+        // gives margin without over-rejecting; 12 MP (~3464×3464) does
+        // OOM. Override with env var when on a bigger plan.
+        const AVIF_MAX_PIXELS = Number(process.env.AVIF_MAX_PIXELS ?? 6_000_000);
 
         for (const tf of targetFormats) {
             const limit = tf === "avif" ? AVIF_CONCURRENCY : WEBP_CONCURRENCY;
@@ -257,17 +263,43 @@ export default async function convertRoute(app: FastifyInstance) {
             ).catch((e) => req.log.error({ e, tf }, "usage_log insert failed"));
         }
 
-        // If EVERY encode failed across both formats, refund the credit
-        // — the user got literally nothing for it. Partial results
-        // (e.g. all WebP succeeded but AVIF OOM'd) are not refunded:
-        // the user got real value, the missing AVIFs surface in the
-        // next scan and bulk fills them.
+        // If EVERY encode failed, refund the credit — the user got
+        // literally nothing for it. Two distinct sub-cases:
+        //
+        //   (a) ALL failures are server-side skips (avif_oversized_input
+        //       on every input). This is a known-outcome refusal, not a
+        //       crash. We return 200 with empty files + the skipped
+        //       array so the plugin can record the skips on the
+        //       attachment meta and stop re-flagging these in future
+        //       scans. Without this branch the plugin saw an HTTP error
+        //       and the bulk loop kept retrying the same too-big input
+        //       indefinitely.
+        //
+        //   (b) Genuine encode errors (input corruption, libvips crash,
+        //       etc.). 422 with an error payload is right — the plugin
+        //       puts the attachment in the retry queue and the user
+        //       can investigate.
         if (results.length === 0) {
             await query(
                 `UPDATE usage_counters SET images_used = GREATEST(0, images_used - 1)
                   WHERE license_id = $1 AND period = $2`,
                 [license.licenseId, period],
             ).catch((e) => req.log.error({ e }, "quota refund failed"));
+
+            const onlySkipped = failures.length > 0
+                && failures.every((f) => f.reason.startsWith("avif_oversized_input"));
+            if (onlySkipped) {
+                req.log.warn({ failures, files: files.length, fmt }, "all encodes server-side skipped (oversized) — credit refunded");
+                return reply.send({
+                    format: fmt,
+                    count: 0,
+                    input_bytes: 0,
+                    output_bytes: 0,
+                    files: [],
+                    skipped: failures.map((f) => ({ name: f.name, format: f.format, reason: f.reason })),
+                });
+            }
+
             req.log.error({ failures, files: files.length, fmt }, "every encode failed — credit refunded");
             throw err.unprocessable(
                 `Conversion failed for every file (${failures.length} encode error(s)). The credit has been refunded.`
