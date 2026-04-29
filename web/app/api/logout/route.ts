@@ -64,12 +64,13 @@ async function doLogout(req: NextRequest): Promise<NextResponse> {
             "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
             "Pragma": "no-cache",
             "Expires": "0",
-            // Clear only cookies + storage. Adding "cache" was too
-            // aggressive — it purged Service Worker / IndexedDB / Cache
-            // Storage that the next sign-in flow may depend on (CSRF
-            // tokens stashed by Better Auth, etc.). Cookies + storage
-            // are enough to wipe the session state.
-            "Clear-Site-Data": "\"cookies\", \"storage\"",
+            // No Clear-Site-Data here. Earlier versions of this route
+            // sent it, which broke the next /api/auth/sign-in/social
+            // request (Better Auth stores CSRF / nonce state in the
+            // browser; Clear-Site-Data wiped it). The per-cookie
+            // Set-Cookie expiries below + the bfcache defeat in the
+            // /webp/logout client are sufficient to invalidate the
+            // session without nuking the sign-in plumbing.
         },
     });
 

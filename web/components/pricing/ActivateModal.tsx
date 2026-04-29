@@ -128,6 +128,13 @@ export function ActivateModal({
             const callbackURL = `${window.location.origin}${path}`;
             try { sessionStorage.setItem("tempaloo_post_auth", path); } catch { /* private mode */ }
 
+            // Warmup GET: ensures Better Auth has a fresh CSRF / nonce
+            // cookie before the sign-in POST. Right after logout the
+            // browser has no auth cookies at all, and some Better Auth
+            // versions return 401 on social-signin without a prior
+            // session-touch. Cheap (~50ms) and idempotent.
+            await fetch("/api/auth/get-session", { credentials: "include", cache: "no-store" }).catch(() => null);
+
             const res = await fetch("/api/auth/sign-in/social", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
