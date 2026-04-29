@@ -131,16 +131,45 @@ export function ActivateModal({
             const res = await fetch("/api/auth/sign-in/social", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
+                credentials: "include",   // ← was missing; some Better Auth
+                                          // versions attach a CSRF token cookie
+                                          // on the first request and need it
+                                          // echoed on the second
                 body: JSON.stringify({ provider: "google", callbackURL }),
             });
             const data = await res.json().catch(() => null);
-            if (res.ok && data?.url) {
-                window.location.href = data.url;
+
+            // Better Auth's social-signin response shape varies:
+            //   { url: "..." }                — current
+            //   { redirect: true, url: "..." } — newer
+            //   { data: { url: "..." } }       — older / Supabase adapter
+            // Accept any of them so an SDK bump doesn't silently break us.
+            const target: string | null =
+                (typeof data?.url === "string" && data.url) ||
+                (typeof data?.data?.url === "string" && data.data.url) ||
+                null;
+
+            if (res.ok && target) {
+                window.location.href = target;
                 return;
             }
-            // Auth not yet configured → gracefully fall back to email step.
+
+            // Log the real cause so anyone debugging "Google sign-in isn't
+            // ready" in the wild can see the upstream status + body.
+            // eslint-disable-next-line no-console
+            console.error("[tempaloo] sign-in/social failed", {
+                status: res.status,
+                ok: res.ok,
+                body: data,
+            });
             setStep("email");
-            setError("Google sign-in isn't ready yet — continue with your email below.");
+            setError(
+                res.status === 401 || res.status === 403
+                    ? "Sign-in session expired — try again."
+                    : data?.error?.message
+                        ? `Google sign-in: ${String(data.error.message).slice(0, 120)}. Use email instead.`
+                        : "Google sign-in isn't ready yet — continue with your email below.",
+            );
         } catch {
             setStep("email");
             setError("Could not reach the auth server. Use your email instead.");

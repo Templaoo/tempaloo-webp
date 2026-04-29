@@ -64,7 +64,12 @@ async function doLogout(req: NextRequest): Promise<NextResponse> {
             "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
             "Pragma": "no-cache",
             "Expires": "0",
-            "Clear-Site-Data": "\"cookies\", \"storage\", \"cache\"",
+            // Clear only cookies + storage. Adding "cache" was too
+            // aggressive — it purged Service Worker / IndexedDB / Cache
+            // Storage that the next sign-in flow may depend on (CSRF
+            // tokens stashed by Better Auth, etc.). Cookies + storage
+            // are enough to wipe the session state.
+            "Clear-Site-Data": "\"cookies\", \"storage\"",
         },
     });
 
