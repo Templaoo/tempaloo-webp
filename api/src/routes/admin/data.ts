@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { query } from "../../db.js";
+import { getFreemius } from "../../freemius.js";
 import { auditLog } from "../../lib/audit.js";
 import { sendTransactional } from "../../lib/email.js";
 import {
@@ -552,6 +553,31 @@ export default async function adminDataRoutes(app: FastifyInstance) {
             metadata: { to, template, ok: result.ok, reason: result.reason ?? null },
         });
         return reply.code(result.ok ? 200 : 502).send({ ok: result.ok, reason: result.reason, messageId: result.messageId });
+    });
+
+    // ─── /admin/freemius/sandbox-params ─────────────────────────────
+    // Returns { token, ctx } for opening the Freemius overlay in sandbox
+    // mode. Lets the admin test the FULL prod checkout flow (overlay +
+    // success callback + dashboard redirect) without spending real money.
+    // Audited at warn — sandbox is rare enough that we want each pull
+    // visible in /admin/audit.
+    app.get("/admin/freemius/sandbox-params", guard, async (req, reply) => {
+        const fs = getFreemius();
+        if (!fs) {
+            return reply.code(503).send({ error: { code: "freemius_not_configured", message: "Freemius keys missing on this server" } });
+        }
+        try {
+            const sandbox = await fs.checkout.getSandboxParams();
+            await auditLog({
+                admin: req.admin!, req,
+                action: "freemius.sandbox_params", severity: "warn",
+            });
+            return { sandbox };
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : "sandbox params failed";
+            req.log.error({ e }, "sandbox params lookup failed");
+            return reply.code(502).send({ error: { code: "freemius_error", message: msg } });
+        }
     });
 
     app.get("/admin/audit", guard, async (req, reply) => {

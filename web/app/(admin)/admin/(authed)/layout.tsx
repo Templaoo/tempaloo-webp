@@ -67,6 +67,7 @@ function Sidebar() {
         { href: "/admin/installs",   label: "Installs",   icon: "▢" },
         { href: "/admin/webhooks",   label: "Webhooks",   icon: "↯" },
         { href: "/admin/audit",      label: "Audit",      icon: "✓" },
+        { href: "/admin/sandbox",    label: "Sandbox",    icon: "▶" },
     ];
     return (
         <aside style={{ borderRight: "1px solid var(--line)", background: "var(--bg-2)", display: "flex", flexDirection: "column" }}>
