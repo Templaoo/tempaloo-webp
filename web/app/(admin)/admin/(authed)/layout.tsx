@@ -74,7 +74,7 @@ function Sidebar() {
         <aside style={{ borderRight: "1px solid var(--line)", background: "var(--bg-2)", display: "flex", flexDirection: "column" }}>
             <div style={{ padding: "20px 20px 24px" }}>
                 <Link href="/admin" style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
-                    <LogoMark size={22} />
+                    <LogoMark size={28} />
                     <span style={{ fontWeight: 500, fontSize: 14, letterSpacing: "-0.015em" }}>
                         Tempaloo<span style={{ color: "var(--ink-3)" }}> / admin</span>
                     </span>

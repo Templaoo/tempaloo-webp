@@ -447,12 +447,13 @@ export default function App() {
 function Logo() {
     // Canonical Tempaloo brand mark — same paths as
     // web/public/favicon.svg + web/components/Logo.tsx LogoMark variant="brand".
-    // currentColor adapts to wp-admin's neutral text color.
+    // viewBox tightened to the glyph bbox so the 40px output actually
+    // shows a 40px-wide glyph (was ~24px because of empty padding).
     return (
         <svg
-            width="36"
-            height="36"
-            viewBox="0 0 2048 2048"
+            width="40"
+            height="40"
+            viewBox="300 540 1520 960"
             xmlns="http://www.w3.org/2000/svg"
             role="img"
             aria-label="Tempaloo"

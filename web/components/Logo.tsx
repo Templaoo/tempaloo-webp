@@ -23,7 +23,7 @@
 type Variant = "brand" | "slash" | "outline" | "block";
 
 export function LogoMark({
-    size = 24,
+    size = 32,
     variant = "brand",
     className,
     ariaLabel = "Tempaloo",
@@ -35,15 +35,17 @@ export function LogoMark({
 }) {
     if (variant === "brand") {
         // Canonical brand mark — synced with /public/favicon.svg.
-        // Two paths from logos/logo-icon.svg with the background rect
-        // stripped and the fill swapped to currentColor so the mark
-        // inherits its parent's text color (dark on light surfaces,
-        // light on dark surfaces — no theme branching needed).
+        // The viewBox crops to the glyph's bounding box (300,540 →
+        // 1820,1500) so the same `size={N}` callers pass actually
+        // fills N pixels — instead of N×0.6 because of the empty
+        // padding in the source 2048×2048 canvas.
+        // currentColor inherits the parent's CSS color, so the mark
+        // adapts to light + dark themes without branching.
         return (
             <svg
                 width={size}
                 height={size}
-                viewBox="0 0 2048 2048"
+                viewBox="300 540 1520 960"
                 xmlns="http://www.w3.org/2000/svg"
                 role="img"
                 aria-label={ariaLabel}

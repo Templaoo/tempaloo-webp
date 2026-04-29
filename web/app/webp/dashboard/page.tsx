@@ -119,7 +119,7 @@ function TopBar({ email, name, authed }: { email: string; name?: string; authed:
         <header style={{ borderBottom: "1px solid var(--line)", background: "color-mix(in oklab, var(--bg) 80%, transparent)", backdropFilter: "blur(16px)", position: "sticky", top: 0, zIndex: 40 }}>
             <div className="app-container" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", height: 60 }}>
                 <Link href="/webp" style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
-                    <LogoMark size={22} />
+                    <LogoMark size={28} />
                     <span style={{ fontWeight: 500, fontSize: 14.5, letterSpacing: "-0.015em" }}>
                         Tempaloo<span style={{ color: "var(--ink-3)" }}> / WebP</span>
                     </span>

@@ -11,7 +11,11 @@
     prefers-color-scheme inside SVG just keep the dark fill, which
     still reads on light browser chrome (Edge, older WebKit).
 -->
-<svg version="1.1" viewBox="0 0 2048 2048" xmlns="http://www.w3.org/2000/svg">
+<!-- viewBox cropped to the glyph's bounding box (300,540 → 1820,1500)
+     padded out to a square so 16×16 / 32×32 favicon renders show the
+     glyph centered + filling the icon, instead of swimming in the
+     2048×2048 source canvas. -->
+<svg version="1.1" viewBox="280 280 1560 1560" xmlns="http://www.w3.org/2000/svg">
     <style>
         path { fill: #0A0A0A; }
         @media (prefers-color-scheme: dark) {
