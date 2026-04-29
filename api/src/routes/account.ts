@@ -4,6 +4,7 @@ import { timingSafeEqual } from "node:crypto";
 import { config } from "../config.js";
 import { query } from "../db.js";
 import { currentPeriod } from "../auth.js";
+import { getFreemius } from "../freemius.js";
 
 /**
  * Constant-time equality. Prevents timing-oracle attacks on the internal
@@ -180,5 +181,110 @@ export default async function accountRoutes(app: FastifyInstance) {
                 };
             }),
         };
+    });
+
+    /**
+     * Invoices list — proxies Freemius's payments API behind our own
+     * surface so the user never has to log into the Freemius portal
+     * to see / download a receipt. Joins each payment against our
+     * `plans` table for a friendly plan name, since the Freemius
+     * Payment entity only carries plan_id.
+     *
+     * Email comes from the trusted Next.js session (the X-Internal-Key
+     * gate above guarantees it's our own server calling). Free accounts
+     * (no freemius_user_id) just return an empty list — no Freemius API
+     * call needed.
+     */
+    app.post("/account/invoices", async (req, reply) => {
+        const body = z.object({ email: z.string().email() }).parse(req.body);
+
+        const { rows: u } = await query<{ freemius_user_id: number | null }>(
+            `SELECT freemius_user_id FROM users WHERE email = $1 LIMIT 1`,
+            [body.email],
+        );
+        const freemiusUserId = u[0]?.freemius_user_id;
+        if (!freemiusUserId) return reply.send({ invoices: [] });
+
+        const fs = getFreemius();
+        if (!fs) return reply.code(503).send({ error: { code: "freemius_not_configured", message: "Freemius keys missing" } });
+
+        try {
+            const payments = await fs.api.user.retrievePayments(String(freemiusUserId));
+            // Plan name lookup — one DB roundtrip for the union of plan ids.
+            const planIds = Array.from(new Set(payments.map((p) => p.plan_id).filter(Boolean) as (string | number)[])).map(Number);
+            const planMap = new Map<number, string>();
+            if (planIds.length) {
+                const { rows: planRows } = await query<{ freemius_plan_id: string; name: string }>(
+                    `SELECT freemius_plan_id::text AS freemius_plan_id, name FROM plans
+                      WHERE freemius_plan_id = ANY($1::bigint[])`,
+                    [planIds],
+                );
+                for (const r of planRows) planMap.set(Number(r.freemius_plan_id), r.name);
+            }
+
+            const invoices = payments.map((p) => ({
+                id: String(p.id),
+                amountCents: Math.round(Number(p.gross ?? 0) * 100),
+                currency: (p.currency ?? "EUR").toUpperCase(),
+                createdAt: p.created ? new Date(p.created).toISOString() : null,
+                planName: p.plan_id ? (planMap.get(Number(p.plan_id)) ?? null) : null,
+                isRefund: Number(p.gross ?? 0) < 0,
+                gateway: p.gateway ?? null,
+                externalId: p.external_id ?? null,
+            }));
+            // Most recent first.
+            invoices.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+            return reply.send({ invoices });
+        } catch (e) {
+            req.log.error({ e }, "freemius payments lookup failed");
+            return reply.code(502).send({ error: { code: "freemius_error", message: e instanceof Error ? e.message : "lookup failed" } });
+        }
+    });
+
+    /**
+     * Single-invoice PDF download. Verifies the payment actually belongs
+     * to the email (Next.js session) before streaming the blob — even
+     * though X-Internal-Key gates the route, an extra ownership check
+     * means a leaked key still can't pull arbitrary invoices.
+     */
+    app.post("/account/invoices/download", async (req, reply) => {
+        const body = z.object({
+            email: z.string().email(),
+            paymentId: z.string().min(1).max(40),
+        }).parse(req.body);
+
+        const { rows: u } = await query<{ freemius_user_id: number | null }>(
+            `SELECT freemius_user_id FROM users WHERE email = $1 LIMIT 1`,
+            [body.email],
+        );
+        const freemiusUserId = u[0]?.freemius_user_id;
+        if (!freemiusUserId) return reply.code(404).send({ error: { code: "no_freemius_account", message: "No paid history for this email" } });
+
+        const fs = getFreemius();
+        if (!fs) return reply.code(503).send({ error: { code: "freemius_not_configured", message: "Freemius keys missing" } });
+
+        try {
+            // Defense in depth: confirm the payment belongs to this user
+            // before generating an invoice URL for it. Otherwise a leaked
+            // INTERNAL_API_KEY + a guessed payment id would pull anyone's PDF.
+            const payment = await fs.api.payment.retrieve(body.paymentId);
+            if (!payment || String(payment.user_id) !== String(freemiusUserId)) {
+                return reply.code(404).send({ error: { code: "not_found", message: "Invoice not found" } });
+            }
+
+            const blob = await fs.api.user.retrieveInvoice(String(freemiusUserId), body.paymentId);
+            if (!blob) return reply.code(404).send({ error: { code: "not_found", message: "Invoice unavailable" } });
+
+            const buffer = Buffer.from(await blob.arrayBuffer());
+            return reply
+                .code(200)
+                .header("Content-Type", "application/pdf")
+                .header("Content-Disposition", `attachment; filename="tempaloo-invoice-${body.paymentId}.pdf"`)
+                .header("Cache-Control", "no-store")
+                .send(buffer);
+        } catch (e) {
+            req.log.error({ e, paymentId: body.paymentId }, "invoice download failed");
+            return reply.code(502).send({ error: { code: "freemius_error", message: e instanceof Error ? e.message : "download failed" } });
+        }
     });
 }

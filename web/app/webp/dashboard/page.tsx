@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { fetchLicensesByEmail } from "@/lib/account";
+import { fetchInvoicesByEmail, fetchLicensesByEmail } from "@/lib/account";
 import { getCurrentUser } from "@/lib/auth";
 import { LicenseCard } from "@/components/dashboard/LicenseCard";
 import { StatsRow } from "@/components/dashboard/StatsRow";
 import { DashboardScorecard } from "@/components/dashboard/DashboardScorecard";
 import { UpgradeCardSmart } from "@/components/dashboard/UpgradeCardSmart";
 import { LicenseListClient } from "@/components/dashboard/LicenseListClient";
+import { InvoicesCard } from "@/components/dashboard/InvoicesCard";
 import { ActivationConfetti, QuotaAlertBanner, ThemeToggle } from "@/components/dashboard/DashboardExtras";
 import { PostPurchaseWaiting } from "@/components/dashboard/PostPurchaseWaiting";
 import { LogoMark } from "@/components/Logo";
@@ -33,7 +34,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     const user = await resolveUserEmail(searchParams.email);
     if (!user) redirect("/webp/activate?redirect=dashboard");
 
-    let licenses = await fetchLicensesByEmail(user.email).catch(() => []);
+    // Parallel fetches — same server cycle, half the latency. Both are
+    // server-only (internal-key gated) so they share no client state.
+    const [initialLicenses, invoices] = await Promise.all([
+        fetchLicensesByEmail(user.email).catch(() => []),
+        user.authed ? fetchInvoicesByEmail(user.email).catch(() => []) : Promise.resolve([]),
+    ]);
+    let licenses = initialLicenses;
 
     if (user.authed && licenses.length === 0 && searchParams.signup) {
         const apiBase = process.env.TEMPALOO_API_BASE ?? "http://localhost:3000/v1";
@@ -93,7 +100,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
                     </div>
                     <aside style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                         <UpgradeCardSmart licenses={licenses} />
-                        <BillingCard hasPaid={licenses.some((l) => l.plan.code !== "free")} />
+                        <InvoicesCard invoices={invoices} />
                         <SupportCard />
                     </aside>
                 </section>
@@ -152,38 +159,6 @@ function EmptyState({ email }: { email: string }) {
             <Link href="/webp/activate" className="btn btn-primary" style={{ marginTop: 24, display: "inline-flex" }}>
                 Generate a key →
             </Link>
-        </div>
-    );
-}
-
-function BillingCard({ hasPaid }: { hasPaid: boolean }) {
-    // Free users: nothing to bill yet, the card just teases the upgrade flow.
-    // Paid users: link out to the Freemius user portal where invoices live.
-    return (
-        <div className="surface-card" style={{ padding: 18 }}>
-            <div className="eyebrow">BILLING</div>
-            <div style={{ marginTop: 8, fontSize: 14, fontWeight: 500, color: "var(--ink)" }}>
-                {hasPaid ? "Invoices & payment" : "Nothing to bill yet"}
-            </div>
-            <p style={{ margin: "4px 0 12px", fontSize: 12.5, color: "var(--ink-3)", lineHeight: 1.5 }}>
-                {hasPaid
-                    ? "Manage your subscription, payment method and invoices from the Freemius customer portal."
-                    : "You're on the Free plan — no payment method needed. Upgrade above whenever you're ready."}
-            </p>
-            {hasPaid ? (
-                <a
-                    href="https://users.freemius.com/"
-                    target="_blank"
-                    rel="noopener"
-                    className="btn btn-ghost btn-sm"
-                >
-                    Open Freemius portal ↗
-                </a>
-            ) : (
-                <Link href="/webp#pricing" className="btn btn-ghost btn-sm">
-                    See pricing →
-                </Link>
-            )}
         </div>
     );
 }

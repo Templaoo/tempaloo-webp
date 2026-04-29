@@ -212,6 +212,15 @@ interface WebhookSubscription {
     license_id?: number | string;
     user_id?: number | string;
     plan_id?: number | string;
+    /** Freemius enum: 1 = monthly, 12 = annual, 0 = lifetime */
+    billing_cycle?: number;
+}
+interface WebhookPayment {
+    id?: number | string;
+    gross?: number | string;
+    currency?: string;
+    created?: string;
+    billing_cycle?: number;
 }
 interface WebhookUser {
     id?: number | string;
@@ -222,6 +231,7 @@ interface WebhookUser {
 interface WebhookObjects {
     license?: WebhookLicense;
     subscription?: WebhookSubscription;
+    payment?: WebhookPayment;
     user?: WebhookUser;
     install?: { id?: number | string; url?: string };
 }
@@ -239,6 +249,41 @@ function resolveLicenseId(o: WebhookObjects | undefined): number | null {
     const fromSub = o?.subscription?.license_id;
     if (fromSub != null) return Number(fromSub);
     return null;
+}
+
+/**
+ * Billing-cycle resolution that survives Freemius's payload variance.
+ *
+ * On `license.created` Freemius doesn't always populate
+ * `objects.license.billing_cycle` (the field is on the underlying
+ * subscription/payment, not always copied to the license entity yet).
+ * The previous "license.billing_cycle === 1 ? monthly : lifetime"
+ * was therefore false for every brand-new monthly subscription —
+ * landed every paid sandbox checkout as `lifetime` in our DB.
+ *
+ * Resolution order, most-specific first:
+ *   1. subscription.billing_cycle  — source of truth for recurring
+ *   2. payment.billing_cycle       — present on payment.* events
+ *   3. license.billing_cycle       — last; sometimes empty on new licenses
+ *   4. infer from license.expiration — has a date → recurring; no date → lifetime
+ *      Period delta > 200 days → annual, else monthly.
+ */
+function resolveBilling(o: WebhookObjects): "monthly" | "annual" | "lifetime" | "free" {
+    const cycle =
+        o.subscription?.billing_cycle ??
+        o.payment?.billing_cycle ??
+        o.license?.billing_cycle;
+
+    if (cycle === 12) return "annual";
+    if (cycle === 1)  return "monthly";
+    if (cycle === 0)  return "lifetime";
+
+    // No explicit cycle — infer from whether there's an expiration.
+    const exp = o.license?.expiration;
+    if (!exp) return "lifetime";
+
+    const days = (new Date(exp).getTime() - Date.now()) / 86_400_000;
+    return days > 200 ? "annual" : "monthly";
 }
 
 /**
@@ -284,7 +329,7 @@ async function upsertLicenseFromEvent(objects: unknown): Promise<UpsertResult | 
     else if (isTrialing(lic)) status = "trialing";
     else status = "active";
 
-    const billing = lic.billing_cycle === 12 ? "annual" : lic.billing_cycle === 1 ? "monthly" : "lifetime";
+    const billing = resolveBilling(o);
     const periodEnd = lic.expiration ? new Date(lic.expiration) : null;
     const trialEndsAt = lic.trial_ends ? new Date(lic.trial_ends) : null;
 
