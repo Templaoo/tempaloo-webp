@@ -3,6 +3,7 @@ import { generateLicenseKey } from "../auth.js";
 import { query, withTx } from "../db.js";
 import { getFreemius, planCodeFromFreemius } from "../freemius.js";
 import { sendTransactional } from "../lib/email.js";
+import { normalizeEmail } from "../lib/email-normalize.js";
 import {
     paymentReceivedEmail,
     subscriptionCancelledEmail,
@@ -334,11 +335,23 @@ async function upsertLicenseFromEvent(objects: unknown): Promise<UpsertResult | 
     const trialEndsAt = lic.trial_ends ? new Date(lic.trial_ends) : null;
 
     return withTx(async (client) => {
+        // CRITICAL: must include email_normalized — the column is NOT NULL
+        // and unique, so an INSERT without it is rejected by the constraint
+        // check BEFORE ON CONFLICT can fire. That was crashing every paid
+        // checkout webhook (sdk_status_500), leaving the user stuck on Free
+        // with no way to recover. Conflict target is email_normalized (not
+        // email) so Gmail aliases — j.o.h.n@gmail.com vs john@gmail.com vs
+        // john+spam@gmail.com — collapse to the same row, matching the
+        // /v1/license/generate path in license.ts.
+        const normalizedEmail = normalizeEmail(userEmail);
         const { rows: userRows } = await client.query<{ id: string }>(
-            `INSERT INTO users (email, freemius_user_id) VALUES ($1, $2)
-             ON CONFLICT (email) DO UPDATE SET freemius_user_id = EXCLUDED.freemius_user_id, updated_at = NOW()
+            `INSERT INTO users (email, email_normalized, freemius_user_id)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (email_normalized) DO UPDATE
+                SET freemius_user_id = COALESCE(EXCLUDED.freemius_user_id, users.freemius_user_id),
+                    updated_at = NOW()
              RETURNING id`,
-            [usr.email, usr.id != null ? Number(usr.id) : null],
+            [userEmail, normalizedEmail, usr.id != null ? Number(usr.id) : null],
         );
         const userId = userRows[0]!.id;
 
