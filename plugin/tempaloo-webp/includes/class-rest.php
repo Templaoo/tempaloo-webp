@@ -370,9 +370,20 @@ class Tempaloo_WebP_REST {
         if ( isset( $p['outputFormat'] ) ) {
             // 'both' generates AVIF + WebP siblings in one batch (still
             // 1 credit per upload). Anything else falls back to WebP.
-            $patch['output_format'] = in_array( $p['outputFormat'], [ 'webp', 'avif', 'both' ], true )
+            $requested = in_array( $p['outputFormat'], [ 'webp', 'avif', 'both' ], true )
                 ? $p['outputFormat']
                 : 'webp';
+            // Server-side gate: free plan (and any plan whose license
+            // doesn't include AVIF) is forced to WebP. The UI already
+            // disables the AVIF + Both buttons when supports_avif=false,
+            // but enforcing here covers cases where the local cache is
+            // stale, the user pokes the option directly, or a future
+            // refactor breaks the UI gate.
+            $cur = Tempaloo_WebP_Plugin::get_settings();
+            if ( ( 'avif' === $requested || 'both' === $requested ) && empty( $cur['supports_avif'] ) ) {
+                $requested = 'webp';
+            }
+            $patch['output_format'] = $requested;
         }
         if ( array_key_exists( 'autoConvert', $p ) ) {
             $patch['auto_convert'] = ! empty( $p['autoConvert'] );

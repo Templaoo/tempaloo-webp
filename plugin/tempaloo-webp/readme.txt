@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.5.4
+Stable tag: 1.6.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -145,6 +145,10 @@ Example — skip conversion for any attachment in the `private/` upload subfolde
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 1.6.0 =
+* New: **Classified error panel** in the Bulk Idle view replaces the old verbose error list. Failures are now sorted into two buckets: a friendly blue "🔄 X images en cours de retry — pas besoin d'attendre" panel for transient failures (network errors, server overload — already auto-enqueued in the background retry queue, with the planned email-on-completion in v1.6.1), and a separate amber "⚠ X images need attention — retry won't help" panel for permanent rejections (oversized for tier, broken file, missing on disk) with one-line explanations of each cause. Lifts the "everything is on fire" anxiety when most failures are recoverable in the background.
+* Improved: **Free plan locked to WebP only** at the server too. The Settings UI was already gating the AVIF + Both buttons when `supports_avif=false`, but the REST endpoint accepted the requested format anyway and relied on the converter to silently downgrade. Now `output_format` is forced to `webp` for any plan whose license doesn't include AVIF — protects against stale local cache and direct option pokes. Free users get fast, light WebP conversion that the Render Starter dyno handles without breaking a sweat.
 
 = 1.5.4 =
 * Improved: AVIF size threshold raised to 6 megapixels (~2450×2450) — live API logs showed successful encodes up to 4.2 MB JPEG / ~2400×2400, so the previous 1500×1500 cap was over-rejecting. Configurable via `AVIF_MAX_PIXELS` env var on the API for higher tiers.

@@ -537,18 +537,7 @@ function IdleView({ pane, state, report, scanning, onScan, lastStatus }: {
                 )}
             </div>
 
-            {lastStatus.errors.length > 0 && (
-                <details className="mt-4">
-                    <summary className="text-xs text-ink-500 cursor-pointer hover:text-ink-700">
-                        {lastStatus.errors.length} error{lastStatus.errors.length > 1 ? "s" : ""} from the last run
-                    </summary>
-                    <ul className="mt-2 text-xs text-red-700 max-h-48 overflow-auto space-y-0.5 font-mono">
-                        {lastStatus.errors.map((e, i) => (
-                            <li key={i}>#{e.id} — {e.code}: {e.message}</li>
-                        ))}
-                    </ul>
-                </details>
-            )}
+            {lastStatus.errors.length > 0 && <ErrorBuckets errors={lastStatus.errors} retryQueuePending={state.retryQueue.pending} />}
         </Card>
     );
 }
@@ -931,3 +920,108 @@ function PausedView({ kind, status, onResume, resuming, onUpgrade, license, quot
 function CheckIcon() { return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5" fill="currentColor" fillOpacity="0.12" /><path d="M8 12 L11 15 L16 9" /></svg>; }
 function WarnIcon()  { return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" fill="currentColor" fillOpacity="0.12" /><path d="M12 8 V13 M12 16 H12.01" /></svg>; }
 function BadIcon()   { return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" fill="currentColor" fillOpacity="0.12" /><path d="M9 9 L15 15 M15 9 L9 15" /></svg>; }
+
+/* ── Classified error buckets ─────────────────────────────────────────
+ * Replaces the old "verbose error list with monospace red text" with
+ * a structured panel that tells the user what each failure MEANS:
+ *   · Retryable  — already enqueued in the background retry queue,
+ *                  no action needed, will succeed on its own.
+ *   · Permanent  — the API said no for a reason that retries can't
+ *                  fix (oversized for tier, broken file, missing on
+ *                  disk, etc.). Surfaces what the user should do.
+ *
+ * Designed for the "ne paniquons pas, le cron s'en occupe" UX: when
+ * everything's retryable the panel reads like a friendly status, not
+ * an error log.
+ */
+type ErrorEntry = { id: number; code: string; message: string };
+
+function isRetryableCode(code: string): boolean {
+    if (!code) return false;
+    if (code === "http_error" || code === "no_output") return true;
+    if (code.startsWith("status_5")) return true;
+    if (code === "connection_reset" || code === "timeout") return true;
+    return false;
+}
+
+function explainPermanentCode(code: string): string {
+    if (code === "quota_exceeded")        return "Monthly quota reached — upgrade plan or wait for reset";
+    if (code === "site_limit_reached")    return "Site limit reached for your plan";
+    if (code === "unauthorized" || code === "forbidden") return "License inactive or AVIF not in plan";
+    if (code === "missing_file")          return "Original file not found on disk";
+    if (code === "unprocessable_image")   return "Image is corrupt or not a supported format";
+    if (code.startsWith("status_4"))      return "Validation rejected by API";
+    return "Permanent failure";
+}
+
+function ErrorBuckets({ errors, retryQueuePending }: { errors: ErrorEntry[]; retryQueuePending: number }) {
+    const retryable: ErrorEntry[] = [];
+    const permanent: ErrorEntry[] = [];
+    for (const e of errors) {
+        if (isRetryableCode(String(e.code))) retryable.push(e);
+        else permanent.push(e);
+    }
+
+    if (retryable.length === 0 && permanent.length === 0 && retryQueuePending === 0) return null;
+
+    return (
+        <div className="mt-5 space-y-3">
+            {(retryable.length > 0 || retryQueuePending > 0) && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50/70 px-4 py-3">
+                    <div className="flex items-start gap-3">
+                        <div className="mt-0.5 text-blue-600 text-lg" aria-hidden>🔄</div>
+                        <div className="flex-1 min-w-0">
+                            <div className="text-sm font-semibold text-ink-900">
+                                {Math.max(retryable.length, retryQueuePending).toLocaleString()} image{Math.max(retryable.length, retryQueuePending) === 1 ? "" : "s"} en cours de retry — pas besoin d&apos;attendre
+                            </div>
+                            <p className="text-xs text-ink-600 mt-1 leading-relaxed">
+                                Erreurs réseau ou serveur surchargé. Notre cron retentera ces images automatiquement (jusqu&apos;à 5 fois) en arrière-plan, et ça
+                                continuera même si tu fermes cette page. Tu recevras un email une fois la conversion complète.
+                            </p>
+                            {retryable.length > 0 && (
+                                <details className="mt-2">
+                                    <summary className="text-[11px] text-blue-700 cursor-pointer hover:text-blue-800">View {retryable.length} affected attachment{retryable.length === 1 ? "" : "s"}</summary>
+                                    <ul className="mt-1.5 text-[11px] font-mono text-ink-600 max-h-32 overflow-auto space-y-0.5 pl-1">
+                                        {retryable.map((e, i) => (
+                                            <li key={i}>#{e.id} <span className="text-ink-400">·</span> {e.code}</li>
+                                        ))}
+                                    </ul>
+                                </details>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {permanent.length > 0 && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50/70 px-4 py-3">
+                    <div className="flex items-start gap-3">
+                        <div className="mt-0.5 text-amber-700 text-lg" aria-hidden>⚠</div>
+                        <div className="flex-1 min-w-0">
+                            <div className="text-sm font-semibold text-ink-900">
+                                {permanent.length.toLocaleString()} image{permanent.length === 1 ? "" : "s"} need attention — retry won&apos;t help
+                            </div>
+                            <p className="text-xs text-ink-600 mt-1 leading-relaxed">
+                                The API rejected these for reasons retries can&apos;t fix. Open the list below to see the cause per attachment and the suggested action.
+                            </p>
+                            <details className="mt-2">
+                                <summary className="text-[11px] text-amber-700 cursor-pointer hover:text-amber-800">Show details</summary>
+                                <ul className="mt-1.5 text-[11px] font-mono text-ink-700 max-h-48 overflow-auto space-y-1 pl-1">
+                                    {permanent.map((e, i) => (
+                                        <li key={i} className="leading-tight">
+                                            <div>
+                                                <span className="text-ink-500">#{e.id}</span>{" "}
+                                                <span className="text-ink-900">{e.code}</span>
+                                            </div>
+                                            <div className="text-ink-500 ml-3">{explainPermanentCode(String(e.code))}</div>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </details>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
