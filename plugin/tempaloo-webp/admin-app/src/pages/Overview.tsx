@@ -111,27 +111,6 @@ export default function Overview({ state, onState, freeQuota, refreshing = false
 
     return (
         <div className="grid gap-6">
-            {/* ─── Background retry indicator ─────────────────────────────
-              * Surfaces what the bulk loop offloaded to the cron — so the
-              * user sees "we're still working on it" on every page load,
-              * not just on the Bulk tab. Disappears the moment the queue
-              * drains; the wrap-up email confirms it server-side.
-              */}
-            {state.license.valid && state.retryQueue.pending > 0 && (
-                <div className="rounded-lg border border-blue-200 bg-blue-50/70 px-4 py-3 flex items-start gap-3">
-                    <div className="text-blue-600 text-lg mt-0.5" aria-hidden>🔄</div>
-                    <div className="flex-1 min-w-0">
-                        <div className="text-sm font-semibold text-ink-900">
-                            {state.retryQueue.pending.toLocaleString()} image{state.retryQueue.pending === 1 ? "" : "s"} en cours de retry — pas besoin d&apos;attendre
-                        </div>
-                        <div className="text-xs text-ink-600 mt-1 leading-relaxed">
-                            Conversion en arrière-plan via WP-cron toutes les 5 minutes ({state.retryQueue.dueNow > 0 ? `${state.retryQueue.dueNow.toLocaleString()} due maintenant` : "prochaine vague programmée"}).
-                            Tu recevras un email de fin une fois la file vidée — ferme cette page, va prendre un café ☕
-                        </div>
-                    </div>
-                </div>
-            )}
-
             {/* ─── Performance scorecard (hero) ──────────────────────────── */}
             {state.license.valid && (
                 refreshing && (state.savings?.converted ?? 0) === 0 ? (

@@ -972,11 +972,11 @@ function ErrorBuckets({ errors, retryQueuePending }: { errors: ErrorEntry[]; ret
                         <div className="mt-0.5 text-blue-600 text-lg" aria-hidden>🔄</div>
                         <div className="flex-1 min-w-0">
                             <div className="text-sm font-semibold text-ink-900">
-                                {Math.max(retryable.length, retryQueuePending).toLocaleString()} image{Math.max(retryable.length, retryQueuePending) === 1 ? "" : "s"} en cours de retry — pas besoin d&apos;attendre
+                                {Math.max(retryable.length, retryQueuePending).toLocaleString()} image{Math.max(retryable.length, retryQueuePending) === 1 ? "" : "s"} retrying in the background — no need to wait
                             </div>
                             <p className="text-xs text-ink-600 mt-1 leading-relaxed">
-                                Erreurs réseau ou serveur surchargé. Notre cron retentera ces images automatiquement (jusqu&apos;à 5 fois) en arrière-plan, et ça
-                                continuera même si tu fermes cette page. Tu recevras un email une fois la conversion complète.
+                                Network blip or server overload. WP-cron will retry these automatically every 5 min (up to 6 attempts), and it keeps running even if you close this tab.
+                                You&apos;ll get an email once the queue is empty.
                             </p>
                             {retryable.length > 0 && (
                                 <details className="mt-2">

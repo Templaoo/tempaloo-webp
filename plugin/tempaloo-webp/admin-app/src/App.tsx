@@ -40,10 +40,10 @@ function RetryQueueBanner({ state, onRunRetry, busy }: { state: AppState; onRunR
                 </div>
                 <div className="min-w-0 flex-1">
                     <h3 className="text-sm font-semibold text-sky-900">
-                        {pending} image{pending > 1 ? "s" : ""} queued for retry
+                        {pending} image{pending > 1 ? "s" : ""} queued for retry — no need to wait
                     </h3>
                     <p className="mt-1 text-sm text-sky-900/80">
-                        These earlier uploads couldn't reach the API and will retry automatically. {nextLabel}.
+                        These uploads couldn't reach the API on the first try. WP-cron will retry them in the background every 5 min. {nextLabel}. We'll email you a summary the moment the queue is empty — feel free to close this tab.
                     </p>
                 </div>
                 <button

@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.6.1
+Stable tag: 1.6.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -145,6 +145,10 @@ Example — skip conversion for any attachment in the `private/` upload subfolde
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 1.6.2 =
+* Fix: Removed the duplicate "X images queued for retry" panel I introduced on the Overview tab in 1.6.1 — there was already a global `RetryQueueBanner` rendering the same information across every tab. The existing banner now mentions the email-on-completion (Phase 2 addition) so users see the wrap-up promise without two stacked banners.
+* Fix: Two strings I had inadvertently shipped in French ("en cours de retry…", "Erreurs réseau ou serveur surchargé…") translated back to English to match the rest of the plugin.
 
 = 1.6.1 =
 * New: **"Conversion complete" email at the end of the background retry run.** When the WP-cron retry tick (every 5 minutes) drains the last attachment from the queue, the plugin asks the API to send a single wrap-up email summarising what was recovered (e.g. "28 images recovered · 1 couldn't be converted"). API-side dedup ensures one email per license per day even if the user cancels and restarts bulk a few times. Lets users close the tab, come back later, and trust that everything happened.
