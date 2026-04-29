@@ -17,7 +17,8 @@
     "migrate": "node scripts/migrate.mjs",
     "reset:dev": "node scripts/reset-dev.mjs",
     "admin:create": "node scripts/admin-create.mjs",
-    "admin:revoke-sessions": "node scripts/admin-revoke-sessions.mjs"
+    "admin:revoke-sessions": "node scripts/admin-revoke-sessions.mjs",
+    "reprocess-webhooks": "npm run build && node scripts/reprocess-webhooks.mjs"
   },
   "dependencies": {
     "@fastify/helmet": "^11.1.1",

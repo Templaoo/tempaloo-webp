@@ -278,9 +278,6 @@ async function upsertLicenseFromEvent(objects: unknown): Promise<UpsertResult | 
     const userEmail = usr.email;
     const userFirstName = usr.first ?? undefined;
 
-    const planCode = planCodeFromFreemius(lic.plan?.name);
-    const planName = lic.plan?.name ?? planCode;
-
     // Status priority: cancelled wins, then trial, then active.
     let status: "canceled" | "trialing" | "active";
     if (lic.is_cancelled) status = "canceled";
@@ -300,12 +297,33 @@ async function upsertLicenseFromEvent(objects: unknown): Promise<UpsertResult | 
         );
         const userId = userRows[0]!.id;
 
-        const { rows: planRows } = await client.query<{ id: string }>(
-            `SELECT id FROM plans WHERE code = $1 LIMIT 1`,
-            [planCode],
-        );
-        const planId = planRows[0]?.id;
-        if (!planId) throw new Error(`Plan ${planCode} not found`);
+        // Plan resolution — match by freemius_plan_id FIRST (numeric,
+        // stable, never silently misclassifies). Falls back to name only
+        // if the id is missing AND the name actually matches one of our
+        // canonical codes — never silently default to free anymore, since
+        // that masked a serious bug where every paid sandbox checkout
+        // landed as Free in our DB.
+        let planRow: { id: string; code: string; name: string } | undefined;
+        if (lic.plan_id != null) {
+            const r = await client.query<{ id: string; code: string; name: string }>(
+                `SELECT id, code, name FROM plans WHERE freemius_plan_id = $1 LIMIT 1`,
+                [Number(lic.plan_id)],
+            );
+            planRow = r.rows[0];
+        }
+        if (!planRow) {
+            const code = planCodeFromFreemius(lic.plan?.name);
+            const r = await client.query<{ id: string; code: string; name: string }>(
+                `SELECT id, code, name FROM plans WHERE code = $1 LIMIT 1`,
+                [code],
+            );
+            planRow = r.rows[0];
+        }
+        if (!planRow) {
+            throw new Error(`Plan not resolvable: freemius_plan_id=${lic.plan_id} name=${lic.plan?.name}`);
+        }
+        const planId = planRow.id;
+        const planName = planRow.name;
 
         const { rows: updated } = await client.query<{ license_key: string }>(
             `UPDATE licenses
