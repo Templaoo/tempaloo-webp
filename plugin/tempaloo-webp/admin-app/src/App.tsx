@@ -445,13 +445,14 @@ export default function App() {
 }
 
 function Logo() {
-    // Canonical Tempaloo brand mark — same geometric T as the public web
-    // app's LogoMark variant="brand". currentColor keeps it theme-neutral.
+    // Canonical Tempaloo brand mark — same paths as
+    // web/public/favicon.svg + web/components/Logo.tsx LogoMark variant="brand".
+    // currentColor adapts to wp-admin's neutral text color.
     return (
         <svg
             width="36"
             height="36"
-            viewBox="334 334 1380 1380"
+            viewBox="0 0 2048 2048"
             xmlns="http://www.w3.org/2000/svg"
             role="img"
             aria-label="Tempaloo"
@@ -459,8 +460,13 @@ function Logo() {
         >
             <path
                 fill="currentColor"
-                transform="translate(334,334)"
-                d="m0 0h29l25 2 36 6 30 7 37 12 29 12 29 14 24 14 24 16 16 12 16 13 11 9 7 7 8 7 15 15 7 8 13 15 13 17 13 18 12 19 12 21 9 17 13 30 10 27 9 31 7 34 5 36 1 14 3-34 6-35 8-32 12-36 13-30 8-16 10-19 12-19 10-15 12-16 8-10 12-14 7-8 12-13 5-5h2v-2l8-7 14-13 28-22 27-18 15-9 24-13 21-10 28-11 30-10 33-8 36-6 27-2h489v461l-875 1 30 4 31 6 26 7 27 9 29 12 32 16 20 12 22 15 16 12 10 8 13 11 13 12 27 27 9 11 12 14 14 19 18 27 14 26 14 28 9 24 10 30 7 27 6 29 4 28 2 26v478h-460v-919h-460z"
+                transform="translate(338,570)"
+                d="m0 0h345l36 3 38 5 26 5 24 6 31 10 21 8 28 12 24 12 18 10 23 14 16 11 19 14 16 13 13 11 15 14 12 11 18 18 7 8 1 3h2l9 11 9 10 14 19 12 16 12 19 15 25 12 23 7 14 13 31 10 28 8 26 9 39 5 30 3 26 2 32v35l-2 30-4 31-7 36-8 30-11 33-11 27-14 32-16 34-13 28-14 30-11 24-1 1h-395l3-9 17-35 13-28 19-40 28-60 16-34 13-28 16-34 13-28 32-68 13-28 13-27 11-24 19-40 14-30 10-22 11-22h-422l-4-4-10-17-12-21-13-22-14-24-15-26-10-17-15-26-8-13-9-16-10-17-15-26-11-18-13-23-8-13-12-21-10-17-10-18-6-10z"
+            />
+            <path
+                fill="currentColor"
+                transform="translate(1112,570)"
+                d="m0 0h394l6 9 12 21 7 12 8 13 16 28 17 29 16 27 14 24 13 23 8 13 12 20 11 20 28 48 13 22 16 28 6 11v3h-215l-24-2-29-5-20-5-25-8-22-9-28-14-18-11-18-13-13-10-11-10-8-7-18-18-9-11-11-13-13-18-11-18-16-28-10-17-16-28-8-13-8-14-10-17-13-22-10-17-11-19z"
             />
         </svg>
     );
