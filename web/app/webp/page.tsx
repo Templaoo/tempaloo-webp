@@ -1,5 +1,6 @@
 import { LandingPage } from "@/components/webp/LandingPage";
 import { loadPlans } from "@/lib/plans";
+import { PostAuthRedirector } from "@/components/PostAuthRedirector";
 
 export const metadata = {
     title: "Tempaloo WebP — Drop-in WebP & AVIF for WordPress",
@@ -12,5 +13,10 @@ export const revalidate = 300;
 
 export default async function WebPLanding() {
     const plans = await loadPlans();
-    return <LandingPage plans={plans} />;
+    return (
+        <>
+            <PostAuthRedirector />
+            <LandingPage plans={plans} />
+        </>
+    );
 }

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { LogoMark } from "@/components/Logo";
+import { PostAuthRedirector } from "@/components/PostAuthRedirector";
 
 export const metadata = {
     title: "Tempaloo — WordPress plugins & templates",
@@ -34,6 +35,10 @@ const PRODUCTS: Product[] = [
 export default function Home() {
     return (
         <main style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+            {/* Catches users stranded here after OAuth — the modal stashed
+                their intended post-auth path in sessionStorage. No-op
+                if the storage slot is empty. */}
+            <PostAuthRedirector />
             <header className="app-container" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", height: 60 }}>
                 <Link href="/" aria-label="Tempaloo home" style={{ display: "inline-flex", alignItems: "center" }}>
                     <LogoMark size={32} />

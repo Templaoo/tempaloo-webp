@@ -110,10 +110,24 @@ export function ActivateModal({
         setLoading(true);
         setError(null);
         try {
-            // Neon Auth (Better Auth) — POST returns a redirect URL.
-            const callbackURL = isPaid
+            // Better Auth's social sign-in: callbackURL must be ABSOLUTE
+            // for trustedOrigins matching to accept it; relative URLs
+            // were silently dropped in some versions and the user landed
+            // on the site root after OAuth. Using window.location.origin
+            // guarantees same-origin.
+            //
+            // Belt-and-braces: stash the desired post-auth path in
+            // sessionStorage too, so the /webp/post-auth router can
+            // recover the redirect target even if Better Auth itself
+            // strips the param somewhere along the OAuth chain (state
+            // cookie loss across the Google round-trip is a known issue
+            // with strict third-party cookie policies on Safari).
+            const path = isPaid
                 ? `/webp/activate?plan=${plan.code}&billing=${billing}&checkout=1`
                 : `/webp/dashboard?signup=1`;
+            const callbackURL = `${window.location.origin}${path}`;
+            try { sessionStorage.setItem("tempaloo_post_auth", path); } catch { /* private mode */ }
+
             const res = await fetch("/api/auth/sign-in/social", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
