@@ -25,8 +25,10 @@ class Tempaloo_WebP_Bulk {
 
     public function ajax_scan() {
         $this->check_caps();
-        $ids = $this->find_pending_ids( 5000 ); // cap upfront to avoid huge scans
-        wp_send_json_success( [ 'pending' => count( $ids ) ] );
+        $report = $this->scan_breakdown( 5000 );
+        // Strip the internal id list — only counters travel over the wire.
+        unset( $report['pendingIds'] );
+        wp_send_json_success( $report );
     }
 
     public function ajax_start() {
@@ -180,20 +182,63 @@ class Tempaloo_WebP_Bulk {
     }
 
     /**
-     * Finds attachment IDs that are supported types and don't have a sibling
-     * converted file yet.
+     * Resolves which output formats the bulk scan should consider an
+     * attachment "complete" against. Mirrors the converter's downgrade
+     * logic so the bulk view never asks the user to convert into a
+     * format their plan doesn't support.
+     *
+     * @return array{0: array<string>, 1: string} [extensions to expect, resolved format label]
+     */
+    private function expected_extensions() {
+        $s = Tempaloo_WebP_Plugin::get_settings();
+        $fmt = isset( $s['output_format'] ) ? (string) $s['output_format'] : 'webp';
+        if ( 'both' === $fmt && empty( $s['supports_avif'] ) ) $fmt = 'webp';
+        if ( 'avif' === $fmt && empty( $s['supports_avif'] ) ) $fmt = 'webp';
+        if ( ! in_array( $fmt, [ 'webp', 'avif', 'both' ], true ) )  $fmt = 'webp';
+
+        if ( 'both' === $fmt ) return [ [ '.webp', '.avif' ], 'both' ];
+        if ( 'avif' === $fmt ) return [ [ '.avif' ], 'avif' ];
+        return [ [ '.webp' ], 'webp' ];
+    }
+
+    /**
+     * Returns the list of attachment IDs the user's CURRENT format setting
+     * considers "incomplete". An image converted only to WebP becomes
+     * pending again the moment the user switches to "Both" or "AVIF only" —
+     * the missing sibling is what bulk is for.
+     *
+     * Existence is checked on disk per-size (original + every WP-generated
+     * size), so the scan reflects reality even if the meta block claims
+     * something different (e.g. a sibling was hand-deleted).
      */
     private function find_pending_ids( $limit = 5000 ) {
+        $report = $this->scan_breakdown( $limit );
+        return $report['pendingIds'];
+    }
+
+    /**
+     * Detailed inventory used by ajax_scan to drive the pre-flight panel
+     * and by ajax_start to seed the running queue. Single source of truth
+     * — both code paths agree on what "pending" means for the current
+     * output_format setting.
+     *
+     * The returned `pendingIds` is intentionally NOT exposed to the
+     * client; only the counters travel over JSON.
+     *
+     * @param int $limit
+     * @return array{
+     *   total:int, fullyConverted:int, pending:int,
+     *   missingWebp:int, missingAvif:int,
+     *   targetFormat:string, expectedExts:array<string>,
+     *   pendingIds:array<int>
+     * }
+     */
+    private function scan_breakdown( $limit = 5000 ) {
         global $wpdb;
         $limit = (int) $limit;
-        // MIME list is hardcoded (no user input), but going through prepare()
-        // keeps WordPress.org's coding-standards review happy and makes the
-        // intent explicit.
-        // Direct query is intentional: we scan the whole attachment table up
-        // to $limit rows. A WP_Query would load every post into memory; get_col
-        // returns just IDs, which is what we need. No cache layer either —
-        // bulk is a one-shot user-initiated action, caching adds no value.
-        //
+
+        list( $expected_exts, $target_fmt ) = $this->expected_extensions();
+
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
         $ids = $wpdb->get_col(
             $wpdb->prepare(
@@ -208,19 +253,62 @@ class Tempaloo_WebP_Bulk {
             )
         );
 
+        $report = [
+            'total'          => count( (array) $ids ),
+            'fullyConverted' => 0,
+            'pending'        => 0,
+            'missingWebp'    => 0,
+            'missingAvif'    => 0,
+            'targetFormat'   => $target_fmt,
+            'expectedExts'   => $expected_exts,
+            'pendingIds'     => [],
+        ];
+
         if ( empty( $ids ) ) {
-            return [];
+            return $report;
         }
 
-        // Filter out those already converted.
-        $pending = [];
         foreach ( $ids as $id ) {
+            $orig = get_attached_file( (int) $id );
+            if ( ! $orig || ! file_exists( $orig ) ) continue;
+
             $meta = wp_get_attachment_metadata( (int) $id );
-            if ( empty( $meta['tempaloo_webp']['sizes'] ) && empty( $meta['tempaloo_webp']['path'] ) ) {
-                $pending[] = (int) $id;
+            $paths = [ $orig ];
+            if ( ! empty( $meta['sizes'] ) && is_array( $meta['sizes'] ) ) {
+                foreach ( $meta['sizes'] as $size ) {
+                    if ( ! empty( $size['file'] ) ) {
+                        $paths[] = trailingslashit( dirname( $orig ) ) . $size['file'];
+                    }
+                }
+            }
+
+            // Pending = at least one (path, expected_ext) pair is missing.
+            // We also track which extension is missing for the breakdown.
+            $needs_webp = false;
+            $needs_avif = false;
+            $is_pending = false;
+            foreach ( $paths as $p ) {
+                if ( in_array( '.webp', $expected_exts, true ) && ! file_exists( $p . '.webp' ) ) {
+                    $needs_webp = true;
+                    $is_pending = true;
+                }
+                if ( in_array( '.avif', $expected_exts, true ) && ! file_exists( $p . '.avif' ) ) {
+                    $needs_avif = true;
+                    $is_pending = true;
+                }
+            }
+
+            if ( $is_pending ) {
+                $report['pendingIds'][] = (int) $id;
+                $report['pending']++;
+                if ( $needs_webp ) $report['missingWebp']++;
+                if ( $needs_avif ) $report['missingAvif']++;
+            } else {
+                $report['fullyConverted']++;
             }
         }
-        return $pending;
+
+        return $report;
     }
 
     private function convert_attachment( $attachment_id, array $settings ) {

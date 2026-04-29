@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.4.0
+Stable tag: 1.5.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -145,6 +145,12 @@ Example — skip conversion for any attachment in the `private/` upload subfolde
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 1.5.0 =
+* Fix: **Bulk scan now respects the current "Image format(s)" setting.** Until now, an image converted in WebP-only mode counted as "fully done" forever — switching to "Both" later did nothing because bulk skipped any attachment whose `tempaloo_webp` meta block existed. The scan is now disk-based per format: an attachment is "pending" if at least one expected sibling (`.webp` and/or `.avif`) is missing for any size. So "WebP → Both" instantly re-flags every image whose AVIF sibling is missing, and bulk fills the gap on the next run.
+* New: **Pre-flight breakdown.** The bulk scan now returns total / fully-converted / pending counts plus a per-format split (how many need WebP, how many need AVIF). The Idle pane shows the inventory at a glance and the pre-flight modal explains what the next batch will do — including a "Why two siblings per size?" panel when "Both" is the target.
+* Improved: Bulk "How it works" copy clarifies that switching formats later only re-processes the gaps — same credit math, never double-charged.
+* Verified: Restore originals already removes both `.webp` and `.avif` siblings in one pass (`includes/class-rest.php`), so dual-format users get a clean undo.
 
 = 1.4.0 =
 * New: **Dual-format generation** — pick "Both" in Settings → Image format(s) and the plugin generates AVIF + WebP siblings in a single API call. Same approach as ShortPixel's "Create WebP versions" + "Create AVIF versions" combo. **Still 1 credit per upload**, regardless of how many output formats. The `<picture>` automatically serves AVIF to browsers that support it (≈80% of 2026 traffic — Chrome / Edge / Safari 16+ / Firefox 113+ / iOS 16+) and falls back to WebP everywhere else. Requires Starter plan or above for AVIF.

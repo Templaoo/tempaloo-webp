@@ -238,8 +238,25 @@ export async function ajax<T>(action: string, extra: Record<string, string> = {}
     return data.data as T;
 }
 
+export interface BulkScanReport {
+    /** Total scannable attachments (jpeg/png/gif). */
+    total: number;
+    /** Already have every expected sibling on disk for the current format. */
+    fullyConverted: number;
+    /** Need at least one missing sibling — these are what bulk will process. */
+    pending: number;
+    /** Subset of pending whose .webp sibling is missing on at least one size. */
+    missingWebp: number;
+    /** Subset of pending whose .avif sibling is missing on at least one size. */
+    missingAvif: number;
+    /** Resolved target format after the supports_avif downgrade step. */
+    targetFormat: "webp" | "avif" | "both";
+    /** Extensions the scan considers "complete" — informative for the UI. */
+    expectedExts: string[];
+}
+
 export const bulk = {
-    scan: () => ajax<{ pending: number }>("bulk_scan"),
+    scan: () => ajax<BulkScanReport>("bulk_scan"),
     start: () => ajax<BulkStatus>("bulk_start"),
     tick: () => ajax<BulkStatus>("bulk_tick"),
     cancel: () => ajax<BulkStatus>("bulk_cancel"),

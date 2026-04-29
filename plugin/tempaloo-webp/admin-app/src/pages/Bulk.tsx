@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, bulk, type AppState, type BulkStatus } from "../api";
+import { api, bulk, type AppState, type BulkScanReport, type BulkStatus } from "../api";
 import { Badge, Button, Card, CardHeader, CompressionFactory, Confetti, FilesStream, Modal, ProgressRing, toast } from "../components/ui";
 
 const EMPTY_STATUS: BulkStatus = {
@@ -65,7 +65,8 @@ export default function Bulk({ state, onState, onUpgrade }: {
     onState?: (s: AppState) => void;
     onUpgrade?: () => void;
 }) {
-    const [pending, setPending]       = useState<number | null>(null);
+    const [report, setReport]         = useState<BulkScanReport | null>(null);
+    const pending = report?.pending ?? null;
     const [status, setStatus]         = useState<BulkStatus>(EMPTY_STATUS);
     const [pane, setPane]             = useState<Pane>("loading");
     const [scanning, setScanning]     = useState(false);
@@ -123,11 +124,15 @@ export default function Bulk({ state, onState, onUpgrade }: {
         setScanning(true);
         try {
             const r = await bulk.scan();
-            setPending(r.pending);
+            setReport(r);
             if (r.pending > 0) setPreflightOpen(true);
             else {
                 setPane("idle-clean");
-                toast("info", "Nothing to convert — your library is already optimized.");
+                const fmtLabel =
+                    r.targetFormat === "both"  ? "WebP + AVIF"
+                  : r.targetFormat === "avif"  ? "AVIF"
+                  :                              "WebP";
+                toast("info", `Nothing to convert — every image already has ${fmtLabel} siblings.`);
             }
         } catch (e) {
             toast("error", e instanceof Error ? e.message : "Scan failed");
@@ -324,7 +329,7 @@ export default function Bulk({ state, onState, onUpgrade }: {
                     <IdleView
                         pane={pane}
                         state={state}
-                        pending={pending}
+                        report={report}
                         scanning={scanning}
                         onScan={scan}
                         lastStatus={status}
@@ -338,7 +343,7 @@ export default function Bulk({ state, onState, onUpgrade }: {
                 open={preflightOpen}
                 onClose={() => setPreflightOpen(false)}
                 onConfirm={start}
-                pending={pending ?? 0}
+                report={report}
                 state={state}
             />
 
@@ -393,24 +398,29 @@ function LoadingSkeleton() {
 }
 
 /* ── Idle view (fresh / clean / canceled) ───────────────────────────── */
-function IdleView({ pane, state, pending, scanning, onScan, lastStatus }: {
+function IdleView({ pane, state, report, scanning, onScan, lastStatus }: {
     pane: "idle-fresh" | "idle-clean" | "idle-canceled";
     state: AppState;
-    pending: number | null;
+    report: BulkScanReport | null;
     scanning: boolean;
     onScan: () => void;
     lastStatus: BulkStatus;
 }) {
+    const fmtLabel =
+        report?.targetFormat === "both" ? "WebP + AVIF"
+      : report?.targetFormat === "avif" ? "AVIF"
+      :                                   "WebP";
+
     const headline =
         pane === "idle-clean"     ? "Library is fully converted ✓"
       : pane === "idle-canceled"  ? "Last run canceled"
       : "Bulk conversion";
     const description =
         pane === "idle-clean"
-            ? "Every supported image already has a WebP/AVIF sibling. Scan again anytime to catch new uploads."
+            ? `Every supported image already has a ${fmtLabel} sibling. Scan again anytime to catch new uploads.`
             : pane === "idle-canceled"
                 ? `${lastStatus.processed.toLocaleString()} of ${lastStatus.total.toLocaleString()} images were converted before you canceled. Scan to resume the rest.`
-                : "Convert images already in your media library. 1 credit per image — all sizes included.";
+                : "Convert images already in your media library. 1 credit per image — every thumbnail size and every selected format included.";
 
     return (
         <Card>
@@ -426,13 +436,36 @@ function IdleView({ pane, state, pending, scanning, onScan, lastStatus }: {
                 </div>
             )}
 
+            {/* Breakdown — visible whenever a scan has run, even at 0 pending */}
+            {report && (
+                <div className="mb-5 rounded-lg border border-ink-100 bg-ink-50/50 px-4 py-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <Stat label="Library total" value={report.total.toLocaleString()} />
+                    <Stat label="Already done" value={report.fullyConverted.toLocaleString()} accent={report.fullyConverted > 0 ? "success" : undefined} />
+                    <Stat
+                        label={report.targetFormat === "both" ? "Need WebP" : `Pending ${fmtLabel}`}
+                        value={(report.targetFormat === "both" ? report.missingWebp : report.pending).toLocaleString()}
+                        accent={report.pending > 0 ? "brand" : undefined}
+                    />
+                    {report.targetFormat === "both" && (
+                        <Stat
+                            label="Need AVIF"
+                            value={report.missingAvif.toLocaleString()}
+                            accent={report.missingAvif > 0 ? "brand" : undefined}
+                        />
+                    )}
+                    {report.targetFormat !== "both" && (
+                        <Stat label="Format" value={fmtLabel} />
+                    )}
+                </div>
+            )}
+
             <div className="flex gap-2 flex-wrap">
                 <Button onClick={onScan} loading={scanning} disabled={!state.license.valid}>
-                    {pending === null ? "Scan & start" : "Scan again"}
+                    {report === null ? "Scan & start" : "Scan again"}
                 </Button>
-                {pending !== null && pending > 0 && (
+                {report !== null && report.pending > 0 && (
                     <span className="self-center text-sm text-ink-500">
-                        {pending} attachment{pending > 1 ? "s" : ""} pending
+                        {report.pending.toLocaleString()} image{report.pending > 1 ? "s" : ""} need {fmtLabel}
                     </span>
                 )}
             </div>
@@ -453,15 +486,29 @@ function IdleView({ pane, state, pending, scanning, onScan, lastStatus }: {
     );
 }
 
+function Stat({ label, value, accent }: { label: string; value: string; accent?: "brand" | "success" }) {
+    const valueClass =
+        accent === "success" ? "text-emerald-700"
+      : accent === "brand"   ? "text-brand-700"
+      :                        "text-ink-900";
+    return (
+        <div>
+            <div className="uppercase tracking-wide text-[10px] font-semibold text-ink-500">{label}</div>
+            <div className={`mt-0.5 text-base font-semibold ${valueClass}`}>{value}</div>
+        </div>
+    );
+}
+
 /* ── How it works (kept under everything) ───────────────────────────── */
 function HowItWorks() {
     return (
         <Card className="bg-ink-50/50 border-dashed">
             <CardHeader title="How it works" />
             <ul className="space-y-2 text-sm text-ink-600">
-                <li>• We scan your media library for JPG, PNG and GIF images that haven&apos;t been optimized yet.</li>
-                <li>• For each attachment we send <strong>one batch</strong> with the original and all generated sizes — that&apos;s <strong>1 credit</strong>.</li>
-                <li>• Originals stay untouched. A <code className="text-xs bg-white border border-ink-200 rounded px-1">.webp</code> sibling is written next to each size.</li>
+                <li>• We scan your media library for JPG, PNG and GIF images that don&apos;t yet have every sibling for your current <strong>Image format(s)</strong> setting (Settings → Conversion).</li>
+                <li>• Each attachment is <strong>one batch, one credit</strong> — original + every WordPress thumbnail + both formats when "Both" is selected, all in a single API call.</li>
+                <li>• Originals stay untouched. <code className="text-xs bg-white border border-ink-200 rounded px-1">.webp</code> and <code className="text-xs bg-white border border-ink-200 rounded px-1">.avif</code> siblings are written next to each size on disk.</li>
+                <li>• Switching formats later (e.g. WebP → Both) re-flags every image whose AVIF sibling is missing — scan again and only the gaps are processed.</li>
                 <li>• If the process is interrupted (tab closed, server restart), reopen this page — we resume from where we stopped.</li>
             </ul>
         </Card>
@@ -470,14 +517,20 @@ function HowItWorks() {
 
 /* ── Pre-flight modal ───────────────────────────────────────────────── */
 function PreflightModal({
-    open, onClose, onConfirm, pending, state,
+    open, onClose, onConfirm, report, state,
 }: {
     open: boolean;
     onClose: () => void;
     onConfirm: () => void;
-    pending: number;
+    report: BulkScanReport | null;
     state: AppState;
 }) {
+    const pending = report?.pending ?? 0;
+    const fmtLabel =
+        report?.targetFormat === "both" ? "WebP + AVIF"
+      : report?.targetFormat === "avif" ? "AVIF"
+      :                                   "WebP";
+
     const checks = useMemo(() => {
         const remaining = state.quota?.imagesRemaining ?? 0;
         const rollover = state.quota?.imagesRollover ?? 0;
@@ -536,7 +589,7 @@ function PreflightModal({
         <Modal
             open={open}
             onClose={onClose}
-            title={`Convert ${pending.toLocaleString()} image${pending > 1 ? "s" : ""}?`}
+            title={`Convert ${pending.toLocaleString()} image${pending > 1 ? "s" : ""} to ${fmtLabel}?`}
             description={
                 <span>
                     Estimated time: <strong className="text-ink-700">~{fmtSecs(checks.etaSeconds)}</strong>.
@@ -546,6 +599,19 @@ function PreflightModal({
             size="lg"
         >
             <div className="mb-5"><CompressionFactory /></div>
+
+            {report && report.targetFormat === "both" && (
+                <div className="mb-5 rounded-lg border border-brand-200 bg-brand-50/60 px-4 py-3 text-sm text-ink-700">
+                    <div className="font-medium text-ink-900">Why two siblings per size?</div>
+                    <div className="mt-1 text-xs leading-relaxed text-ink-600">
+                        <strong>{report.missingWebp.toLocaleString()}</strong> image{report.missingWebp === 1 ? "" : "s"} need WebP ·
+                        <strong className="ml-1">{report.missingAvif.toLocaleString()}</strong> need AVIF.
+                        Both are produced in a single API call per attachment — <strong>1 credit covers both formats</strong>,
+                        same cost as picking just one.
+                    </div>
+                </div>
+            )}
+
             <div className="space-y-2.5 mb-5">
                 {checks.list.map((c) => (
                     <div key={c.label} className="flex items-start gap-3 px-3 py-2.5 rounded-lg bg-ink-50/70">
