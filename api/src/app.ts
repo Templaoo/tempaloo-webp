@@ -2,9 +2,29 @@ import Fastify, { type FastifyInstance } from "fastify";
 import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
 import helmet from "@fastify/helmet";
+import sharp from "sharp";
 import { ZodError } from "zod";
 import { config } from "./config.js";
 import { ApiError } from "./errors.js";
+
+// ─── Sharp memory tuning for the 512MB Render Starter dyno ──────────
+//
+// Sharp picks its libvips thread-pool size from libuv defaults — on a
+// machine with N cores it spawns N threads, each holding its own
+// working memory. On a 0.5 vCPU dyno that translated into 4–8 threads
+// each grabbing 50–150MB during AVIF encoding, which OOM-killed the
+// dyno mid-batch (observed live on real bulk runs). Pinning to 1
+// thread keeps RSS predictable; a single AVIF encode peaks ~150MB
+// instead of N × 150MB.
+//
+// `cache(false)` disables the libvips operation cache entirely. The
+// cache speeds up repeated encodes of the same buffer, which never
+// happens in our workflow — we encode each file once and ship the
+// bytes. Keeping it enabled holds onto recently-decoded pixel data
+// long after we're done with it, which is pure heap pressure.
+sharp.concurrency(1);
+sharp.cache(false);
+sharp.simd(true); // SIMD is fine — it's CPU vectorization, not extra memory
 import accountRoutes from "./routes/account.js";
 import adminAuthRoutes from "./routes/admin/auth.js";
 import adminDataRoutes from "./routes/admin/data.js";

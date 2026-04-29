@@ -125,22 +125,30 @@ export default async function convertRoute(app: FastifyInstance) {
         // choose the sibling extension when writing back to disk.
         const targetFormats: ("webp" | "avif")[] = fmt === "both" ? ["webp", "avif"] : [fmt];
 
-        // Encoding strategy on a 512MB Render dyno:
-        //   * WebP is light (~10-30MB peak per encode), AVIF is heavy
-        //     (~50-150MB peak — libavif/libaom). 5 thumbnails × 2 formats
-        //     = 10 parallel Promise.all() encodes was OOM-killing the
-        //     dyno; the proxy then returned 502 to the plugin which
-        //     treated it as "all sizes failed" and the credit was lost
-        //     even though WebP would have succeeded.
-        //   * Fix: encode formats SEQUENTIALLY (webp first, then avif)
-        //     and within each format cap concurrency so the resident
-        //     set never spikes past the dyno limit. Promise.allSettled
-        //     means one bad encode doesn't poison the rest of the batch.
-        //   * AVIF effort=4 (Sharp default) is balanced. Anything lower
-        //     produces noticeably bigger files; anything higher trades
-        //     2x time for ~5% extra compression. We keep the default.
-        const AVIF_CONCURRENCY = 2;
-        const WEBP_CONCURRENCY = 4;
+        // Encoding strategy on a 512MB Render dyno (post-OOM tuning):
+        //   * v1.4.1 capped AVIF concurrency at 2; that STILL OOM'd on
+        //     real WordPress thumbnails (observed live at 18:37 UTC —
+        //     "Ran out of memory used over 512MB"). libavif peak is
+        //     closer to 200MB per encode than the 50-150MB I estimated.
+        //     With concurrency=2 + Node baseline + Fastify + the input
+        //     buffer array, RSS spikes past 512MB on the second encode.
+        //   * Fix v1.5.2: AVIF strictly sequential (concurrency=1) so
+        //     RSS only carries one libavif working set at a time. Plus
+        //     `sharp.concurrency(1)` at app boot pins the libvips
+        //     thread pool to 1 thread, removing per-thread working
+        //     memory multiplication.
+        //   * effort=3 instead of Sharp's default 4 for AVIF — cuts
+        //     encode time ~30% and peak heap ~10-15%, files are 3-5%
+        //     larger which is the right trade on a 512MB dyno. Revisit
+        //     if we move to Standard (2GB) later.
+        //   * WebP concurrency stays at 3 (was 4) — small headroom
+        //     reduction so a parallel WebP batch can't compound with
+        //     the libvips thread pool to push us close to the limit.
+        //   * Promise.allSettled means one bad encode doesn't poison
+        //     the rest of the batch (kept from v1.4.1).
+        const AVIF_CONCURRENCY = 1;
+        const WEBP_CONCURRENCY = 3;
+        const AVIF_EFFORT      = 3;
 
         type EncodeResult = {
             name: string;
@@ -160,7 +168,7 @@ export default async function convertRoute(app: FastifyInstance) {
                 try {
                     const pipeline = sharp(f.buffer, { failOnError: false });
                     const out = tf === "avif"
-                        ? await pipeline.avif({ quality }).toBuffer()
+                        ? await pipeline.avif({ quality, effort: AVIF_EFFORT }).toBuffer()
                         : await pipeline.webp({ quality }).toBuffer();
                     return {
                         ok: true as const,
@@ -183,6 +191,17 @@ export default async function convertRoute(app: FastifyInstance) {
                     failures.push({ name: r.name, format: r.format, reason: r.reason });
                     req.log.warn({ name: r.name, format: r.format, reason: r.reason }, "sharp encode failed");
                 }
+            }
+            // Free libvips internal state between formats. cache(false) at
+            // boot disables persistent caching, but per-encode scratch
+            // buffers can still linger until the next libvips call. A
+            // no-op cache reconfigure flushes them deterministically.
+            sharp.cache({ items: 0 });
+            // Suggest GC if Node was started with --expose-gc (Render's
+            // default node command doesn't pass that flag, so this is a
+            // no-op there but useful in local profiling).
+            if (typeof globalThis.gc === "function") {
+                globalThis.gc();
             }
         }
 

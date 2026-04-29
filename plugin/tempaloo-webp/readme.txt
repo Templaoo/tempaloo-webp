@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.5.1
+Stable tag: 1.5.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -145,6 +145,9 @@ Example — skip conversion for any attachment in the `private/` upload subfolde
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 1.5.2 =
+* (API-side) Fixed AVIF OOM on the 512 MB Render dyno. v1.4.1's `concurrency=2` cap still ran out of memory on real WordPress thumbnail batches because libavif peak heap is ~200 MB per encode, not ~150 MB. AVIF is now strictly sequential (concurrency=1) and runs at `effort=3` (Sharp default is 4) — files are 3–5 % larger but encode time drops ~30 % and peak heap drops ~10–15 %. `sharp.concurrency(1)` + `sharp.cache(false)` at app boot pins the libvips thread pool to one worker so RSS only ever carries one libavif working set at a time. No plugin code changed; redeploy the API and re-run bulk.
 
 = 1.5.1 =
 * Fix: **Restore now verifies every deletion.** `wp_delete_file()` returns void and silently swallows permission errors and file-in-use locks (LiteSpeed object cache, FTP transfer in progress, etc.) — we used to count those as "removed" and the user ended up with leftover siblings the bulk scan then treated as "fully converted". The post-delete `file_exists()` check now falls back to a raw `unlink()`, counts true failures, and surfaces them in the modal with sample paths so you can see exactly which files are stuck.
