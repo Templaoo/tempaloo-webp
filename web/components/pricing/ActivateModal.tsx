@@ -110,22 +110,23 @@ export function ActivateModal({
         setLoading(true);
         setError(null);
         try {
-            // Better Auth's social sign-in: callbackURL must be ABSOLUTE
-            // for trustedOrigins matching to accept it; relative URLs
-            // were silently dropped in some versions and the user landed
-            // on the site root after OAuth. Using window.location.origin
-            // guarantees same-origin.
+            // Better Auth's callbackURL: PATH-ONLY (relative). Switching
+            // to absolute URLs (window.location.origin + path) tripped
+            // the trustedOrigins validation server-side and produced
+            // 403 INVALID_CALLBACKURL — the Neon Auth instance doesn't
+            // have tempaloo.com in its trustedOrigins config, but
+            // relative paths are treated as same-origin and skip the
+            // check entirely.
             //
-            // Belt-and-braces: stash the desired post-auth path in
-            // sessionStorage too, so the /webp/post-auth router can
-            // recover the redirect target even if Better Auth itself
-            // strips the param somewhere along the OAuth chain (state
-            // cookie loss across the Google round-trip is a known issue
-            // with strict third-party cookie policies on Safari).
+            // Safety net: stash the desired post-auth path in
+            // sessionStorage too, so the <PostAuthRedirector/> on the
+            // home page can recover the redirect if Better Auth ever
+            // drops it (e.g. state cookie loss across the Google
+            // round-trip on strict third-party cookie policies).
             const path = isPaid
                 ? `/webp/activate?plan=${plan.code}&billing=${billing}&checkout=1`
                 : `/webp/dashboard?signup=1`;
-            const callbackURL = `${window.location.origin}${path}`;
+            const callbackURL = path;   // relative — same-origin, no trustedOrigins check
             try { sessionStorage.setItem("tempaloo_post_auth", path); } catch { /* private mode */ }
 
             // Warmup GET: ensures Better Auth has a fresh CSRF / nonce
