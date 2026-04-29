@@ -93,7 +93,7 @@ final class Tempaloo_WebP_Plugin {
 
         // Per-CPT quality overrides: when an attachment is attached to a
         // post of type X and X has a saved override, use that quality.
-        add_filter( 'tempaloo_quality_for', static function ( $quality, $attachment_id ) {
+        add_filter( 'tempaloo_webp_quality_for', static function ( $quality, $attachment_id ) {
             $s = self::get_settings();
             $map = is_array( $s['cpt_quality'] ?? null ) ? $s['cpt_quality'] : (array) ( $s['cpt_quality'] ?? [] );
             if ( empty( $map ) ) return $quality;

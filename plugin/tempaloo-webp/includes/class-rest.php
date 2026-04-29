@@ -119,6 +119,11 @@ class Tempaloo_WebP_REST {
     public function post_restore( WP_REST_Request $req ) {
         $ids = $req->get_param( 'ids' );
         if ( ! is_array( $ids ) || empty( $ids ) ) {
+            // Slow-query warning acknowledged: same trade-off as the CLI
+            // restore — this only runs on the explicit /restore REST
+            // endpoint (admin button, never a page render), capped at
+            // 5000 ids. Acceptable cost for a destructive admin op.
+            // phpcs:disable WordPress.DB.SlowDBQuery.slow_db_query_meta_query
             $ids = get_posts( [
                 'post_type'      => 'attachment',
                 'post_status'    => 'inherit',
@@ -133,6 +138,7 @@ class Tempaloo_WebP_REST {
                     ],
                 ],
             ] );
+            // phpcs:enable WordPress.DB.SlowDBQuery.slow_db_query_meta_query
         } else {
             $ids = array_map( 'absint', $ids );
         }
@@ -171,7 +177,12 @@ class Tempaloo_WebP_REST {
         }
 
         Tempaloo_WebP_Activity::log( 'restore', 'warn',
-            sprintf( __( 'Restored %d attachments · %d files removed', 'tempaloo-webp' ), $restored, $files_removed ),
+            sprintf(
+                /* translators: 1: number of attachments whose original was restored, 2: number of WebP/AVIF files removed in the process */
+                __( 'Restored %1$d attachments · %2$d files removed', 'tempaloo-webp' ),
+                $restored,
+                $files_removed
+            ),
             [ 'restored' => $restored, 'files_removed' => $files_removed ]
         );
 
@@ -219,7 +230,11 @@ class Tempaloo_WebP_REST {
             'last_verified_at' => time(),
         ] );
         Tempaloo_WebP_Activity::log( 'license', 'success',
-            sprintf( __( 'License activated · %s plan', 'tempaloo-webp' ), strtoupper( (string) ( $res['data']['plan'] ?? 'free' ) ) ),
+            sprintf(
+                /* translators: %s: plan name in upper-case (FREE / STARTER / GROWTH / BUSINESS / UNLIMITED) */
+                __( 'License activated · %s plan', 'tempaloo-webp' ),
+                strtoupper( (string) ( $res['data']['plan'] ?? 'free' ) )
+            ),
             [ 'plan' => (string) ( $res['data']['plan'] ?? 'free' ) ]
         );
         return $this->state_response();

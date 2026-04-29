@@ -209,6 +209,12 @@ class Tempaloo_WebP_CLI {
             $ids = array_filter( array_map( 'absint', explode( ',', (string) $assoc_args['ids'] ) ) );
         }
         if ( empty( $ids ) ) {
+            // Slow-query warning acknowledged: this only runs on the
+            // manual `wp tempaloo restore` CLI command, never in a
+            // request hot path. Capped at 5000 attachments — plenty
+            // for the typical site that ever runs a restore (it's a
+            // destructive op, used once when uninstalling).
+            // phpcs:disable WordPress.DB.SlowDBQuery.slow_db_query_meta_query
             $ids = get_posts( [
                 'post_type'      => 'attachment',
                 'post_status'    => 'inherit',
@@ -219,6 +225,7 @@ class Tempaloo_WebP_CLI {
                     [ 'key' => '_wp_attachment_metadata', 'value' => 'tempaloo_webp', 'compare' => 'LIKE' ],
                 ],
             ] );
+            // phpcs:enable WordPress.DB.SlowDBQuery.slow_db_query_meta_query
         }
         if ( empty( $ids ) ) {
             WP_CLI::success( 'Nothing to restore.' );

@@ -61,7 +61,11 @@ class Tempaloo_WebP_Converter {
          * @param int    $attachment_id The attachment being processed.
          * @param string $mode          'auto' (on upload) or 'bulk' (CLI / bulk job).
          */
-        if ( apply_filters( 'tempaloo_skip_attachment', false, $attachment_id, $mode ) ) {
+        // The hook prefix matches the plugin slug (`tempaloo_webp`), per
+        // WP coding standards. Old `tempaloo_skip_attachment` callers are
+        // not preserved — the hook was never publicly documented; safe
+        // to rename pre-1.x.
+        if ( apply_filters( 'tempaloo_webp_skip_attachment', false, $attachment_id, $mode ) ) {
             return [ 'metadata' => $metadata, 'converted' => 0, 'failed' => 0, 'error_code' => 'skipped' ];
         }
 
@@ -81,7 +85,7 @@ class Tempaloo_WebP_Converter {
          * @param int    $attachment_id The attachment being processed.
          * @param string $format        'webp' or 'avif' — the target format chosen above.
          */
-        $quality = (int) apply_filters( 'tempaloo_quality_for', (int) $settings['quality'], $attachment_id, $format );
+        $quality = (int) apply_filters( 'tempaloo_webp_quality_for', (int) $settings['quality'], $attachment_id, $format );
         $quality = max( 1, min( 100, $quality ) ); // clamp — defends against stray filter values
         $client  = new Tempaloo_WebP_API_Client( $settings['license_key'] );
 
@@ -165,7 +169,7 @@ class Tempaloo_WebP_Converter {
          *     @type array  $sizes      Generated sizes map: orig_basename => { file, bytes }.
          * }
          */
-        do_action( 'tempaloo_after_convert', $attachment_id, [
+        do_action( 'tempaloo_webp_after_convert', $attachment_id, [
             'format'    => $format,
             'converted' => $converted,
             'failed'    => $failed,
