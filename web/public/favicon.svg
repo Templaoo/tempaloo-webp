@@ -1,27 +1,24 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-    Tempaloo brand mark — transparent background.
-    The two paths are the canonical T glyph from the master logo
-    (logos/logo-icon.svg). Background rect from the source has been
-    stripped so the icon overlays cleanly on any color.
+    Tempaloo brand mark — synced with logos/logo templaoo (1).svg.
+    Two paths from the master logo, transparent background.
 
     Auto dark/light: the <style> block flips fill to white when the
     user-agent reports a dark color scheme — works in Chrome, Firefox,
-    Safari favicons + tab bars. Browsers that don't support
-    prefers-color-scheme inside SVG just keep the dark fill, which
-    still reads on light browser chrome (Edge, older WebKit).
+    Safari favicons + tab bars. Browsers without prefers-color-scheme
+    SVG support keep the dark fill, which still reads on light chrome.
+
+    viewBox 0 0 1563 1563 = the source square. The glyph is centered
+    vertically (top padding 259, bottom ~263) so this renders well as
+    a 16×16 / 32×32 favicon without further cropping.
 -->
-<!-- viewBox cropped to the glyph's bounding box (300,540 → 1820,1500)
-     padded out to a square so 16×16 / 32×32 favicon renders show the
-     glyph centered + filling the icon, instead of swimming in the
-     2048×2048 source canvas. -->
-<svg version="1.1" viewBox="280 280 1560 1560" xmlns="http://www.w3.org/2000/svg">
+<svg version="1.1" viewBox="0 0 1563 1563" xmlns="http://www.w3.org/2000/svg">
     <style>
         path { fill: #0A0A0A; }
         @media (prefers-color-scheme: dark) {
             path { fill: #FFFFFF; }
         }
     </style>
-    <path transform="translate(338,570)" d="m0 0h345l36 3 38 5 26 5 24 6 31 10 21 8 28 12 24 12 18 10 23 14 16 11 19 14 16 13 13 11 15 14 12 11 18 18 7 8 1 3h2l9 11 9 10 14 19 12 16 12 19 15 25 12 23 7 14 13 31 10 28 8 26 9 39 5 30 3 26 2 32v35l-2 30-4 31-7 36-8 30-11 33-11 27-14 32-16 34-13 28-14 30-11 24-1 1h-395l3-9 17-35 13-28 19-40 28-60 16-34 13-28 16-34 13-28 32-68 13-28 13-27 11-24 19-40 14-30 10-22 11-22h-422l-4-4-10-17-12-21-13-22-14-24-15-26-10-17-15-26-8-13-9-16-10-17-15-26-11-18-13-23-8-13-12-21-10-17-10-18-6-10z"/>
-    <path transform="translate(1112,570)" d="m0 0h394l6 9 12 21 7 12 8 13 16 28 17 29 16 27 14 24 13 23 8 13 12 20 11 20 28 48 13 22 16 28 6 11v3h-215l-24-2-29-5-20-5-25-8-22-9-28-14-18-11-18-13-13-10-11-10-8-7-18-18-9-11-11-13-13-18-11-18-16-28-10-17-16-28-8-13-8-14-10-17-13-22-10-17-11-19z"/>
+    <path transform="translate(3,259)" d="m0 0h385l33 2 34 4 32 5 28 6 26 7 25 8 24 9 26 11 25 12 21 11 21 12 19 12 20 14 16 12 9 7 10 8 14 12 24 22 8 8 2 1v2h2l7 8 11 11 7 8 10 11 9 11 12 15 14 19 14 20 17 28 9 16 15 29 12 26 13 34 12 36 10 41 7 36 4 31 3 37v56l-4 44-4 27-7 34-10 37-13 38-11 27-11 25-12 26-13 28-14 30-16 34-11 24-1 1h-448l-1-2 13-28 17-35 13-28 16-34 17-36 16-34 9-20 18-38 16-34 19-41 17-36 16-34 12-26 19-40 16-34 13-28 18-38 13-28 15-31 3-8-480-1-5-6-13-22-16-28-9-15-17-29-15-26-10-17-12-21-13-22-15-26-8-13-11-20-14-23-15-26-16-27-15-26-10-17-10-18-6-11z"/>
+    <path transform="translate(884,259)" d="m0 0h446l8 13 16 28 13 22 17 29 16 28 15 25 13 22 13 23 17 29 17 28 15 27 14 24 17 29 13 22 14 24 10 18 2 4v4h-234l-33-2-27-4-23-5-33-10-21-8-20-9-28-15-17-11-17-12-12-9-10-9-8-7-7-7-8-7-9-9-7-8-11-13-10-13-13-18-13-21-12-21-15-26-12-21-12-20-11-19-34-58-20-34z"/>
 </svg>

@@ -283,77 +283,61 @@ export default function App() {
     }, []);
 
     /**
-     * Auto-refresh the plugin state.
+     * State refresh strategy — event-driven, NOT periodic.
      *
-     * Why: after a user uploads images to WP, our converter fires and
-     * writes attachment meta. The savings/quota numbers in this admin
-     * are computed server-side from that meta — they only update when
-     * we re-fetch /state. Without polling, users had to manually reload
-     * the page after every batch, which feels broken.
+     * Earlier versions ran an 8-second polling tick. Users found that
+     * cadence intrusive ("the page keeps refreshing on its own"), so
+     * we replaced periodic polling with three event-driven triggers:
      *
-     * Strategy: 8s interval, ONLY when the window is focused. Stops
-     * the moment the tab is hidden so we don't burn admin-ajax cycles
-     * on backgrounded tabs. Resumes on focus.
+     *   1. Tab switch — useEffect below, keyed on `tab`. Switching
+     *      between Overview / Bulk / Activity / Settings / Sites /
+     *      Upgrade refetches /state immediately.
+     *   2. Window focus — visibilitychange listener. The user came
+     *      back from another tab → they probably want fresh numbers.
+     *   3. Post-action — explicit api.refreshState() call sites
+     *      (Bulk completion, license activate / disconnect / refresh,
+     *      retry queue run, settings save).
      *
-     * The refetch is silent (no skeleton) because state is already on
-     * screen — we only flip the `refreshing` flag for a discreet "·"
-     * indicator next to the API status chip.
+     * Result: zero idle polling. The UI only re-fetches when there's
+     * a strong signal that data may have changed. Quieter, cheaper.
+     * Numbers stay fresh because every realistic "I just did something
+     * that changed the data" path triggers a refresh.
      */
     useEffect(() => {
-        let alive = true;
-        let timer: ReturnType<typeof setTimeout> | null = null;
-
-        const tick = async () => {
-            if (!alive || document.hidden) return;
-            try {
-                setRefreshing(true);
-                const next = await api.refreshState();
-                if (!alive) return;
-                // Polling cannot override a manual update made in the
-                // last 10s — see lastManualUpdateRef comment above.
-                // Without this, a fresh activate gets stomped by the
-                // next tick's older snapshot and the UI flips back to
-                // "no license" 4-8s after the success toast.
-                const sinceManual = Date.now() - lastManualUpdateRef.current;
-                if (sinceManual >= 10_000) {
-                    setState(next);
-                }
-            } catch { /* silent — next tick will retry */ } finally {
-                if (alive) setRefreshing(false);
-            }
-            if (alive) timer = setTimeout(tick, 8_000);
+        const onVis = () => {
+            if (document.hidden) return;
+            setRefreshing(true);
+            api.refreshState()
+                .then((next) => {
+                    // Manual-update lock still applies — a recent click
+                    // (within 10s) can't be clobbered by a focus refresh.
+                    const sinceManual = Date.now() - lastManualUpdateRef.current;
+                    if (sinceManual >= 10_000) setState(next);
+                })
+                .catch(() => { /* silent — next event will retry */ })
+                .finally(() => setRefreshing(false));
         };
-
-        // Schedule first tick after a small delay to avoid hammering the
-        // server right when the page just rendered.
-        timer = setTimeout(tick, 4_000);
-
-        // Re-tick immediately when the tab regains focus — the user is
-        // back, they probably want fresh numbers right now.
-        const onVis = () => { if (!document.hidden) tick(); };
         document.addEventListener("visibilitychange", onVis);
-
-        return () => {
-            alive = false;
-            if (timer) clearTimeout(timer);
-            document.removeEventListener("visibilitychange", onVis);
-        };
+        return () => document.removeEventListener("visibilitychange", onVis);
     }, []);
 
-    // Refresh-on-tab-switch.
+    // Refresh on tab switch.
     //
     // Common path: user runs a bulk → switches to Overview to see the
-    // results. The 8s polling tick + 10s manual-update lock could mean
-    // up to 18 seconds of stale stats. Triggering a fetch immediately
-    // when the user navigates to Overview gives them fresh numbers in
-    // ~200ms instead.
+    // results. Without this, the Overview would show whatever state
+    // was last fetched (potentially stale). Triggering a fresh /state
+    // fetch on every tab change gives ~200ms-fresh numbers everywhere
+    // they actually look.
     useEffect(() => {
-        if (tab !== "overview") return;
         let alive = true;
         setRefreshing(true);
         api.refreshState()
-            .then((next) => { if (alive) setState(next); })
-            .catch(() => { /* silent — polling will catch up */ })
+            .then((next) => {
+                if (!alive) return;
+                const sinceManual = Date.now() - lastManualUpdateRef.current;
+                if (sinceManual >= 10_000) setState(next);
+            })
+            .catch(() => { /* silent */ })
             .finally(() => { if (alive) setRefreshing(false); });
         return () => { alive = false; };
     }, [tab]);
@@ -500,15 +484,14 @@ export default function App() {
 }
 
 function Logo() {
-    // Canonical Tempaloo brand mark — same paths as
-    // web/public/favicon.svg + web/components/Logo.tsx LogoMark variant="brand".
-    // viewBox tightened to the glyph bbox so the 40px output actually
-    // shows a 40px-wide glyph (was ~24px because of empty padding).
+    // Canonical Tempaloo brand mark — synced with web/public/favicon.svg
+    // and web/components/Logo.tsx LogoMark variant="brand". Source paths
+    // from logos/logo templaoo (1).svg, transparent background.
     return (
         <svg
             width="40"
             height="40"
-            viewBox="300 540 1520 960"
+            viewBox="0 240 1560 1080"
             xmlns="http://www.w3.org/2000/svg"
             role="img"
             aria-label="Tempaloo"
@@ -516,13 +499,13 @@ function Logo() {
         >
             <path
                 fill="currentColor"
-                transform="translate(338,570)"
-                d="m0 0h345l36 3 38 5 26 5 24 6 31 10 21 8 28 12 24 12 18 10 23 14 16 11 19 14 16 13 13 11 15 14 12 11 18 18 7 8 1 3h2l9 11 9 10 14 19 12 16 12 19 15 25 12 23 7 14 13 31 10 28 8 26 9 39 5 30 3 26 2 32v35l-2 30-4 31-7 36-8 30-11 33-11 27-14 32-16 34-13 28-14 30-11 24-1 1h-395l3-9 17-35 13-28 19-40 28-60 16-34 13-28 16-34 13-28 32-68 13-28 13-27 11-24 19-40 14-30 10-22 11-22h-422l-4-4-10-17-12-21-13-22-14-24-15-26-10-17-15-26-8-13-9-16-10-17-15-26-11-18-13-23-8-13-12-21-10-17-10-18-6-10z"
+                transform="translate(3,259)"
+                d="m0 0h385l33 2 34 4 32 5 28 6 26 7 25 8 24 9 26 11 25 12 21 11 21 12 19 12 20 14 16 12 9 7 10 8 14 12 24 22 8 8 2 1v2h2l7 8 11 11 7 8 10 11 9 11 12 15 14 19 14 20 17 28 9 16 15 29 12 26 13 34 12 36 10 41 7 36 4 31 3 37v56l-4 44-4 27-7 34-10 37-13 38-11 27-11 25-12 26-13 28-14 30-16 34-11 24-1 1h-448l-1-2 13-28 17-35 13-28 16-34 17-36 16-34 9-20 18-38 16-34 19-41 17-36 16-34 12-26 19-40 16-34 13-28 18-38 13-28 15-31 3-8-480-1-5-6-13-22-16-28-9-15-17-29-15-26-10-17-12-21-13-22-15-26-8-13-11-20-14-23-15-26-16-27-15-26-10-17-10-18-6-11z"
             />
             <path
                 fill="currentColor"
-                transform="translate(1112,570)"
-                d="m0 0h394l6 9 12 21 7 12 8 13 16 28 17 29 16 27 14 24 13 23 8 13 12 20 11 20 28 48 13 22 16 28 6 11v3h-215l-24-2-29-5-20-5-25-8-22-9-28-14-18-11-18-13-13-10-11-10-8-7-18-18-9-11-11-13-13-18-11-18-16-28-10-17-16-28-8-13-8-14-10-17-13-22-10-17-11-19z"
+                transform="translate(884,259)"
+                d="m0 0h446l8 13 16 28 13 22 17 29 16 28 15 25 13 22 13 23 17 29 17 28 15 27 14 24 17 29 13 22 14 24 10 18 2 4v4h-234l-33-2-27-4-23-5-33-10-21-8-20-9-28-15-17-11-17-12-12-9-10-9-8-7-7-7-8-7-9-9-7-8-11-13-10-13-13-18-13-21-12-21-15-26-12-21-12-20-11-19-34-58-20-34z"
             />
         </svg>
     );
