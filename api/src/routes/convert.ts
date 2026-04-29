@@ -162,11 +162,46 @@ export default async function convertRoute(app: FastifyInstance) {
         const results: EncodeResult[] = [];
         const failures: { name: string; format: "webp" | "avif"; reason: string }[] = [];
 
+        // Hard limit on AVIF input dimensions for the 512MB Render dyno.
+        // libavif needs ~6 bytes per pixel of working heap; a 3000×3000
+        // original (typical WP "full-size" upload) needs ~600MB and OOM-
+        // kills the worker even at concurrency=1. We pre-read the image
+        // header (cheap — 5-10ms, no full decode) and refuse to start an
+        // AVIF encode that would exceed the budget. WebP is unaffected;
+        // it handles 4000+ px inputs in ~50MB.
+        //
+        // 2_250_000 px ≈ 1500×1500 — a 1024×1024 thumbnail fits easily,
+        // a 1920×1080 hero image fits, but anything bigger gets cleanly
+        // rejected with `avif_oversized_input` instead of crashing the
+        // dyno. The plugin's wrap_img_in_picture then naturally skips
+        // the missing AVIF sibling and falls back to WebP for that size.
+        //
+        // Move this to env (AVIF_MAX_PIXELS) when we have a paid Render
+        // plan with more RAM to lift the limit on demand.
+        const AVIF_MAX_PIXELS = 2_250_000;
+
         for (const tf of targetFormats) {
             const limit = tf === "avif" ? AVIF_CONCURRENCY : WEBP_CONCURRENCY;
             const settled = await mapWithConcurrency(files, limit, async (f) => {
                 try {
                     const pipeline = sharp(f.buffer, { failOnError: false });
+
+                    // AVIF size guard. Read the header without decoding
+                    // pixels, bail before allocating the encoder heap if
+                    // the input is too big to fit in the dyno budget.
+                    if (tf === "avif") {
+                        const meta = await pipeline.metadata();
+                        const pixels = (meta.width ?? 0) * (meta.height ?? 0);
+                        if (pixels > AVIF_MAX_PIXELS) {
+                            return {
+                                ok: false as const,
+                                name: f.name,
+                                format: tf,
+                                reason: `avif_oversized_input:${meta.width}x${meta.height}_${pixels}px`,
+                            };
+                        }
+                    }
+
                     const out = tf === "avif"
                         ? await pipeline.avif({ quality, effort: AVIF_EFFORT }).toBuffer()
                         : await pipeline.webp({ quality }).toBuffer();
@@ -279,6 +314,12 @@ export default async function convertRoute(app: FastifyInstance) {
             input_bytes: totalIn,
             output_bytes: totalOut,
             files: results,
+            // Per-(file × format) entries that the encoder declined to
+            // attempt — currently only AVIF inputs over AVIF_MAX_PIXELS
+            // on small dynos. The plugin records these on the attachment
+            // meta so the next bulk scan stops flagging the same files
+            // as pending forever.
+            skipped: failures.map((f) => ({ name: f.name, format: f.format, reason: f.reason })),
         });
     });
 

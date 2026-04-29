@@ -271,6 +271,12 @@ class Tempaloo_WebP_Bulk {
             // Skipped — surfaced so the user understands why the total
             // and fullyConverted+pending may not add up.
             'brokenPaths'    => 0,
+            // Attachments where the API declined at least one AVIF encode
+            // because the input exceeded the dyno memory budget (>2.25 MP
+            // on the 512 MB Render Starter). The user can ignore — these
+            // images already have WebP coverage and the AVIF gap is
+            // tracked separately so re-bulks don't burn credits trying.
+            'avifSkippedTier' => 0,
             'targetFormat'   => $target_fmt,
             'expectedExts'   => $expected_exts,
             'pendingIds'     => [],
@@ -297,19 +303,37 @@ class Tempaloo_WebP_Bulk {
                 }
             }
 
-            // Pending = at least one (path, expected_ext) pair is missing.
-            // We also track which extension is missing for the breakdown
-            // and whether ANY sibling exists at all (orphan detection).
-            $needs_webp     = false;
-            $needs_avif     = false;
-            $is_pending     = false;
+            // Server-side skipped encodes recorded after a previous bulk
+            // (e.g. AVIF inputs the API tier couldn't fit in heap). Those
+            // (filename × format) pairs MUST be excluded from the pending
+            // check — otherwise the scan re-queues them every time and
+            // each retry burns 1 credit for a known-bad encode.
+            $skipped_map = [];
+            if ( ! empty( $meta['tempaloo_webp']['skipped'] ) && is_array( $meta['tempaloo_webp']['skipped'] ) ) {
+                foreach ( $meta['tempaloo_webp']['skipped'] as $key => $_reason ) {
+                    $skipped_map[ (string) $key ] = true;
+                }
+            }
+
+            // Pending = at least one (path, expected_ext) pair is missing
+            // AND not server-side-skipped. Also track which extension is
+            // missing for the breakdown and whether ANY sibling exists
+            // (orphan detection).
+            $needs_webp      = false;
+            $needs_avif      = false;
+            $is_pending      = false;
             $has_any_sibling = false;
             foreach ( $paths as $p ) {
-                if ( in_array( '.webp', $expected_exts, true ) && ! file_exists( $p . '.webp' ) ) {
+                $base = basename( $p );
+                if ( in_array( '.webp', $expected_exts, true )
+                  && ! file_exists( $p . '.webp' )
+                  && empty( $skipped_map[ $base . '|webp' ] ) ) {
                     $needs_webp = true;
                     $is_pending = true;
                 }
-                if ( in_array( '.avif', $expected_exts, true ) && ! file_exists( $p . '.avif' ) ) {
+                if ( in_array( '.avif', $expected_exts, true )
+                  && ! file_exists( $p . '.avif' )
+                  && empty( $skipped_map[ $base . '|avif' ] ) ) {
                     $needs_avif = true;
                     $is_pending = true;
                 }
@@ -334,6 +358,20 @@ class Tempaloo_WebP_Bulk {
             // got out of sync.
             if ( $has_any_sibling && empty( $meta['tempaloo_webp'] ) ) {
                 $report['orphanedSiblings']++;
+            }
+
+            // Track attachments where AVIF was skipped server-side (input
+            // too big for the API's heap budget). Helps the user understand
+            // why "Need AVIF" stays at zero when most images are fully
+            // converted but the originals are too large.
+            if ( ! empty( $skipped_map ) ) {
+                $has_avif_skip = false;
+                foreach ( array_keys( $skipped_map ) as $k ) {
+                    if ( substr( $k, -5 ) === '|avif' ) { $has_avif_skip = true; break; }
+                }
+                if ( $has_avif_skip ) {
+                    $report['avifSkippedTier']++;
+                }
             }
         }
 

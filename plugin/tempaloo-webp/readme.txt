@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.5.2
+Stable tag: 1.5.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -145,6 +145,11 @@ Example — skip conversion for any attachment in the `private/` upload subfolde
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 1.5.3 =
+* Fix: AVIF over-large inputs no longer crash the API dyno. v1.5.2 already pinned Sharp to one thread and ran AVIF sequentially, but real WordPress originals (3000×3000 photos, ~10 MP) need ~600 MB of libavif working heap, which still OOM-kills a 512 MB Render Starter dyno. The API now reads each image header (cheap, no full decode) and refuses to start an AVIF encode whose pixel count exceeds the dyno budget — returns a clean `avif_oversized_input` skip entry instead of crashing.
+* New: skipped encodes are persisted on the attachment meta (`tempaloo_webp.skipped`). The next bulk scan honours this and stops re-flagging those (file × format) pairs as pending — without this the same images burned 1 credit per scan for an outcome we already knew (no AVIF possible on this tier).
+* New: bulk Idle pane shows a blue info banner counting "X images had AVIF skipped on at least one size — original too large for current memory budget. Enable Resize on upload, or upgrade the API tier." The WebP coverage on those sizes is intact, so the <picture> still serves an optimized format; only the AVIF source for the affected size is missing.
 
 = 1.5.2 =
 * (API-side) Fixed AVIF OOM on the 512 MB Render dyno. v1.4.1's `concurrency=2` cap still ran out of memory on real WordPress thumbnail batches because libavif peak heap is ~200 MB per encode, not ~150 MB. AVIF is now strictly sequential (concurrency=1) and runs at `effort=3` (Sharp default is 4) — files are 3–5 % larger but encode time drops ~30 % and peak heap drops ~10–15 %. `sharp.concurrency(1)` + `sharp.cache(false)` at app boot pins the libvips thread pool to one worker so RSS only ever carries one libavif working set at a time. No plugin code changed; redeploy the API and re-run bulk.

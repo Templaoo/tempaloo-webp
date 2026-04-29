@@ -486,6 +486,13 @@ function IdleView({ pane, state, report, scanning, onScan, lastStatus }: {
                             These are excluded from bulk (we can&apos;t convert what isn&apos;t there). Check the WP Media Library for any rows that show as missing.
                         </div>
                     )}
+                    {report.avifSkippedTier > 0 && (
+                        <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50/70 px-4 py-3 text-xs leading-relaxed text-blue-900">
+                            <strong>{report.avifSkippedTier.toLocaleString()} image{report.avifSkippedTier === 1 ? "" : "s"} had AVIF skipped on at least one size</strong> — input larger than ~1500×1500 px,
+                            which doesn&apos;t fit in the API&apos;s current memory budget. WebP coverage is intact for those sizes, so the <code className="text-[11px] mx-0.5">&lt;picture&gt;</code> still serves an optimized format.
+                            To get AVIF on those originals: enable Settings → <strong>Resize on upload</strong> (1920 or 2560 px) for new uploads, or contact us about a higher API tier.
+                        </div>
+                    )}
                 </>
             )}
 

@@ -258,6 +258,13 @@ export interface BulkScanReport {
     orphanedSiblings: number;
     /** Attachments whose original file is missing on disk (broken WP record). */
     brokenPaths: number;
+    /**
+     * Attachments where the API declined to encode AVIF because the input
+     * was too big for the current dyno memory budget. WebP coverage is
+     * unaffected; these images simply don't get an AVIF source emitted.
+     * Subsequent scans no longer flag them (the meta records the skip).
+     */
+    avifSkippedTier: number;
     /** Resolved target format after the supports_avif downgrade step. */
     targetFormat: "webp" | "avif" | "both";
     /** Extensions the scan considers "complete" — informative for the UI. */

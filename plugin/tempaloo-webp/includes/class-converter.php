@@ -164,12 +164,32 @@ class Tempaloo_WebP_Converter {
             ];
         }
 
-        $metadata['tempaloo_webp'] = [
+        // Server-side skipped encodes (currently only AVIF inputs that
+        // exceeded the dyno memory budget). Persist on the attachment so
+        // the next bulk scan stops flagging this file as pending forever
+        // — without this, every scan re-queues these and we burn one
+        // credit per attempt for a result we already know we can't get.
+        // Cleared by Restore (which removes the whole tempaloo_webp meta
+        // block) or by manually upgrading the API and re-bulking.
+        $skipped_pairs = [];
+        if ( ! empty( $res['skipped'] ) && is_array( $res['skipped'] ) ) {
+            foreach ( $res['skipped'] as $sk ) {
+                if ( empty( $sk['name'] ) || empty( $sk['format'] ) ) continue;
+                $key = (string) $sk['name'] . '|' . (string) $sk['format'];
+                $skipped_pairs[ $key ] = isset( $sk['reason'] ) ? (string) $sk['reason'] : 'skipped';
+            }
+        }
+
+        $tempaloo_meta = [
             'format'    => $format,
             'sizes'     => $generated,
             'converted' => $converted,
             'at'        => time(),
         ];
+        if ( ! empty( $skipped_pairs ) ) {
+            $tempaloo_meta['skipped'] = $skipped_pairs;
+        }
+        $metadata['tempaloo_webp'] = $tempaloo_meta;
 
         /**
          * Action: tempaloo_after_convert
