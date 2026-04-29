@@ -18,7 +18,8 @@
     "reset:dev": "node scripts/reset-dev.mjs",
     "admin:create": "node scripts/admin-create.mjs",
     "admin:revoke-sessions": "node scripts/admin-revoke-sessions.mjs",
-    "reprocess-webhooks": "npm run build && node scripts/reprocess-webhooks.mjs"
+    "reprocess-webhooks": "npm run build && node scripts/reprocess-webhooks.mjs",
+    "reconcile-licenses": "npm run build && node scripts/reconcile-licenses.mjs"
   },
   "dependencies": {
     "@fastify/helmet": "^11.1.1",
