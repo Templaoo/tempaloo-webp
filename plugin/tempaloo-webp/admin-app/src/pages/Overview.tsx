@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, boot, formatBytes, type AppState } from "../api";
+import { api, ApiError, boot, formatBytes, type AppState } from "../api";
 import { Badge, Button, Card, CardHeader, Input, Modal, PerformanceScorecard, QuotaRing, Stat, toast } from "../components/ui";
 
 const NUDGE_DISMISS_KEY = "tempaloo_upgrade_nudge_dismissed_until";
@@ -28,6 +28,10 @@ export default function Overview({ state, onState, freeQuota, onGoToUpgrade, onG
     const [changeOpen, setChangeOpen] = useState(false);
     const [reveal, setReveal] = useState(false);
     const [nudgeDismissed, setNudgeDismissed] = useState(false);
+    // When activation hits a site-limit error we show a dedicated
+    // panel below the input (with deactivate + upgrade CTAs) instead
+    // of a generic toast that disappears in 3s.
+    const [activateError, setActivateError] = useState<{ code: string; message: string } | null>(null);
 
     // Keep the local input in sync if the parent state changes (e.g. after
     // activate, restore, or a bulk run that nukes the key remotely).
@@ -43,6 +47,7 @@ export default function Overview({ state, onState, freeQuota, onGoToUpgrade, onG
     const activate = async () => {
         if (!key.trim()) { toast("error", "Enter a license key"); return; }
         setActivating(true);
+        setActivateError(null);
         try {
             const next = await api.activate(key.trim());
             onState(next);
@@ -54,12 +59,22 @@ export default function Overview({ state, onState, freeQuota, onGoToUpgrade, onG
             });
             setChangeOpen(false);
         } catch (e) {
-            toast({
-                kind: "error",
-                title: "Activation failed",
-                text: e instanceof Error ? e.message : "Unknown error",
-                action: { label: "Get a key", onClick: () => window.open(boot.activateUrl, "_blank") },
-            });
+            const code = e instanceof ApiError ? e.code : "unknown";
+            const message = e instanceof Error ? e.message : "Unknown error";
+            // For site-limit specifically we render an inline panel
+            // (see <SiteLimitPanel/> below) with deactivate + upgrade
+            // CTAs that stay on screen — toast disappears too fast for
+            // a "what do I do now" decision.
+            if (code === "site_limit_reached") {
+                setActivateError({ code, message });
+            } else {
+                toast({
+                    kind: "error",
+                    title: "Activation failed",
+                    text: message,
+                    action: { label: "Get a key", onClick: () => window.open(boot.activateUrl, "_blank") },
+                });
+            }
         } finally {
             setActivating(false);
         }
@@ -127,6 +142,9 @@ export default function Overview({ state, onState, freeQuota, onGoToUpgrade, onG
                             Activate
                         </Button>
                     </div>
+                    {activateError?.code === "site_limit_reached" && (
+                        <SiteLimitPanel onGoToUpgrade={onGoToUpgrade} onDismiss={() => setActivateError(null)} />
+                    )}
                 </Card>
             )}
 
@@ -470,4 +488,63 @@ function QuickAction({ icon, title, sub, onClick, href }: {
         return <a href={href} target="_blank" rel="noopener" className={className}>{inner}</a>;
     }
     return <button type="button" onClick={onClick} className={`${className} w-full text-left`}>{inner}</button>;
+}
+
+/**
+ * Inline panel for the "site_limit_reached" error path.
+ *
+ * Toasts disappear in 3-5 seconds — too fast for a "what should I do
+ * next" decision. This stays on screen with two clear paths:
+ *   1. Free a slot — links to the dashboard's Sites tab where the user
+ *      can deactivate one of their existing sites.
+ *   2. Upgrade — jumps directly to the Upgrade tab in this plugin.
+ *
+ * The Upgrade jump is the primary CTA: site-limit hits are the
+ * highest-intent upgrade trigger we have (the user actively WANTS
+ * another site).
+ */
+function SiteLimitPanel({ onGoToUpgrade, onDismiss }: { onGoToUpgrade?: () => void; onDismiss: () => void }) {
+    const dashUrl = "https://tempaloo.com/webp/dashboard";
+    return (
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+            <div className="flex items-start gap-3">
+                <span className="text-amber-600 text-base leading-none mt-0.5">⚠</span>
+                <div className="flex-1 min-w-0">
+                    <p className="m-0 text-sm font-semibold text-ink-900">
+                        Site limit reached for this plan
+                    </p>
+                    <p className="mt-1 mb-3 text-[13px] text-ink-700 leading-snug">
+                        Each Tempaloo plan covers a fixed number of WordPress sites
+                        (1 for Starter, 5 for Growth, unlimited for Business+).
+                        Free a slot by deactivating an existing site, or upgrade to a
+                        plan with more sites.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                        <a
+                            href={dashUrl}
+                            target="_blank"
+                            rel="noopener"
+                            className="inline-flex items-center gap-1.5 rounded-md bg-ink-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-ink-700"
+                        >
+                            Deactivate a site ↗
+                        </a>
+                        {onGoToUpgrade && (
+                            <button
+                                onClick={onGoToUpgrade}
+                                className="inline-flex items-center gap-1.5 rounded-md border border-ink-200 bg-white px-3 py-1.5 text-sm font-medium text-ink-900 hover:border-ink-400"
+                            >
+                                See plans
+                            </button>
+                        )}
+                        <button
+                            onClick={onDismiss}
+                            className="ml-auto text-xs text-ink-500 hover:text-ink-900 underline"
+                        >
+                            Dismiss
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 }

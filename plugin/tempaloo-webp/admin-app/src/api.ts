@@ -135,6 +135,17 @@ export async function fetchPlans(): Promise<Plan[]> {
     return data.plans;
 }
 
+/**
+ * Structured error so the UI can branch on the error CODE (e.g.
+ * "site_limit_reached") and render the right inline guidance instead
+ * of swallowing it into a generic toast.
+ */
+export class ApiError extends Error {
+    constructor(public readonly code: string, message: string, public readonly status: number) {
+        super(message);
+    }
+}
+
 async function restFetch<T>(path: string, init?: RequestInit): Promise<T> {
     const res = await fetch(boot.rest.root + "tempaloo-webp/v1" + path, {
         credentials: "same-origin",
@@ -147,8 +158,11 @@ async function restFetch<T>(path: string, init?: RequestInit): Promise<T> {
     });
     const data = await res.json().catch(() => null);
     if (!res.ok) {
-        const err = (data && (data.message || data.error?.message)) || `HTTP ${res.status}`;
-        throw new Error(err);
+        // WP REST returns { code, message }; our upstream API errors come
+        // through as WP_Error with the same shape.
+        const code = (data && (data.code || data.error?.code)) || `http_${res.status}`;
+        const msg = (data && (data.message || data.error?.message)) || `HTTP ${res.status}`;
+        throw new ApiError(String(code), String(msg), res.status);
     }
     return data as T;
 }

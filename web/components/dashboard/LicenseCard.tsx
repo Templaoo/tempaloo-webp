@@ -106,10 +106,27 @@ export function LicenseCard({ license }: { license: DashLicense }) {
                         Since {new Date(license.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
                     </p>
                 </div>
-                {license.plan.code === "free" && (
+                {/* Plan switch CTA — sensitive to current plan:
+                      Free  → "Upgrade →" goes straight to /activate (Stripe-style overlay)
+                      Paid  → "Change plan ↗" opens the Freemius portal where the user
+                              can upgrade or downgrade with proration. We deliberately
+                              don't render an in-overlay downgrade flow because Freemius
+                              handles refund/proration math better than we can mock. */}
+                {license.plan.code === "free" ? (
                     <Link href="/webp/activate?plan=growth" className="btn btn-primary btn-sm" style={{ display: "inline-flex" }}>
                         Upgrade →
                     </Link>
+                ) : (license.status === "active" || license.status === "trialing") && (
+                    <a
+                        href="https://users.freemius.com/"
+                        target="_blank"
+                        rel="noopener"
+                        className="btn btn-ghost btn-sm"
+                        style={{ display: "inline-flex" }}
+                        title="Manage your subscription — change plan, update card, view invoices"
+                    >
+                        Change plan ↗
+                    </a>
                 )}
             </div>
 
@@ -135,6 +152,13 @@ export function LicenseCard({ license }: { license: DashLicense }) {
                                 {copied ? "Copied" : "Copy"}
                             </button>
                         </div>
+                        {/* Add-site instruction — answers "I bought Growth, how do
+                            I put it on my 2nd / 3rd / 4th site?" without leaving
+                            the dashboard. Hidden when license is dead (no point
+                            showing add-site copy on a canceled license). */}
+                        {(license.status === "active" || license.status === "trialing") && license.plan.maxSites !== 1 && (
+                            <AddSiteHint slotsAvailable={license.plan.maxSites === -1 || sites.length < license.plan.maxSites} />
+                        )}
                     </div>
 
                     <div>
@@ -152,12 +176,27 @@ export function LicenseCard({ license }: { license: DashLicense }) {
                             </div>
                         ) : (
                             <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }}>
-                                {sites.map((s) => (
-                                    <li key={s.host} className="surface-card" style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 8 }}>
+                                {sites.map((s) => {
+                                    // 90 days without a ping = stale. Most likely the
+                                    // user migrated/uninstalled and forgot to free the
+                                    // slot. Surface it so they can deactivate before
+                                    // they hit site-limit on a new install.
+                                    const stale = s.lastSeenAt
+                                        ? (Date.now() - new Date(s.lastSeenAt).getTime()) > 90 * 86_400_000
+                                        : false;
+                                    return (
+                                    <li key={s.host} className="surface-card" style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 8, ...(stale ? { borderColor: "color-mix(in oklab, var(--warn) 35%, var(--line))" } : {}) }}>
                                         <div style={{ minWidth: 0, flex: 1 }}>
-                                            <div style={{ fontSize: 13, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.host}</div>
+                                            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                                                <span style={{ fontSize: 13, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>{s.host}</span>
+                                                {stale && (
+                                                    <span className="font-mono" style={{ fontSize: 9.5, padding: "1px 6px", borderRadius: 4, background: "color-mix(in oklab, var(--warn) 18%, transparent)", color: "var(--warn)", letterSpacing: "0.04em", fontWeight: 500 }}>
+                                                        STALE
+                                                    </span>
+                                                )}
+                                            </div>
                                             <div style={{ fontSize: 11.5, color: "var(--ink-3)", marginTop: 2 }}>
-                                                {s.lastSeenAt ? `active ${timeAgo(new Date(s.lastSeenAt))}` : "waiting first request"}
+                                                {s.lastSeenAt ? `${stale ? "last seen" : "active"} ${timeAgo(new Date(s.lastSeenAt))}` : "waiting first request"}
                                                 {errorHost === s.host && <span style={{ marginLeft: 8, color: "var(--danger)" }}>— retry</span>}
                                             </div>
                                         </div>
@@ -180,7 +219,8 @@ export function LicenseCard({ license }: { license: DashLicense }) {
                                             {removing === s.host ? "Removing…" : "Deactivate"}
                                         </button>
                                     </li>
-                                ))}
+                                    );
+                                })}
                             </ul>
                         )}
                         {slotsFull && (
@@ -426,6 +466,30 @@ function EyeIcon() {
 }
 function EyeOffIcon() {
     return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" /><line x1="1" y1="1" x2="23" y2="23" /></svg>;
+}
+
+/**
+ * Tiny "how to use this on another site" reminder. Lives below the
+ * key + Reveal/Copy controls so the natural reading order is:
+ *   key → Copy button → instruction. Three-line callout so it stays
+ * visually quiet but unmistakable when scanning the card.
+ */
+function AddSiteHint({ slotsAvailable }: { slotsAvailable: boolean }) {
+    return (
+        <div style={{
+            marginTop: 10, padding: "10px 12px",
+            background: "var(--bg-2)", border: "1px solid var(--line)",
+            borderRadius: 7, fontSize: 12.5, color: "var(--ink-3)",
+            lineHeight: 1.5,
+        }}>
+            <strong style={{ color: "var(--ink-2)" }}>Add to another site:</strong>{" "}
+            {slotsAvailable ? (
+                <>install <Link href="https://wordpress.org/plugins/tempaloo-webp/" target="_blank" rel="noopener" style={{ color: "var(--ink)", borderBottom: "1px solid var(--line-2)" }}>Tempaloo WebP</Link>, open the plugin&apos;s <strong style={{ color: "var(--ink-2)" }}>License</strong> tab, paste the key above and click <em>Activate</em>.</>
+            ) : (
+                <>your plan&apos;s site limit is reached. <Link href="#sites" style={{ color: "var(--ink)", borderBottom: "1px solid var(--line-2)" }}>Deactivate one below</Link> to free a slot, or upgrade for more sites.</>
+            )}
+        </div>
+    );
 }
 
 const licenseCardCss = `
