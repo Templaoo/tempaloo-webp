@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { bulk, type AppState, type BulkStatus } from "../api";
+import { api, bulk, type AppState, type BulkStatus } from "../api";
 import { Badge, Button, Card, CardHeader, CompressionFactory, Confetti, FilesStream, Modal, ProgressRing, toast } from "../components/ui";
 
 const EMPTY_STATUS: BulkStatus = {
@@ -57,7 +57,14 @@ function fmtCountdown(ms: number): string {
     return h > 0 ? `${h}h ${m}m` : `${m}m ${s}s`;
 }
 
-export default function Bulk({ state, onUpgrade }: { state: AppState; onUpgrade?: () => void }) {
+export default function Bulk({ state, onState, onUpgrade }: {
+    state: AppState;
+    /** Refresh global state — called on bulk completion so the Overview
+     *  stats reflect the new converted-image counts immediately, instead
+     *  of waiting up to 8s for the next polling tick. */
+    onState?: (s: AppState) => void;
+    onUpgrade?: () => void;
+}) {
     const [pending, setPending]       = useState<number | null>(null);
     const [status, setStatus]         = useState<BulkStatus>(EMPTY_STATUS);
     const [pane, setPane]             = useState<Pane>("loading");
@@ -157,6 +164,14 @@ export default function Bulk({ state, onUpgrade }: { state: AppState; onUpgrade?
         if (s.status === "done") {
             celebrationDismissibleRef.current = false;
             setPane("celebrating");
+            // Pull fresh state RIGHT NOW so Overview's PerformanceScorecard
+            // and quota counters reflect the just-converted images. Without
+            // this the user navigates to Overview and sees stale numbers
+            // until the next 8s polling tick runs (and even later if the
+            // 10s post-manual-update lock is still active).
+            api.refreshState()
+                .then((next) => onState?.(next))
+                .catch(() => { /* polling will catch up later */ });
             // Long enough to read + celebrate but not annoying
             setTimeout(() => { celebrationDismissibleRef.current = true; }, 2000);
             setTimeout(() => {

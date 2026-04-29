@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, ApiError, boot, formatBytes, type AppState } from "../api";
-import { Badge, Button, Card, CardHeader, Input, Modal, PerformanceScorecard, QuotaRing, Stat, toast } from "../components/ui";
+import { Badge, Button, Card, CardHeader, Input, Modal, PerformanceScorecard, QuotaRing, Skeleton, Stat, toast } from "../components/ui";
 
 const NUDGE_DISMISS_KEY = "tempaloo_upgrade_nudge_dismissed_until";
 
@@ -15,10 +15,14 @@ const NUDGE_DISMISS_KEY = "tempaloo_upgrade_nudge_dismissed_until";
  *     30-day dismiss memory in localStorage so we don't pester users who
  *     said "no thanks".
  */
-export default function Overview({ state, onState, freeQuota, onGoToUpgrade, onGoToBulk, onGoToActivity }: {
+export default function Overview({ state, onState, freeQuota, refreshing = false, onGoToUpgrade, onGoToBulk, onGoToActivity }: {
     state: AppState;
     onState: (s: AppState) => void;
     freeQuota: number | null;
+    /** True while App.tsx is fetching fresh state (tab-switch refresh
+     *  or polling tick). Drives skeletons over the stat cards instead
+     *  of leaving stale numbers on screen. */
+    refreshing?: boolean;
     onGoToUpgrade?: () => void;
     onGoToBulk?: () => void;
     onGoToActivity?: () => void;
@@ -109,11 +113,27 @@ export default function Overview({ state, onState, freeQuota, onGoToUpgrade, onG
         <div className="grid gap-6">
             {/* ─── Performance scorecard (hero) ──────────────────────────── */}
             {state.license.valid && (
-                <PerformanceScorecard
-                    bytesIn={state.savings?.bytesIn ?? 0}
-                    bytesOut={state.savings?.bytesOut ?? 0}
-                    converted={state.savings?.converted ?? 0}
-                />
+                refreshing && (state.savings?.converted ?? 0) === 0 ? (
+                    // First-load case: no savings yet but a refresh is in
+                    // flight — skeleton instead of "0 converted" so the
+                    // user doesn't think the bulk failed for the 200ms
+                    // the round-trip takes.
+                    <div className="rounded-xl border border-ink-200 bg-white p-6 space-y-4">
+                        <Skeleton height={18} width={160} />
+                        <div className="grid grid-cols-3 gap-4">
+                            <Skeleton height={56} />
+                            <Skeleton height={56} />
+                            <Skeleton height={56} />
+                        </div>
+                        <Skeleton height={12} width="60%" />
+                    </div>
+                ) : (
+                    <PerformanceScorecard
+                        bytesIn={state.savings?.bytesIn ?? 0}
+                        bytesOut={state.savings?.bytesOut ?? 0}
+                        converted={state.savings?.converted ?? 0}
+                    />
+                )
             )}
 
             {/* ─── Activate (only when no valid license) ─────────────────── */}

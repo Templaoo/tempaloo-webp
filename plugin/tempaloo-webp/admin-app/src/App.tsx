@@ -340,6 +340,24 @@ export default function App() {
         };
     }, []);
 
+    // Refresh-on-tab-switch.
+    //
+    // Common path: user runs a bulk → switches to Overview to see the
+    // results. The 8s polling tick + 10s manual-update lock could mean
+    // up to 18 seconds of stale stats. Triggering a fetch immediately
+    // when the user navigates to Overview gives them fresh numbers in
+    // ~200ms instead.
+    useEffect(() => {
+        if (tab !== "overview") return;
+        let alive = true;
+        setRefreshing(true);
+        api.refreshState()
+            .then((next) => { if (alive) setState(next); })
+            .catch(() => { /* silent — polling will catch up */ })
+            .finally(() => { if (alive) setRefreshing(false); });
+        return () => { alive = false; };
+    }, [tab]);
+
     const freeQuota = plans?.find(p => p.code === "free")?.imagesPerMonth ?? null;
 
     const runRetry = async () => {
@@ -465,11 +483,12 @@ export default function App() {
                         state={state}
                         onState={setStateLockingPolling}
                         freeQuota={freeQuota}
+                        refreshing={refreshing}
                         onGoToUpgrade={() => setTab("upgrade")}
                         onGoToBulk={() => setTab("bulk")}
                         onGoToActivity={() => setTab("activity")}
                     />}
-                    {tab === "bulk"     && <Bulk state={state} onUpgrade={() => setTab("upgrade")} />}
+                    {tab === "bulk"     && <Bulk state={state} onState={setStateLockingPolling} onUpgrade={() => setTab("upgrade")} />}
                     {tab === "activity" && <Activity />}
                     {tab === "sites"    && <Sites state={state} onUpgrade={() => setTab("upgrade")} />}
                     {tab === "settings" && <Settings state={state} onState={setStateLockingPolling} />}
