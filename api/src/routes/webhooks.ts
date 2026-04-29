@@ -384,20 +384,65 @@ async function upsertLicenseFromEvent(objects: unknown): Promise<UpsertResult | 
         let licenseKey: string;
         let wasNew = false;
         if (updated.length === 0) {
-            // Defensive: ON CONFLICT covers the rare concurrent-delivery
-            // race. RETURNING gives us the persisted key whether we
-            // inserted or the conflicted row already existed.
-            licenseKey = generateLicenseKey();
-            const { rows: ins } = await client.query<{ license_key: string; xmax: number }>(
-                `INSERT INTO licenses (user_id, plan_id, license_key, freemius_license_id, status, billing, current_period_end)
-                 VALUES ($1, $2, $3, $4, $5::license_status, $6::billing_cycle, $7)
-                 ON CONFLICT (freemius_license_id) DO UPDATE SET updated_at = NOW()
-                 RETURNING license_key, xmax::text::int AS xmax`,
-                [userId, planId, licenseKey, Number(lic.id), status, billing, periodEnd],
+            // Plan-change continuity.
+            //
+            // When the user upgrades from one plan to another (e.g.
+            // Free → Starter → Pro), Freemius does not always mutate the
+            // existing license — it commonly issues a brand-new
+            // license_id alongside the old one. If we INSERT a new row
+            // with a freshly-generated license_key the plugin keeps
+            // calling the API with the OLD key, so the old (now
+            // single-license-invariant-expired) row answers and the
+            // plugin appears stuck on the old plan or shows "expired".
+            // The user has to manually re-activate to recover.
+            //
+            // Fix: if this user already has an active/trialing license,
+            // MIGRATE that row to the new freemius_license_id + new
+            // plan. The license_key never changes, so the plugin's
+            // stored key keeps working and surfaces the new plan on the
+            // very next /v1/quota call.
+            //
+            // Only one row should match thanks to the single-license
+            // invariant enforced below; we still LIMIT 1 + ORDER BY for
+            // safety in case a webhook race left two live rows briefly.
+            const { rows: migrated } = await client.query<{ license_key: string }>(
+                `UPDATE licenses
+                    SET freemius_license_id = $1,
+                        plan_id = $2,
+                        status = $3::license_status,
+                        billing = $4::billing_cycle,
+                        current_period_end = $5,
+                        canceled_at = NULL,
+                        updated_at = NOW()
+                  WHERE id = (
+                      SELECT id FROM licenses
+                       WHERE user_id = $6
+                         AND status IN ('active','trialing')
+                       ORDER BY updated_at DESC
+                       LIMIT 1
+                  )
+                  RETURNING license_key`,
+                [Number(lic.id), planId, status, billing, periodEnd, userId],
             );
-            licenseKey = ins[0]!.license_key;
-            // xmax = 0 on a true insert; >0 if the ON CONFLICT path ran.
-            wasNew = ins[0]!.xmax === 0;
+
+            if (migrated.length > 0) {
+                licenseKey = migrated[0]!.license_key;
+                wasNew = false;
+            } else {
+                // Genuinely new license — user has no existing active
+                // row to migrate (first activation, or every prior
+                // license is canceled/expired).
+                licenseKey = generateLicenseKey();
+                const { rows: ins } = await client.query<{ license_key: string; xmax: number }>(
+                    `INSERT INTO licenses (user_id, plan_id, license_key, freemius_license_id, status, billing, current_period_end)
+                     VALUES ($1, $2, $3, $4, $5::license_status, $6::billing_cycle, $7)
+                     ON CONFLICT (freemius_license_id) DO UPDATE SET updated_at = NOW()
+                     RETURNING license_key, xmax::text::int AS xmax`,
+                    [userId, planId, licenseKey, Number(lic.id), status, billing, periodEnd],
+                );
+                licenseKey = ins[0]!.license_key;
+                wasNew = ins[0]!.xmax === 0;
+            }
         } else {
             licenseKey = updated[0]!.license_key;
         }
