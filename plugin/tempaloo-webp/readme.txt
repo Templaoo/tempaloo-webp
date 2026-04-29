@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.3.1
+Stable tag: 1.3.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -145,6 +145,9 @@ Example — skip conversion for any attachment in the `private/` upload subfolde
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 1.3.2 =
+* Fix: **Picture-tag mode now works on page builders** (Elementor, Bricks, Divi, Beaver Builder, Oxygen…). Previously the wrapper relied on the `wp_content_img_tag` filter, which only fires for output that goes through `the_content()` — page-builder output bypasses that filter entirely, so most images were never wrapped. We now post-process the full HTML response on `template_redirect` via output buffering (same approach as Imagify, ShortPixel and other mature WebP plugins). Coverage is total: every `<img>` in `/uploads/` gets wrapped, regardless of which renderer emitted it. Existing manual `<picture>` blocks (theme retina sources, etc.) are detected and left untouched.
 
 = 1.3.1 =
 * Fix: Settings changes now auto-purge known page caches (LiteSpeed Cache, WP Rocket, W3 Total Cache, WP Super Cache, SiteGround Optimizer, Cache Enabler, Hummingbird, Autoptimize) so toggles like Display method or CDN passthrough take effect immediately on the frontend instead of needing a manual "Purge all". Each branch is a no-op when the matching plugin isn't installed.

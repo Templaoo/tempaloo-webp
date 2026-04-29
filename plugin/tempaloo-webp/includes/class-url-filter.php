@@ -24,7 +24,31 @@ class Tempaloo_WebP_URL_Filter {
         // the original JPG/PNG even when every srcset URL was rewritten,
         // which makes it LOOK like the bulk did nothing in source view.
         // Available since WP 6.0 (matches our Requires at least header).
+        // url_rewrite mode → rewrites the literal src attribute.
+        // picture_tag mode → no-op (the buffer hook below handles
+        //                    everything page-wide, including page-builder
+        //                    output that bypasses this filter).
         add_filter( 'wp_content_img_tag',             [ $this, 'replace_in_img_tag' ], 10, 3 );
+
+        // Page-wide output buffer for picture_tag mode. WordPress's content
+        // filters (wp_content_img_tag, wp_filter_content_tags) only fire
+        // on output that goes through the_content() — Gutenberg, classic
+        // editor, some theme code. Page builders like Elementor, Bricks,
+        // Divi, Beaver Builder render their <img> tags directly to the
+        // browser without ever touching those filters, so a pure-hook
+        // picture wrapper would silently miss every image on every page
+        // builder site.
+        //
+        // The fix used by Imagify, ShortPixel and other mature WebP
+        // plugins: capture the entire HTML response in an output buffer
+        // on template_redirect (priority 1, before anything else can
+        // start its own ob_start) and post-process it in one pass when
+        // the response flushes. Cost is small (regex over the response
+        // body, typically <10 ms) and the coverage is total.
+        //
+        // We don't register this in admin / AJAX / REST / feed — same
+        // exclusions as the URL-rewrite filters.
+        add_action( 'template_redirect', [ $this, 'maybe_start_picture_buffer' ], 1 );
 
         // Media library status column.
         add_filter( 'manage_upload_columns',        [ $this, 'media_column' ] );
@@ -316,10 +340,7 @@ class Tempaloo_WebP_URL_Filter {
         if ( empty( $s['serve_webp'] ) ) {
             return $filtered_image;
         }
-        // CDN passthrough: a Cloudflare Polish / BunnyCDN Optimizer /
-        // ImageKit setup is serving WebP transparently from the same
-        // .jpg URL via Accept negotiation. Wrapping in <picture> or
-        // rewriting URLs would short-circuit that. Stay out of the way.
+        // CDN passthrough — stay out of the way.
         if ( ! empty( $s['cdn_passthrough'] ) ) {
             return $filtered_image;
         }
@@ -331,11 +352,16 @@ class Tempaloo_WebP_URL_Filter {
             ? 'picture_tag'
             : 'url_rewrite';
 
+        // picture_tag mode is handled page-wide by maybe_start_picture_buffer
+        // so this hook becomes a no-op. Wrapping HERE would only catch
+        // <img> from the_content() — page-builder output (Elementor,
+        // Bricks, Divi…) bypasses the_content() and the wrapper would
+        // silently miss most images.
         if ( 'picture_tag' === $mode ) {
-            return $this->wrap_img_in_picture( $filtered_image, $s );
+            return $filtered_image;
         }
 
-        // url_rewrite mode — rewrite the literal src
+        // url_rewrite mode — rewrite the literal src attribute.
         if ( ! preg_match( '/\bsrc\s*=\s*([\'"])([^\'"]+?)\1/i', $filtered_image, $m ) ) {
             return $filtered_image;
         }
@@ -349,6 +375,105 @@ class Tempaloo_WebP_URL_Filter {
             return $filtered_image;
         }
         return substr_replace( $filtered_image, $alt, $pos, strlen( $original_url ) );
+    }
+
+    /**
+     * Starts an output buffer on template_redirect when picture_tag
+     * mode is on. The callback (process_picture_buffer) runs once when
+     * the response flushes and wraps every <img> in /uploads/ that
+     * isn't already inside a <picture>. This is the only reliable way
+     * to cover page-builder output that bypasses WordPress content
+     * filters.
+     *
+     * Skipped on admin, AJAX, REST, feeds, and embed routes — those
+     * either don't render full HTML or are explicitly NOT meant to be
+     * rewritten.
+     */
+    public function maybe_start_picture_buffer() {
+        $s = Tempaloo_WebP_Plugin::get_settings();
+        if ( empty( $s['serve_webp'] ) ) return;
+        if ( ! empty( $s['cdn_passthrough'] ) ) return;
+        if ( 'picture_tag' !== ( $s['delivery_mode'] ?? 'url_rewrite' ) ) return;
+        if ( is_admin() || wp_doing_ajax() ) return;
+        if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) return;
+        if ( is_feed() || is_embed() ) return;
+        // 404 pages, robots.txt, anything not full HTML — buffer is harmless
+        // but we can save the work.
+        if ( is_robots() || is_trackback() ) return;
+
+        ob_start( [ $this, 'process_picture_buffer' ] );
+    }
+
+    /**
+     * Output-buffer callback. Rewrites every <img> in /uploads/ that
+     * isn't already inside a <picture> by wrapping it in a <picture>
+     * with <source type="image/avif"> + <source type="image/webp"> entries.
+     *
+     * Strategy: split the response on <picture>…</picture> blocks, then
+     * process the chunks BETWEEN them. Anything inside a <picture> the
+     * theme/page-builder wrote intentionally is left alone, so we never
+     * produce nested <picture> markup or steamroll a designer's choice.
+     *
+     * Returns the original buffer untouched if:
+     *   - response doesn't contain our uploads URL (nothing to do)
+     *   - response is too short to be a real page (under 200 bytes)
+     *   - response looks like an XML/JSON document (we never modify those)
+     */
+    public function process_picture_buffer( $html ) {
+        if ( ! is_string( $html ) || strlen( $html ) < 200 ) {
+            return $html;
+        }
+        // Don't touch non-HTML responses. Cheap heuristic: the first
+        // ~256 bytes should look HTML-like for us to be in scope.
+        $head = ltrim( substr( $html, 0, 256 ) );
+        if ( '' === $head ) return $html;
+        $first_char = $head[0] ?? '';
+        if ( '<' !== $first_char ) {
+            return $html;
+        }
+        // <?xml or <rss or <feed → not our problem.
+        if ( 0 === strncasecmp( $head, '<?xml', 5 )
+            || false !== stripos( substr( $head, 0, 64 ), '<rss' )
+            || false !== stripos( substr( $head, 0, 64 ), '<feed' ) ) {
+            return $html;
+        }
+
+        $uploads = wp_get_upload_dir();
+        $base_url = isset( $uploads['baseurl'] ) ? (string) $uploads['baseurl'] : '';
+        if ( '' === $base_url || false === stripos( $html, $base_url ) ) {
+            return $html;
+        }
+
+        $settings = Tempaloo_WebP_Plugin::get_settings();
+
+        // Split on <picture>…</picture> blocks. Even-indexed chunks are
+        // OUTSIDE picture (process them); odd-indexed are INSIDE (leave
+        // alone). PREG_SPLIT_DELIM_CAPTURE keeps the picture blocks in
+        // the result so re-joining is exact.
+        $chunks = preg_split(
+            '/(<picture\b[^>]*>.*?<\/picture\s*>)/is',
+            $html,
+            -1,
+            PREG_SPLIT_DELIM_CAPTURE
+        );
+        if ( ! is_array( $chunks ) || empty( $chunks ) ) {
+            return $html;
+        }
+
+        $self = $this;
+        foreach ( $chunks as $i => $chunk ) {
+            if ( ( $i % 2 ) !== 0 ) continue;          // inside <picture> — skip
+            if ( false === stripos( $chunk, $base_url ) ) continue; // no work
+            $chunks[ $i ] = preg_replace_callback(
+                '/<img\b[^>]*>/i',
+                static function ( $m ) use ( $self, $settings ) {
+                    return $self->wrap_img_in_picture( $m[0], $settings );
+                },
+                $chunk
+            );
+        }
+
+        return implode( '', $chunks );
     }
 
     /**
@@ -366,7 +491,7 @@ class Tempaloo_WebP_URL_Filter {
      * that emit their own <picture> manually live outside post_content
      * and aren't reached by this filter.
      */
-    private function wrap_img_in_picture( $img, $settings ) {
+    public function wrap_img_in_picture( $img, $settings ) {
         // Need both a src AND a path inside our uploads dir. If either
         // fails we abort — never wrap an image we can't safely match
         // to a sibling on disk.
