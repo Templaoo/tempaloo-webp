@@ -120,6 +120,28 @@ function AccountChip({ email, plan }: { email: string; plan: string }) {
     );
 }
 
+/**
+ * Tiny pulsing dot shown next to the API status chip while a /state
+ * refetch is in flight. Discreet on purpose — we don't want to flash
+ * a big "Loading…" each 8 seconds, just signal that numbers are being
+ * pulled from the server. Tooltip explains it.
+ */
+function RefreshingDot() {
+    return (
+        <span
+            title="Syncing latest stats from the server"
+            className="inline-flex items-center gap-1 text-[11px] text-ink-400"
+            style={{ lineHeight: 1 }}
+        >
+            <span
+                className="inline-block rounded-full bg-brand-500"
+                style={{ width: 6, height: 6, animation: "tempaloo-pulse 1s ease-in-out infinite" }}
+            />
+            updating
+        </span>
+    );
+}
+
 function ApiStatusChip({ ok }: { ok: boolean }) {
     return (
         <span
@@ -220,6 +242,10 @@ export default function App() {
     const [state, setState] = useState<AppState>(boot.state);
     const [tab, setTab] = useState<Tab>("overview");
     const [retrying, setRetrying] = useState(false);
+    // Subtle "updating…" indicator on the top-bar while polling, so users
+    // see why their numbers tick up after a conversion without thinking
+    // the page is broken.
+    const [refreshing, setRefreshing] = useState(false);
     // Cache plans at the root so every child (Overview banner, Upgrade grid)
     // gets the same copy without re-fetching. If the feed fails we fall back
     // to null everywhere — each component handles that gracefully.
@@ -231,6 +257,55 @@ export default function App() {
             .then((all) => { if (alive) setPlans(all); })
             .catch(() => { /* silent — each consumer shows its own fallback */ });
         return () => { alive = false; };
+    }, []);
+
+    /**
+     * Auto-refresh the plugin state.
+     *
+     * Why: after a user uploads images to WP, our converter fires and
+     * writes attachment meta. The savings/quota numbers in this admin
+     * are computed server-side from that meta — they only update when
+     * we re-fetch /state. Without polling, users had to manually reload
+     * the page after every batch, which feels broken.
+     *
+     * Strategy: 8s interval, ONLY when the window is focused. Stops
+     * the moment the tab is hidden so we don't burn admin-ajax cycles
+     * on backgrounded tabs. Resumes on focus.
+     *
+     * The refetch is silent (no skeleton) because state is already on
+     * screen — we only flip the `refreshing` flag for a discreet "·"
+     * indicator next to the API status chip.
+     */
+    useEffect(() => {
+        let alive = true;
+        let timer: ReturnType<typeof setTimeout> | null = null;
+
+        const tick = async () => {
+            if (!alive || document.hidden) return;
+            try {
+                setRefreshing(true);
+                const next = await api.refreshState();
+                if (alive) setState(next);
+            } catch { /* silent — next tick will retry */ } finally {
+                if (alive) setRefreshing(false);
+            }
+            if (alive) timer = setTimeout(tick, 8_000);
+        };
+
+        // Schedule first tick after a small delay to avoid hammering the
+        // server right when the page just rendered.
+        timer = setTimeout(tick, 4_000);
+
+        // Re-tick immediately when the tab regains focus — the user is
+        // back, they probably want fresh numbers right now.
+        const onVis = () => { if (!document.hidden) tick(); };
+        document.addEventListener("visibilitychange", onVis);
+
+        return () => {
+            alive = false;
+            if (timer) clearTimeout(timer);
+            document.removeEventListener("visibilitychange", onVis);
+        };
     }, []);
 
     const freeQuota = plans?.find(p => p.code === "free")?.imagesPerMonth ?? null;
@@ -274,6 +349,7 @@ export default function App() {
                 </div>
                 <div className="flex items-center gap-3">
                     <ApiStatusChip ok={state.apiHealth.ok} />
+                    {refreshing && <RefreshingDot />}
                     <Badge variant={state.license.valid ? "brand" : "neutral"}>
                         {state.license.valid ? `${planLabel} plan` : "No license"}
                     </Badge>

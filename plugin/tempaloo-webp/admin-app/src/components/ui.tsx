@@ -226,8 +226,13 @@ export function SkeletonStyles() {
                 from { background-position: 200% 0; }
                 to   { background-position: -200% 0; }
             }
+            @keyframes tempaloo-pulse {
+                0%, 100% { opacity: 1; transform: scale(1); }
+                50%      { opacity: 0.5; transform: scale(1.4); }
+            }
             @media (prefers-reduced-motion: reduce) {
                 .tempaloo-skel { animation: none; background: #e2e8f0; }
+                @keyframes tempaloo-pulse { 0%, 100% { opacity: 1; } }
             }
         `}</style>
     );

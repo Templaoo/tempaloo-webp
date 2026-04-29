@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type AppState } from "../api";
-import { Button, Card, CardHeader, DecompressionWave, FilesStream, Input, Modal, Switch, toast } from "../components/ui";
+import { Button, Card, CardHeader, DecompressionWave, FilesStream, Input, Modal, Skeleton, Switch, toast } from "../components/ui";
 
 // Three quality presets — covers ~95% of use cases without exposing
 // the slider's full range. The slider stays for power users.
@@ -187,7 +187,7 @@ export default function Settings({ state, onState }: { state: AppState; onState:
                 />
                 {cpts === null ? (
                     <div className="space-y-2">
-                        {[0, 1, 2].map((i) => <div key={i} className="h-12 bg-ink-100 rounded-lg animate-pulse" />)}
+                        {[0, 1, 2].map((i) => <Skeleton key={i} height={48} className="rounded-lg" />)}
                     </div>
                 ) : cpts.length === 0 ? (
                     <p className="text-sm text-ink-500">No public custom post types detected on this site.</p>

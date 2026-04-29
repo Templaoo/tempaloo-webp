@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type ActivityEvent } from "../api";
-import { Button, Card, CardHeader, Modal, toast } from "../components/ui";
+import { Button, Card, CardHeader, Modal, Skeleton, toast } from "../components/ui";
 
 type LevelFilter = "all" | "success" | "info" | "warn" | "error";
 
@@ -129,7 +129,7 @@ export default function Activity() {
                 {loading ? (
                     <div className="space-y-2">
                         {[0, 1, 2, 3, 4].map((i) => (
-                            <div key={i} className="h-12 bg-ink-100 rounded-lg animate-pulse" />
+                            <Skeleton key={i} height={48} className="rounded-lg" />
                         ))}
                     </div>
                 ) : filtered.length === 0 ? (
