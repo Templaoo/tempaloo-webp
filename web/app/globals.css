@@ -143,6 +143,38 @@ h1, h2, h3, h4 {
     to { transform: rotate(360deg); }
 }
 
+/* Shimmer skeleton used by PostPurchaseWaiting / LicenseCardSkeleton.
+   Light theme uses a soft gray gradient; dark theme inverts to a
+   subtle brighter band. The 200% background-size + moving position
+   produces the smooth "light passes over the placeholder" effect. */
+@keyframes tempaloo-shimmer {
+    0%   { background-position: -200% 0; }
+    100% { background-position:  200% 0; }
+}
+.tempaloo-shimmer {
+    background: linear-gradient(
+        90deg,
+        var(--bg-2) 0%,
+        var(--line-2) 50%,
+        var(--bg-2) 100%
+    );
+    background-size: 200% 100%;
+    animation: tempaloo-shimmer 1.4s linear infinite;
+}
+
+/* Pulsing dot used by ProgressTimeline's "live" step. */
+@keyframes tempaloo-pulse {
+    0%, 100% { transform: scale(1);   opacity: 1; }
+    50%      { transform: scale(1.4); opacity: 0.55; }
+}
+
+/* Respect reduced-motion. Replaces the moving gradient with a flat
+   tone so users with vestibular sensitivity don't get the strobing. */
+@media (prefers-reduced-motion: reduce) {
+    .tempaloo-shimmer { animation: none; background: var(--bg-2); }
+    @keyframes tempaloo-pulse { 0%, 100% { opacity: 1; } }
+}
+
 /* ── Respect user's motion preference (WCAG 2.3.3, legal in EU) ────────── */
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
