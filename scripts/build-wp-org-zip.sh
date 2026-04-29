@@ -48,14 +48,16 @@ rm -f "$ZIP_PATH"
 
 echo "→ Zipping $ZIP_NAME"
 cd "$REPO_ROOT/plugin"
+# admin-app/ is excluded entirely — only build/admin.js + build/admin.css
+# are needed at runtime. The React source has zero value to a WP install
+# and would more than triple the ZIP size + raise the WP.org review's
+# eyebrow ("why is there a Vite project in the plugin?").
 zip -r "$ZIP_PATH" tempaloo-webp \
-    -x "tempaloo-webp/admin-app/node_modules/*" \
-    -x "tempaloo-webp/admin-app/dist/*" \
-    -x "tempaloo-webp/admin-app/.vite/*" \
-    -x "tempaloo-webp/admin-app/*.log" \
+    -x "tempaloo-webp/admin-app/*" \
     -x "tempaloo-webp/**/.DS_Store" \
     -x "tempaloo-webp/**/Thumbs.db" \
     -x "tempaloo-webp/**/*.map" \
+    -x "tempaloo-webp/**/.gitkeep" \
     > /dev/null
 
 echo ""

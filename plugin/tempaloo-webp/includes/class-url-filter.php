@@ -310,6 +310,20 @@ class Tempaloo_WebP_URL_Filter {
         if ( empty( $s['serve_webp'] ) ) {
             return null;
         }
+
+        // Never rewrite in admin / AJAX / REST contexts. We use a
+        // double-extension scheme (`foo.jpg.webp`) and many web servers —
+        // including some nginx defaults and shared hosts — pick the MIME
+        // type from the FIRST recognized extension (`.jpg`) and serve our
+        // WebP body with `Content-Type: image/jpeg`, which the browser
+        // can't decode. Result: blank/blue tiles in the media library.
+        // The frontend `<img>` requests still benefit because they go
+        // through the proper Accept-header negotiation, and admin doesn't
+        // need WebP for performance anyway (logged-in, low-traffic).
+        if ( is_admin() || wp_doing_ajax() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
+            return null;
+        }
+
         $uploads = wp_get_upload_dir();
         $base_url = $uploads['baseurl'];
         if ( 0 !== strpos( $url, $base_url ) ) {
@@ -320,16 +334,11 @@ class Tempaloo_WebP_URL_Filter {
         $file_path = $base_dir . $relative;
 
         // Prefer AVIF if plan supports it AND client accepts it, else WebP.
-        // In admin we always rewrite — WP admin targets modern browsers, and the real
-        // image request sent by the browser will include "Accept: image/webp" natively.
-        // On the frontend we respect the Accept header for HTML-context fetches.
         $accept = isset( $_SERVER['HTTP_ACCEPT'] )
             ? sanitize_text_field( wp_unslash( (string) $_SERVER['HTTP_ACCEPT'] ) )
             : '';
-        $is_admin_ctx = is_admin() || wp_doing_ajax();
-        $wants_avif   = ! empty( $s['supports_avif'] ) && ( $is_admin_ctx || false !== stripos( $accept, 'image/avif' ) );
-        $wants_webp   = $is_admin_ctx
-            || false !== stripos( $accept, 'image/webp' )
+        $wants_avif = ! empty( $s['supports_avif'] ) && false !== stripos( $accept, 'image/avif' );
+        $wants_webp = false !== stripos( $accept, 'image/webp' )
             || false !== stripos( $accept, 'image/*' )
             || false !== stripos( $accept, '*/*' )
             || '' === $accept;

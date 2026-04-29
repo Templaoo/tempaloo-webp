@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.9.0
+Stable tag: 1.1.8
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -145,6 +145,14 @@ Example — skip conversion for any attachment in the `private/` upload subfolde
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 1.1.8 =
+* Fix: Media Library thumbnails appeared as solid blue tiles after conversion on some hosts. Root cause: the URL filter rewrote admin URLs to the `.jpg.webp` sibling, and a number of web servers map MIME types from the first recognised extension and end up serving WebP bytes with `Content-Type: image/jpeg`, which the browser can't decode. Admin / AJAX / REST contexts now always serve the original; frontend `<img>` requests still negotiate WebP normally via the Accept header.
+
+= 1.1.7 =
+* Improved: Replaced the 8-second admin polling tick with event-driven refresh (tab change, window focus regain, post-action). Removes the "page reloads constantly" feeling.
+* Improved: Fresh brand mark across the Next.js favicon, the plugin admin header, and the WordPress sidebar menu icon.
+* Improved: Daily bulk cap and free-plan quota are now read live from `/v1/quota` instead of being hardcoded.
 
 = 0.9.0 =
 * Improved: Overview now shows the active plan's monthly capacity prominently — a brand-colored pill ("847 / 5,000 images this month"), a 0→max gauge under the quota ring, and a new Quick Actions row (Run Bulk · View activity · Open dashboard).
