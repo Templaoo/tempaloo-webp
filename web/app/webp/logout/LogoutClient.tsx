@@ -29,13 +29,21 @@ export function LogoutClient() {
         let cancelled = false;
         (async () => {
             try {
-                const res = await fetch("/api/auth/sign-out", {
+                // Hit our own /api/logout — it (a) forwards to Better Auth
+                // to invalidate the server session, (b) emits Set-Cookie
+                // expiry headers for EVERY cookie the request brought,
+                // across multiple Paths, and (c) sends Clear-Site-Data
+                // which tells the browser to drop cookies + storage +
+                // cache atomically. Belt-and-braces against the previous
+                // logout failures where /api/auth/sign-out returned 200
+                // but left some cookies alive.
+                const res = await fetch("/api/logout", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: "{}",
                     credentials: "include",
+                    cache: "no-store",
                 });
-                // 200, 204 or even 404 (no session) all mean "you're signed out".
                 if (cancelled) return;
                 if (res.status >= 500) {
                     setErrMsg(`Server error (${res.status})`);
@@ -43,11 +51,15 @@ export function LogoutClient() {
                     return;
                 }
                 setState("done");
-                // Hard navigation so Next.js doesn't reuse cached Server
-                // Component output from before the cookies were dropped.
+                // Cache-busting query + window.location.assign (not
+                // replace) so the previous /webp/dashboard render is
+                // popped from the history stack — hitting "Back" after
+                // this won't resurrect the authed view. The pageshow
+                // listener below ALSO catches bfcache restores.
                 setTimeout(() => {
                     if (typeof window !== "undefined") {
-                        window.location.replace(safeReturn(returnTo));
+                        const target = appendCacheBust(safeReturn(returnTo));
+                        window.location.assign(target);
                     }
                 }, 600);
             } catch (e) {
@@ -58,6 +70,21 @@ export function LogoutClient() {
         })();
         return () => { cancelled = true; };
     }, [returnTo]);
+
+    // Defeat back-forward cache. If the user hits Back AFTER this page,
+    // some browsers restore the previous /webp/dashboard render from
+    // bfcache, so it appears as if logout failed. event.persisted = true
+    // means "this page came from bfcache" → force a real reload, which
+    // re-runs the logout flow on the now-cookieless session.
+    useEffect(() => {
+        const onPageShow = (e: PageTransitionEvent) => {
+            if (e.persisted && typeof window !== "undefined") {
+                window.location.reload();
+            }
+        };
+        window.addEventListener("pageshow", onPageShow);
+        return () => window.removeEventListener("pageshow", onPageShow);
+    }, []);
 
     return (
         <main style={mainStyle}>
@@ -108,6 +135,17 @@ function safeReturn(value: string): string {
     if (!value) return "/";
     if (value.startsWith("/") && !value.startsWith("//")) return value;
     return "/";
+}
+
+/**
+ * Add a non-functional query param so the browser can't reuse a
+ * cached HTML response of the destination page. Without this, even
+ * after wiping cookies, Next.js might serve a cached /webp from disk
+ * with the previous "signed-in" rendering.
+ */
+function appendCacheBust(path: string): string {
+    const sep = path.includes("?") ? "&" : "?";
+    return `${path}${sep}_=${Date.now()}`;
 }
 
 const mainStyle: React.CSSProperties = {
