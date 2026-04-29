@@ -159,6 +159,8 @@ export const api = {
         restFetch<AppState>("/activate", { method: "POST", body: JSON.stringify({ license_key: licenseKey }) }),
     refreshLicense: () =>
         restFetch<AppState>("/refresh-license", { method: "POST", body: "{}" }),
+    disconnectLicense: () =>
+        restFetch<AppState>("/disconnect-license", { method: "POST", body: "{}" }),
     saveSettings: (patch: Partial<AppState["settings"]>) =>
         restFetch<AppState>("/settings", { method: "POST", body: JSON.stringify(patch) }),
     runRetry: () =>

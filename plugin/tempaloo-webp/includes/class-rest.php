@@ -70,6 +70,17 @@ class Tempaloo_WebP_REST {
             'callback'            => [ $this, 'post_refresh_license' ],
             'permission_callback' => [ $this, 'perm_manage' ],
         ] );
+
+        // Wipes license_key + every derived field on the local install.
+        // Useful when the upstream license was deleted/replaced and the
+        // plugin keeps showing as "active" because of cached settings.
+        // No upstream call — purely local. The user re-activates by
+        // pasting a fresh license_key.
+        register_rest_route( self::NS, '/disconnect-license', [
+            'methods'             => 'POST',
+            'callback'            => [ $this, 'post_disconnect_license' ],
+            'permission_callback' => [ $this, 'perm_manage' ],
+        ] );
     }
 
     public function get_activity( WP_REST_Request $req ) {
@@ -247,6 +258,34 @@ class Tempaloo_WebP_REST {
         if ( isset( $data['sites_limit'] ) )   $patch['sites_limit']   = (int) $data['sites_limit'];
         Tempaloo_WebP_Plugin::update_settings( $patch );
 
+        return $this->state_response();
+    }
+
+    /**
+     * Wipes every derived license field on the local install. Returns a
+     * fresh state with the React app's empty defaults, so the UI flips
+     * back to the "Activate license" affordance immediately.
+     *
+     * Quota cache, site links, retry queue and per-CPT settings are
+     * preserved — they survive a key swap, a user wouldn't expect them
+     * to reset just because they re-activated under a new key.
+     */
+    public function post_disconnect_license() {
+        Tempaloo_WebP_Plugin::update_settings( [
+            'license_key'      => '',
+            'license_valid'    => false,
+            'license_status'   => 'unknown',
+            'license_email'    => '',
+            'plan'             => '',
+            'supports_avif'    => false,
+            'images_limit'     => 0,
+            'sites_limit'      => 0,
+            'last_verified_at' => 0,
+        ] );
+        // Drop any pending license-alert snooze so a future bad status
+        // surfaces cleanly on the next verify.
+        delete_option( Tempaloo_WebP_License_Watch::DISMISS_OPTION );
+        Tempaloo_WebP_Activity::log( 'license', 'info', __( 'License disconnected', 'tempaloo-webp' ) );
         return $this->state_response();
     }
 

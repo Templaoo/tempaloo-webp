@@ -289,6 +289,18 @@ export default function Overview({ state, onState, freeQuota, onGoToUpgrade, onG
                             <Button variant="secondary" size="sm" onClick={() => setChangeOpen(true)}>
                                 Change
                             </Button>
+                            <Button variant="ghost" size="sm" onClick={async () => {
+                                if (!confirm("Disconnect this site from Tempaloo? You can reconnect any time by re-entering a license key.")) return;
+                                try {
+                                    const next = await api.disconnectLicense();
+                                    onState(next);
+                                    toast("success", "Disconnected");
+                                } catch (e) {
+                                    toast("error", e instanceof Error ? e.message : "Disconnect failed");
+                                }
+                            }}>
+                                Disconnect
+                            </Button>
                         </div>
                     </div>
                     <div className="text-xs text-ink-500 mt-2">
