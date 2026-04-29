@@ -465,9 +465,18 @@ function PreflightModal({
 }) {
     const checks = useMemo(() => {
         const remaining = state.quota?.imagesRemaining ?? 0;
+        const rollover = state.quota?.imagesRollover ?? 0;
         const isUnlimited = state.license.imagesLimit === -1;
-        const isFree = state.license.plan === "free";
         const etaSeconds = pending * 1.2;
+        // Daily bulk cap comes from the server now (BULK_DAILY_LIMIT_FREE
+        // env), surfaced via /quota → state.quota.dailyBulkLimit. 0 means
+        // "no daily cap" (paid plans). Falls back to 0 on legacy installs
+        // that haven't refreshed state since the field was added.
+        const dailyCap = state.quota?.dailyBulkLimit ?? 0;
+        const hasDailyCap = dailyCap > 0;
+        const planLabel = state.license.plan
+            ? state.license.plan.charAt(0).toUpperCase() + state.license.plan.slice(1)
+            : "your";
 
         const quotaOk = isUnlimited || remaining >= pending;
         const quotaPartial = !quotaOk && remaining > 0;
@@ -479,22 +488,23 @@ function PreflightModal({
                     ok: quotaOk,
                     warn: quotaPartial,
                     detail: isUnlimited
-                        ? `Unlimited on your ${state.license.plan} plan`
+                        ? `Unlimited on your ${planLabel} plan`
                         : quotaOk
-                            ? `Will use ${pending.toLocaleString()} / ${remaining.toLocaleString()} remaining this month`
+                            ? `Will use ${pending.toLocaleString()} of ${remaining.toLocaleString()} left this month` +
+                              (rollover > 0 ? ` (incl. ${rollover.toLocaleString()} rollover)` : "")
                             : quotaPartial
                                 ? `Only ${remaining.toLocaleString()} credits left — ${pending - remaining} images won't be converted`
                                 : `No credits remaining this month`,
                 },
                 {
                     label: "Daily cap",
-                    ok: !isFree,
-                    warn: isFree && pending > 50,
-                    detail: !isFree
-                        ? `No daily cap on ${state.license.plan} plan`
-                        : pending <= 50
-                            ? `Free: 50/day — your ${pending} images fit`
-                            : `Free: 50/day — only the first 50 will run today, then resume tomorrow`,
+                    ok: !hasDailyCap || pending <= dailyCap,
+                    warn: hasDailyCap && pending > dailyCap,
+                    detail: !hasDailyCap
+                        ? `No daily cap on ${planLabel} plan`
+                        : pending <= dailyCap
+                            ? `${planLabel}: ${dailyCap}/day — your ${pending} images fit`
+                            : `${planLabel}: ${dailyCap}/day — only the first ${dailyCap} will run today, then resume tomorrow`,
                 },
                 {
                     label: "API health",

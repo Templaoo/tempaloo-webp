@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { authMiddleware, currentPeriod } from "../auth.js";
+import { config } from "../config.js";
 import { query } from "../db.js";
 
 export default async function quotaRoute(app: FastifyInstance) {
@@ -48,6 +49,11 @@ export default async function quotaRoute(app: FastifyInstance) {
             sites_limit: license.maxSites,
             period_start: r.period_start,
             period_end: r.period_end,
+            // Daily bulk cap exposed from server config so the plugin
+            // doesn't hardcode "50/day". Only meaningful for Free —
+            // every paid plan returns 0 here meaning "no daily cap".
+            daily_bulk_limit:
+                license.planCode === "free" ? config.BULK_DAILY_LIMIT_FREE : 0,
         };
     });
 }

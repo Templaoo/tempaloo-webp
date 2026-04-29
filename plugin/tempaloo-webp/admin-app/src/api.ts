@@ -27,12 +27,16 @@ export interface AppState {
     };
     quota: null | {
         imagesUsed: number;
-        imagesLimit: number;
+        imagesLimit: number;        // base plan cap
+        imagesEffective: number;    // base + rollover (what the user can actually consume)
+        imagesRollover: number;     // carried over from last month
         imagesRemaining: number;
         sitesUsed: number;
         sitesLimit: number;
         periodStart: string;
         periodEnd: string;
+        /** Free-plan daily bulk cap from the server (0 = no daily cap). */
+        dailyBulkLimit: number;
     };
     quotaExceededAt: number | null;
     apiHealth: {

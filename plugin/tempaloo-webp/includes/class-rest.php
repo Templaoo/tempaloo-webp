@@ -356,13 +356,23 @@ class Tempaloo_WebP_REST {
             if ( ! empty( $q['ok'] ) && isset( $q['data'] ) ) {
                 $d = $q['data'];
                 $quota = [
-                    'imagesUsed'      => (int) ( $d['images_used']      ?? 0 ),
-                    'imagesLimit'     => (int) ( $d['images_limit']     ?? 0 ),
-                    'imagesRemaining' => (int) ( $d['images_remaining'] ?? 0 ),
-                    'sitesUsed'       => (int) ( $d['sites_used']       ?? 0 ),
-                    'sitesLimit'      => (int) ( $d['sites_limit']      ?? 0 ),
-                    'periodStart'     => (string) ( $d['period_start']  ?? '' ),
-                    'periodEnd'       => (string) ( $d['period_end']    ?? '' ),
+                    'imagesUsed'        => (int) ( $d['images_used']        ?? 0 ),
+                    'imagesLimit'       => (int) ( $d['images_limit']       ?? 0 ),
+                    // Effective monthly cap = base limit + unused rollover
+                    // (capped at 1× plan). What the user can actually
+                    // consume this month — the React side prefers this
+                    // over imagesLimit for "of N" displays.
+                    'imagesEffective'   => (int) ( $d['images_effective']   ?? ( $d['images_limit'] ?? 0 ) ),
+                    'imagesRollover'    => (int) ( $d['images_rollover']    ?? 0 ),
+                    'imagesRemaining'   => (int) ( $d['images_remaining']   ?? 0 ),
+                    'sitesUsed'         => (int) ( $d['sites_used']         ?? 0 ),
+                    'sitesLimit'        => (int) ( $d['sites_limit']        ?? 0 ),
+                    'periodStart'       => (string) ( $d['period_start']    ?? '' ),
+                    'periodEnd'         => (string) ( $d['period_end']      ?? '' ),
+                    // Daily bulk cap from server config (was hardcoded
+                    // as "50/day" in the React preflight modal). 0 means
+                    // "no daily cap" (paid plans).
+                    'dailyBulkLimit'    => (int) ( $d['daily_bulk_limit']   ?? 0 ),
                 ];
             }
         }
