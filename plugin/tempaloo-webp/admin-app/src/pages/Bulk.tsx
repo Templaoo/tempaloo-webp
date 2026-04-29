@@ -67,6 +67,20 @@ export default function Bulk({ state, onState, onUpgrade }: {
 }) {
     const [report, setReport]         = useState<BulkScanReport | null>(null);
     const pending = report?.pending ?? null;
+
+    // Drop the cached scan when the library shrinks. The savings.converted
+    // counter only ever decreases on a Restore (every other path adds
+    // siblings); when it does, our previous breakdown is lying about
+    // what's still on disk and the user shouldn't have to remember to
+    // click "Scan again" before trusting the numbers.
+    const lastConvertedRef = useRef(state.savings?.converted ?? 0);
+    useEffect(() => {
+        const curr = state.savings?.converted ?? 0;
+        if (curr < lastConvertedRef.current) {
+            setReport(null);
+        }
+        lastConvertedRef.current = curr;
+    }, [state.savings?.converted]);
     const [status, setStatus]         = useState<BulkStatus>(EMPTY_STATUS);
     const [pane, setPane]             = useState<Pane>("loading");
     const [scanning, setScanning]     = useState(false);
@@ -438,25 +452,41 @@ function IdleView({ pane, state, report, scanning, onScan, lastStatus }: {
 
             {/* Breakdown — visible whenever a scan has run, even at 0 pending */}
             {report && (
-                <div className="mb-5 rounded-lg border border-ink-100 bg-ink-50/50 px-4 py-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                    <Stat label="Library total" value={report.total.toLocaleString()} />
-                    <Stat label="Already done" value={report.fullyConverted.toLocaleString()} accent={report.fullyConverted > 0 ? "success" : undefined} />
-                    <Stat
-                        label={report.targetFormat === "both" ? "Need WebP" : `Pending ${fmtLabel}`}
-                        value={(report.targetFormat === "both" ? report.missingWebp : report.pending).toLocaleString()}
-                        accent={report.pending > 0 ? "brand" : undefined}
-                    />
-                    {report.targetFormat === "both" && (
+                <>
+                    <div className="mb-3 rounded-lg border border-ink-100 bg-ink-50/50 px-4 py-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                        <Stat label="Library total" value={report.total.toLocaleString()} />
+                        <Stat label="Already done" value={report.fullyConverted.toLocaleString()} accent={report.fullyConverted > 0 ? "success" : undefined} />
                         <Stat
-                            label="Need AVIF"
-                            value={report.missingAvif.toLocaleString()}
-                            accent={report.missingAvif > 0 ? "brand" : undefined}
+                            label={report.targetFormat === "both" ? "Need WebP" : `Pending ${fmtLabel}`}
+                            value={(report.targetFormat === "both" ? report.missingWebp : report.pending).toLocaleString()}
+                            accent={report.pending > 0 ? "brand" : undefined}
                         />
+                        {report.targetFormat === "both" && (
+                            <Stat
+                                label="Need AVIF"
+                                value={report.missingAvif.toLocaleString()}
+                                accent={report.missingAvif > 0 ? "brand" : undefined}
+                            />
+                        )}
+                        {report.targetFormat !== "both" && (
+                            <Stat label="Format" value={fmtLabel} />
+                        )}
+                    </div>
+                    {report.orphanedSiblings > 0 && (
+                        <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50/70 px-4 py-3 text-xs leading-relaxed text-amber-900">
+                            <strong>{report.orphanedSiblings.toLocaleString()} orphaned sibling{report.orphanedSiblings === 1 ? "" : "s"} detected</strong> —
+                            <code className="text-[11px] mx-1">.webp</code>/<code className="text-[11px] mx-0.5">.avif</code>
+                            files on disk for attachments that have no <code className="text-[11px] mx-0.5">tempaloo_webp</code> meta. Usually means a previous Restore couldn&apos;t delete every sibling
+                            (LiteSpeed cache lock, file permissions). Re-run Restore from Settings — v1.5.1+ falls back to a raw unlink and reports the failures.
+                        </div>
                     )}
-                    {report.targetFormat !== "both" && (
-                        <Stat label="Format" value={fmtLabel} />
+                    {report.brokenPaths > 0 && (
+                        <div className="mb-3 rounded-lg border border-red-200 bg-red-50/70 px-4 py-3 text-xs leading-relaxed text-red-900">
+                            <strong>{report.brokenPaths.toLocaleString()} broken attachment{report.brokenPaths === 1 ? "" : "s"}</strong> — the original file is missing on disk.
+                            These are excluded from bulk (we can&apos;t convert what isn&apos;t there). Check the WP Media Library for any rows that show as missing.
+                        </div>
                     )}
-                </div>
+                </>
             )}
 
             <div className="flex gap-2 flex-wrap">

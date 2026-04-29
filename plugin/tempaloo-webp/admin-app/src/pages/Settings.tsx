@@ -29,7 +29,7 @@ export default function Settings({ state, onState }: { state: AppState; onState:
     }, []);
     const [restoreStage, setRestoreStage] = useState<RestoreStage>("idle");
     const [restoreConfirmText, setRestoreConfirmText] = useState("");
-    const [restoreResult, setRestoreResult] = useState<{ restored: number; filesRemoved: number } | null>(null);
+    const [restoreResult, setRestoreResult] = useState<{ restored: number; filesRemoved: number; deleteFailures?: number; failureSamples?: string[] } | null>(null);
     const dirty = JSON.stringify(s) !== JSON.stringify(state.settings);
 
     const convertedCount = state.savings?.converted ?? 0;
@@ -67,7 +67,12 @@ export default function Settings({ state, onState }: { state: AppState; onState:
         try {
             const res = await api.restore();
             onState(res.state);
-            setRestoreResult({ restored: res.restored, filesRemoved: res.filesRemoved });
+            setRestoreResult({
+                restored: res.restored,
+                filesRemoved: res.filesRemoved,
+                deleteFailures: res.deleteFailures,
+                failureSamples: res.failureSamples,
+            });
             setRestoreStage("done");
         } catch (e) {
             toast("error", e instanceof Error ? e.message : "Restore failed");
@@ -393,7 +398,7 @@ function RestoreModal({
     convertedCount: number;
     confirmText: string;
     onConfirmTextChange: (v: string) => void;
-    result: { restored: number; filesRemoved: number } | null;
+    result: { restored: number; filesRemoved: number; deleteFailures?: number; failureSamples?: string[] } | null;
 }) {
     const open = stage !== "idle";
     const isConfirm = stage === "confirm";
@@ -494,17 +499,44 @@ function RestoreModal({
             {isDone && result && (
                 <div className="py-2 space-y-4">
                     <div className="flex items-center gap-3">
-                        <div className="h-12 w-12 rounded-full bg-emerald-100 grid place-items-center text-emerald-600 text-2xl">
-                            ✓
+                        <div className={`h-12 w-12 rounded-full grid place-items-center text-2xl ${
+                            (result.deleteFailures ?? 0) > 0
+                                ? "bg-amber-100 text-amber-600"
+                                : "bg-emerald-100 text-emerald-600"
+                        }`}>
+                            {(result.deleteFailures ?? 0) > 0 ? "!" : "✓"}
                         </div>
                         <div>
-                            <div className="text-base font-semibold text-ink-900">All clean.</div>
+                            <div className="text-base font-semibold text-ink-900">
+                                {(result.deleteFailures ?? 0) > 0 ? "Restored — with some files left behind." : "All clean."}
+                            </div>
                             <div className="text-sm text-ink-600">
                                 <strong className="text-ink-900">{result.restored.toLocaleString()}</strong> attachment{result.restored !== 1 ? "s" : ""} restored ·
                                 <strong className="text-ink-900">{" "}{result.filesRemoved.toLocaleString()}</strong> sibling file{result.filesRemoved !== 1 ? "s" : ""} removed
+                                {(result.deleteFailures ?? 0) > 0 && (
+                                    <> · <strong className="text-amber-700">{result.deleteFailures!.toLocaleString()} couldn&apos;t be deleted</strong></>
+                                )}
                             </div>
                         </div>
                     </div>
+
+                    {(result.deleteFailures ?? 0) > 0 && (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-900">
+                            <div className="font-semibold mb-1.5">{result.deleteFailures!.toLocaleString()} sibling file{result.deleteFailures === 1 ? "" : "s"} couldn&apos;t be removed</div>
+                            <p className="text-xs leading-relaxed">
+                                Almost always a server-side lock — LiteSpeed object cache holding a file handle, or a permission glitch on <code className="bg-white/60 px-1 rounded text-[11px]">wp-content/uploads/</code>.
+                                The Bulk tab&apos;s scan will flag these as &quot;orphaned siblings&quot; so you can spot them. Try re-running Restore in 30 seconds, or contact your host if it persists.
+                            </p>
+                            {result.failureSamples && result.failureSamples.length > 0 && (
+                                <details className="mt-2">
+                                    <summary className="text-xs cursor-pointer hover:text-amber-700">First {result.failureSamples.length} affected file{result.failureSamples.length === 1 ? "" : "s"}</summary>
+                                    <ul className="mt-1.5 text-[11px] font-mono text-amber-800 space-y-0.5">
+                                        {result.failureSamples.map((p, i) => <li key={i}>{p}</li>)}
+                                    </ul>
+                                </details>
+                            )}
+                        </div>
+                    )}
 
                     <div className="rounded-lg border border-ink-200 bg-ink-50 p-4 text-sm text-ink-700">
                         <div className="font-semibold text-ink-900 mb-1.5">What&apos;s next?</div>

@@ -201,7 +201,7 @@ export const api = {
             "/retry/run", { method: "POST", body: "{}" }
         ),
     restore: (ids?: number[]) =>
-        restFetch<{ state: AppState; restored: number; filesRemoved: number }>(
+        restFetch<{ state: AppState; restored: number; filesRemoved: number; deleteFailures?: number; failureSamples?: string[] }>(
             "/restore", { method: "POST", body: JSON.stringify({ ids: ids ?? [] }) }
         ),
     activity: () =>
@@ -249,6 +249,15 @@ export interface BulkScanReport {
     missingWebp: number;
     /** Subset of pending whose .avif sibling is missing on at least one size. */
     missingAvif: number;
+    /**
+     * Attachments with siblings on disk but no `tempaloo_webp` meta block —
+     * almost always the trace of a Restore that hit a permission/lock and
+     * didn't fully clean up. Surfaces drift instead of letting the scan
+     * silently treat these as "fully converted".
+     */
+    orphanedSiblings: number;
+    /** Attachments whose original file is missing on disk (broken WP record). */
+    brokenPaths: number;
     /** Resolved target format after the supports_avif downgrade step. */
     targetFormat: "webp" | "avif" | "both";
     /** Extensions the scan considers "complete" — informative for the UI. */

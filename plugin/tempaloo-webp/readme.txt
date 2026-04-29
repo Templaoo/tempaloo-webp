@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.5.0
+Stable tag: 1.5.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -145,6 +145,13 @@ Example — skip conversion for any attachment in the `private/` upload subfolde
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 1.5.1 =
+* Fix: **Restore now verifies every deletion.** `wp_delete_file()` returns void and silently swallows permission errors and file-in-use locks (LiteSpeed object cache, FTP transfer in progress, etc.) — we used to count those as "removed" and the user ended up with leftover siblings the bulk scan then treated as "fully converted". The post-delete `file_exists()` check now falls back to a raw `unlink()`, counts true failures, and surfaces them in the modal with sample paths so you can see exactly which files are stuck.
+* New: **Orphaned-sibling detection in the bulk scan.** An attachment whose `tempaloo_webp` meta is gone but whose `.webp`/`.avif` files are still on disk gets flagged with a yellow warning band. Almost always the trace of a Restore that hit a lock.
+* New: **Broken-path detection.** Attachments whose original file is missing from disk are counted separately so the math (total = done + pending + broken) finally adds up — used to be silently dropped from the scan.
+* Fix: **Bulk scan auto-invalidates after Restore.** The cached scan report drops the moment `state.savings.converted` decreases (Restore is the only path that shrinks the library), so you don't see stale numbers when navigating from Settings → Bulk.
+* Fix: **Restore purges page caches and per-attachment metadata cache.** Without this, LiteSpeed Cache could keep serving cached pages whose `<picture>` tags pointed at the just-deleted siblings, and `wp_get_attachment_metadata()` could return the pre-restore meta block to other plugin code paths until the next save.
 
 = 1.5.0 =
 * Fix: **Bulk scan now respects the current "Image format(s)" setting.** Until now, an image converted in WebP-only mode counted as "fully done" forever — switching to "Both" later did nothing because bulk skipped any attachment whose `tempaloo_webp` meta block existed. The scan is now disk-based per format: an attachment is "pending" if at least one expected sibling (`.webp` and/or `.avif`) is missing for any size. So "WebP → Both" instantly re-flags every image whose AVIF sibling is missing, and bulk fills the gap on the next run.

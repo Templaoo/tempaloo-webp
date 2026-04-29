@@ -259,6 +259,18 @@ class Tempaloo_WebP_Bulk {
             'pending'        => 0,
             'missingWebp'    => 0,
             'missingAvif'    => 0,
+            // Orphans: attachments where siblings sit on disk but the
+            // tempaloo_webp meta block is gone. Almost always the
+            // signature of a Restore that didn't fully clean up
+            // (LiteSpeed object cache lock, permission glitch, etc.).
+            // Counted separately so the user can spot the drift instead
+            // of the scan silently treating these as "fully converted".
+            'orphanedSiblings' => 0,
+            // Attachments with NO original on disk (broken WP record,
+            // CDN-pulled attachment whose file was never downloaded).
+            // Skipped — surfaced so the user understands why the total
+            // and fullyConverted+pending may not add up.
+            'brokenPaths'    => 0,
             'targetFormat'   => $target_fmt,
             'expectedExts'   => $expected_exts,
             'pendingIds'     => [],
@@ -270,7 +282,10 @@ class Tempaloo_WebP_Bulk {
 
         foreach ( $ids as $id ) {
             $orig = get_attached_file( (int) $id );
-            if ( ! $orig || ! file_exists( $orig ) ) continue;
+            if ( ! $orig || ! file_exists( $orig ) ) {
+                $report['brokenPaths']++;
+                continue;
+            }
 
             $meta = wp_get_attachment_metadata( (int) $id );
             $paths = [ $orig ];
@@ -283,10 +298,12 @@ class Tempaloo_WebP_Bulk {
             }
 
             // Pending = at least one (path, expected_ext) pair is missing.
-            // We also track which extension is missing for the breakdown.
-            $needs_webp = false;
-            $needs_avif = false;
-            $is_pending = false;
+            // We also track which extension is missing for the breakdown
+            // and whether ANY sibling exists at all (orphan detection).
+            $needs_webp     = false;
+            $needs_avif     = false;
+            $is_pending     = false;
+            $has_any_sibling = false;
             foreach ( $paths as $p ) {
                 if ( in_array( '.webp', $expected_exts, true ) && ! file_exists( $p . '.webp' ) ) {
                     $needs_webp = true;
@@ -295,6 +312,9 @@ class Tempaloo_WebP_Bulk {
                 if ( in_array( '.avif', $expected_exts, true ) && ! file_exists( $p . '.avif' ) ) {
                     $needs_avif = true;
                     $is_pending = true;
+                }
+                if ( file_exists( $p . '.webp' ) || file_exists( $p . '.avif' ) ) {
+                    $has_any_sibling = true;
                 }
             }
 
@@ -305,6 +325,15 @@ class Tempaloo_WebP_Bulk {
                 if ( $needs_avif ) $report['missingAvif']++;
             } else {
                 $report['fullyConverted']++;
+            }
+
+            // Orphan = no tempaloo_webp meta but siblings still on disk.
+            // Independent of pending/done: an orphan can be either, since
+            // its siblings might happen to match the user's current format
+            // selection or not. Either way, it's a sign that meta and disk
+            // got out of sync.
+            if ( $has_any_sibling && empty( $meta['tempaloo_webp'] ) ) {
+                $report['orphanedSiblings']++;
             }
         }
 

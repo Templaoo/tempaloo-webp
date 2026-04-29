@@ -143,8 +143,11 @@ class Tempaloo_WebP_REST {
             $ids = array_map( 'absint', $ids );
         }
 
-        $restored = 0;
-        $files_removed = 0;
+        $restored        = 0;
+        $files_removed   = 0;
+        $delete_failures = 0;
+        $failure_samples = [];
+
         foreach ( $ids as $id ) {
             $meta = wp_get_attachment_metadata( $id );
             if ( empty( $meta['tempaloo_webp'] ) ) continue;
@@ -161,35 +164,88 @@ class Tempaloo_WebP_REST {
                 foreach ( $names as $name ) {
                     foreach ( [ '.webp', '.avif' ] as $ext ) {
                         $sibling = $dir . $name . $ext;
-                        // wp_delete_file is the WP-blessed way to unlink an
-                        // attachment-adjacent file (handles permissions +
-                        // hooks). It returns void, so we count optimistically.
+                        if ( ! file_exists( $sibling ) ) continue;
+
+                        // wp_delete_file returns void — it can silently
+                        // swallow permission errors, file-in-use locks
+                        // (LiteSpeed object cache holding a handle, etc.)
+                        // and we'd report a phantom success. Verify by
+                        // checking existence AFTER, then fall back to a
+                        // raw @unlink so a permission glitch in the WP
+                        // wrapper doesn't strand the file forever.
+                        wp_delete_file( $sibling );
+                        clearstatcache( true, $sibling );
                         if ( file_exists( $sibling ) ) {
-                            wp_delete_file( $sibling );
-                            $files_removed++;
+                            // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink
+                            @unlink( $sibling );
+                            clearstatcache( true, $sibling );
                         }
+                        if ( file_exists( $sibling ) ) {
+                            $delete_failures++;
+                            if ( count( $failure_samples ) < 5 ) {
+                                $failure_samples[] = str_replace(
+                                    trailingslashit( ABSPATH ),
+                                    '/',
+                                    $sibling
+                                );
+                            }
+                            continue; // don't count as removed
+                        }
+                        $files_removed++;
                     }
                 }
             }
+
             unset( $meta['tempaloo_webp'] );
             wp_update_attachment_metadata( $id, $meta );
+            // Drop the per-attachment metadata cache so any subsequent
+            // call (savings panel, scan, REST attachment) sees the
+            // post-restore truth instead of the pre-restore cached copy.
+            clean_post_cache( (int) $id );
             $restored++;
         }
 
-        Tempaloo_WebP_Activity::log( 'restore', 'warn',
-            sprintf(
-                /* translators: 1: number of attachments whose original was restored, 2: number of WebP/AVIF files removed in the process */
+        // Page-cache purge — Cache Enabler / LiteSpeed / Rocket can hold
+        // pages whose <picture> tags point at the just-deleted siblings.
+        // Without a purge those visitors get a 404 on every <source>
+        // until the cache rolls over naturally.
+        if ( method_exists( 'Tempaloo_WebP_Plugin', 'purge_page_caches' ) ) {
+            Tempaloo_WebP_Plugin::purge_page_caches();
+        }
+
+        $log_message = $delete_failures > 0
+            ? sprintf(
+                /* translators: 1: attachments restored, 2: files removed, 3: files that failed to delete */
+                __( 'Restored %1$d attachments · %2$d files removed · %3$d delete failure(s)', 'tempaloo-webp' ),
+                $restored,
+                $files_removed,
+                $delete_failures
+            )
+            : sprintf(
+                /* translators: 1: attachments restored, 2: files removed */
                 __( 'Restored %1$d attachments · %2$d files removed', 'tempaloo-webp' ),
                 $restored,
                 $files_removed
-            ),
-            [ 'restored' => $restored, 'files_removed' => $files_removed ]
+            );
+
+        Tempaloo_WebP_Activity::log(
+            'restore',
+            $delete_failures > 0 ? 'error' : 'warn',
+            $log_message,
+            [
+                'restored'        => $restored,
+                'files_removed'   => $files_removed,
+                'delete_failures' => $delete_failures,
+                'failure_samples' => $failure_samples,
+            ]
         );
 
         return rest_ensure_response( [
-            'state'        => $this->state_response()->get_data(),
-            'restored'     => $restored,
-            'filesRemoved' => $files_removed,
+            'state'          => $this->state_response()->get_data(),
+            'restored'       => $restored,
+            'filesRemoved'   => $files_removed,
+            'deleteFailures' => $delete_failures,
+            'failureSamples' => $failure_samples,
         ] );
     }
 
