@@ -13,13 +13,19 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 // $options/$opt at file scope of an uninstaller file, since uninstall.php
 // runs in WP's global scope and could collide with another plugin's vars).
 $tempaloo_webp_options = array(
-    'tempaloo_webp_settings',            // user settings (license key, quality, toggles)
-    'tempaloo_webp_quota_exceeded_at',   // quota-reached flag
-    'tempaloo_webp_api_health',          // API-down tracker
-    'tempaloo_webp_retry_queue',         // queued attachments awaiting retry
-    'tempaloo_webp_bulk_state',          // in-progress bulk job state
-    'tempaloo_webp_license_alert_dismissed_until', // 7-day snooze for the license-watch notice
+    'tempaloo_webp_settings',                       // user settings (license key, quality, toggles)
+    'tempaloo_webp_activity',                       // local event log (last 200 entries)
+    'tempaloo_webp_quota_exceeded_at',              // quota-reached flag
+    'tempaloo_webp_api_health',                     // API-down tracker
+    'tempaloo_webp_retry_queue',                    // queued attachments awaiting retry
+    'tempaloo_webp_bulk_state',                     // in-progress bulk job state
+    'tempaloo_webp_license_alert_dismissed_until',  // 7-day snooze for the license-watch notice
 );
+// Note: attachment-level metadata (`_wp_attachment_metadata.tempaloo_webp`)
+// and the generated .webp / .avif files on disk are intentionally LEFT IN
+// PLACE on uninstall. Same convention as Imagify / Smush — pulling the
+// plugin shouldn't break front-end image rewriting on a live site. Users
+// who want a full reset can run `wp tempaloo restore` BEFORE uninstall.
 foreach ( $tempaloo_webp_options as $tempaloo_webp_opt ) {
     delete_option( $tempaloo_webp_opt );
     delete_site_option( $tempaloo_webp_opt ); // multisite safety

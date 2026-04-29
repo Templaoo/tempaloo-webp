@@ -14,6 +14,39 @@ class Tempaloo_WebP_API_Client {
     }
 
     /**
+     * Path-traversal guard for any local file we read before sending to
+     * the API. Confirms the resolved real path lives under WordPress's
+     * own upload base directory — so even if a future caller passes a
+     * tainted path (filter override, REST input, etc.) we refuse to
+     * read /etc/passwd or wp-config.php.
+     *
+     * Returns the resolved path on success, false if the path is unsafe
+     * or doesn't exist. Callers must check the return.
+     */
+    private static function resolve_safe_upload_path( $path ) {
+        if ( ! is_string( $path ) || '' === $path ) {
+            return false;
+        }
+        $real = realpath( $path );
+        if ( false === $real ) {
+            return false; // file doesn't exist or is unreadable
+        }
+        $upload   = wp_get_upload_dir();
+        $base     = isset( $upload['basedir'] ) ? realpath( (string) $upload['basedir'] ) : false;
+        if ( false === $base ) {
+            // No usable upload basedir — fail closed.
+            return false;
+        }
+        // Normalize separators for Windows hosts (Local by Flywheel etc.)
+        $real_norm = str_replace( '\\', '/', $real );
+        $base_norm = str_replace( '\\', '/', $base );
+        if ( 0 !== strpos( $real_norm, rtrim( $base_norm, '/' ) . '/' ) ) {
+            return false; // outside the uploads tree
+        }
+        return $real;
+    }
+
+    /**
      * Records the outcome of an API call so the admin UI can surface
      * "API unreachable" without each caller having to remember.
      *
@@ -76,8 +109,9 @@ class Tempaloo_WebP_API_Client {
      * @return array{ok:bool, body?:string, content_type?:string, used?:int, limit?:int, error?:array}
      */
     public function convert_file( $file_path, $format = 'webp', $quality = 82 ) {
-        if ( ! file_exists( $file_path ) ) {
-            return [ 'ok' => false, 'error' => [ 'code' => 'missing_file', 'message' => 'File not found' ] ];
+        $safe_path = self::resolve_safe_upload_path( $file_path );
+        if ( false === $safe_path ) {
+            return [ 'ok' => false, 'error' => [ 'code' => 'missing_file', 'message' => 'File not found or outside uploads' ] ];
         }
 
         $boundary = wp_generate_password( 24, false );
@@ -88,12 +122,13 @@ class Tempaloo_WebP_API_Client {
         $body .= "--{$boundary}{$eol}";
         $body .= 'Content-Disposition: form-data; name="quality"' . $eol . $eol . (int) $quality . $eol;
         $body .= "--{$boundary}{$eol}";
-        $body .= 'Content-Disposition: form-data; name="image"; filename="' . basename( $file_path ) . '"' . $eol;
-        $body .= 'Content-Type: ' . $this->guess_mime( $file_path ) . $eol . $eol;
-        // Reading a local file (upload path on the user's own server) — WP_Filesystem
-        // is for remote/credentialed writes, it doesn't apply to a straight local read.
+        $body .= 'Content-Disposition: form-data; name="image"; filename="' . basename( $safe_path ) . '"' . $eol;
+        $body .= 'Content-Type: ' . $this->guess_mime( $safe_path ) . $eol . $eol;
+        // Reading a local file under wp-content/uploads, validated above by
+        // resolve_safe_upload_path() — refuses anything outside the tree
+        // so a tainted path can't leak /etc/passwd or wp-config.php.
         // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
-        $body .= file_get_contents( $file_path ) . $eol;
+        $body .= file_get_contents( $safe_path ) . $eol;
         $body .= "--{$boundary}--{$eol}";
 
         $resp = wp_remote_post(
@@ -163,7 +198,16 @@ class Tempaloo_WebP_API_Client {
      * @return array{ok:bool, files?:array, used?:int, limit?:int, error?:array}
      */
     public function convert_batch( array $file_paths, $format = 'webp', $quality = 82, $mode = 'auto' ) {
-        $paths = array_values( array_filter( $file_paths, 'file_exists' ) );
+        // Same path-containment guard as convert_file(). Filters out
+        // anything outside wp-content/uploads/ — wins on a per-path
+        // basis, so a single bad path doesn't kill the whole batch.
+        $paths = array();
+        foreach ( $file_paths as $candidate ) {
+            $resolved = self::resolve_safe_upload_path( $candidate );
+            if ( false !== $resolved ) {
+                $paths[] = $resolved;
+            }
+        }
         if ( empty( $paths ) ) {
             return [ 'ok' => false, 'error' => [ 'code' => 'no_files', 'message' => 'No source files' ] ];
         }
@@ -179,7 +223,7 @@ class Tempaloo_WebP_API_Client {
             $body .= "--{$boundary}{$eol}";
             $body .= 'Content-Disposition: form-data; name="image[]"; filename="' . basename( $p ) . '"' . $eol;
             $body .= 'Content-Type: ' . $this->guess_mime( $p ) . $eol . $eol;
-            // Local read of an attachment path — see note above the other file_get_contents call.
+            // Local read — path containment validated by resolve_safe_upload_path.
             // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
             $body .= file_get_contents( $p ) . $eol;
         }
