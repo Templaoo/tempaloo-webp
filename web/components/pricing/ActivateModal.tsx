@@ -161,14 +161,13 @@ export function ActivateModal({
                 return;
             }
 
-            // Log the real cause so anyone debugging "Google sign-in isn't
-            // ready" in the wild can see the upstream status + body.
+            // Log the real cause as a flat string so the message is
+            // self-contained in DevTools (no clicking into an object
+            // tree to see the upstream status + body).
             // eslint-disable-next-line no-console
-            console.error("[tempaloo] sign-in/social failed", {
-                status: res.status,
-                ok: res.ok,
-                body: data,
-            });
+            console.error(
+                `[tempaloo] sign-in/social failed — status=${res.status} body=${JSON.stringify(data)}`,
+            );
             setStep("email");
             setError(
                 res.status === 401 || res.status === 403

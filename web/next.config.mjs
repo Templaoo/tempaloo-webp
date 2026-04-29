@@ -14,7 +14,11 @@ const csp = [
     "img-src 'self' data: blob: https:",
     "font-src 'self' data: https://fonts.gstatic.com",
     "connect-src 'self' https://api.tempaloo.com https://*.tempaloo.com https://va.vercel-scripts.com https://vitals.vercel-insights.com https://checkout.freemius.com https://accounts.google.com",
-    "frame-src 'self' https://checkout.freemius.com https://accounts.google.com",
+    // vercel.live is the optional preview / feedback widget Vercel
+    // injects on its preview deploys. Whitelisting it silences the
+    // "Framing 'https://vercel.live/' violates CSP" console noise on
+    // preview URLs without affecting prod (where the widget isn't loaded).
+    "frame-src 'self' https://checkout.freemius.com https://accounts.google.com https://vercel.live",
     "base-uri 'self'",
     "form-action 'self' https://accounts.google.com",
     "frame-ancestors 'none'",
