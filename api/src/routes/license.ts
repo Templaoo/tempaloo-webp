@@ -2,9 +2,10 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { authMiddleware, generateLicenseKey, resolveLicense } from "../auth.js";
 import { query, withTx } from "../db.js";
-import { err } from "../errors.js";
+import { ApiError, err } from "../errors.js";
 import { sendTransactional } from "../lib/email.js";
 import { welcomeFreeEmail } from "../lib/email-templates.js";
+import { normalizeEmail } from "../lib/email-normalize.js";
 
 function normalizeHost(siteUrl: string): string {
     try {
@@ -84,8 +85,63 @@ export default async function licenseRoutes(app: FastifyInstance) {
         // same site-limit / activation logic as before.
         const license = await resolveLicense(body.license_key);
         const host = normalizeHost(body.site_url);
+        const activationIp = req.ip || null;
 
         return withTx(async (client) => {
+            // ─── Site-claim enforcement ────────────────────────────
+            // The rule: a site_host can only ever be claimed by ONE
+            // tempaloo user. If someone tries to activate a license
+            // belonging to a DIFFERENT user on a host already in use,
+            // refuse — this is the path a fraudster takes when they
+            // exhaust their Free quota and try to chain a fresh key
+            // from a new account onto the same site.
+            //
+            // Same-user activation IS allowed even if the OLD row is
+            // tied to a different license (e.g. user upgraded Free →
+            // Starter and is now activating the new key on their site).
+            // We deactivate the old site row inside the transaction
+            // and create a fresh one for the new license — so the
+            // sites table always reflects the live binding.
+            const { rows: claimRows } = await client.query<{
+                id: string; license_id: string; deactivated_at: Date | null;
+                owner_user_id: string;
+            }>(
+                `SELECT s.id, s.license_id, s.deactivated_at, l.user_id AS owner_user_id
+                   FROM sites s
+                   JOIN licenses l ON l.id = s.license_id
+                  WHERE s.site_host = $1
+                    AND s.deactivated_at IS NULL
+                  LIMIT 1`,
+                [host],
+            );
+            const claim = claimRows[0];
+
+            if (claim && claim.owner_user_id !== license.userId) {
+                // Different user owns this host. Refuse, with a clear
+                // code so the plugin can render the right message.
+                throw new ApiError(
+                    403,
+                    "site_already_claimed",
+                    "This WordPress site is already linked to another Tempaloo account. " +
+                    "Sign in with the original account, or contact support if you've changed accounts.",
+                );
+            }
+
+            // ─── Existing-row swap path (same user, possibly different key) ───
+            if (claim && claim.license_id !== license.licenseId) {
+                // Same user, but they're moving from one of their own
+                // licenses to another (e.g. Free → Starter). Deactivate
+                // the old site row so the slot is freed on the previous
+                // license, then fall through to the normal create path.
+                await client.query(
+                    `UPDATE sites
+                        SET deactivated_at = NOW()
+                      WHERE id = $1`,
+                    [claim.id],
+                );
+            }
+
+            // ─── Normal flow: register or refresh the site row ─────
             const { rows: existing } = await client.query<{ id: string; deactivated_at: Date | null }>(
                 `SELECT id, deactivated_at FROM sites
                  WHERE license_id = $1 AND site_host = $2
@@ -105,9 +161,9 @@ export default async function licenseRoutes(app: FastifyInstance) {
                     }
                 }
                 await client.query(
-                    `INSERT INTO sites (license_id, site_url, site_host, wp_version, plugin_version, last_seen_at)
-                     VALUES ($1, $2, $3, $4, $5, NOW())`,
-                    [license.licenseId, body.site_url, host, body.wp_version ?? null, body.plugin_version ?? null],
+                    `INSERT INTO sites (license_id, site_url, site_host, wp_version, plugin_version, last_seen_at, activation_ip)
+                     VALUES ($1, $2, $3, $4, $5, NOW(), $6)`,
+                    [license.licenseId, body.site_url, host, body.wp_version ?? null, body.plugin_version ?? null, activationIp],
                 );
             } else {
                 await client.query(
@@ -115,9 +171,10 @@ export default async function licenseRoutes(app: FastifyInstance) {
                         SET deactivated_at = NULL,
                             last_seen_at = NOW(),
                             wp_version = COALESCE($3, wp_version),
-                            plugin_version = COALESCE($4, plugin_version)
+                            plugin_version = COALESCE($4, plugin_version),
+                            activation_ip = COALESCE(activation_ip, $5)
                       WHERE id = $1 AND license_id = $2`,
-                    [existing[0]!.id, license.licenseId, body.wp_version ?? null, body.plugin_version ?? null],
+                    [existing[0]!.id, license.licenseId, body.wp_version ?? null, body.plugin_version ?? null, activationIp],
                 );
             }
 
@@ -145,6 +202,11 @@ export default async function licenseRoutes(app: FastifyInstance) {
             const body = generateBody.parse(req.body);
             // TODO: verify captcha (Turnstile/hCaptcha) when in prod.
 
+            // Normalize for de-dup. Gmail aliases (john+spam@gmail.com,
+            // j.o.h.n@gmail.com) all collapse to the same canonical form
+            // so we never create separate users for the same inbox.
+            const normalized = normalizeEmail(body.email);
+
             return withTx(async (client) => {
                 const { rows: planRows } = await client.query<{ id: string }>(
                     `SELECT id FROM plans WHERE code = 'free' LIMIT 1`,
@@ -152,11 +214,15 @@ export default async function licenseRoutes(app: FastifyInstance) {
                 const planId = planRows[0]?.id;
                 if (!planId) throw err.unprocessable("Free plan not configured");
 
+                // Conflict target is email_normalized (the new UNIQUE column)
+                // so two visually different Gmail addresses that resolve to
+                // the same inbox merge into one row. We keep the user's
+                // typed `email` for display / sending.
                 const { rows: userRows } = await client.query<{ id: string }>(
-                    `INSERT INTO users (email) VALUES ($1)
-                     ON CONFLICT (email) DO UPDATE SET updated_at = NOW()
+                    `INSERT INTO users (email, email_normalized) VALUES ($1, $2)
+                     ON CONFLICT (email_normalized) DO UPDATE SET updated_at = NOW()
                      RETURNING id`,
-                    [body.email],
+                    [body.email, normalized],
                 );
                 const userId = userRows[0]!.id;
 

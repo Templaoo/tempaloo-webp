@@ -65,7 +65,7 @@ export default function Overview({ state, onState, freeQuota, onGoToUpgrade, onG
             // (see <SiteLimitPanel/> below) with deactivate + upgrade
             // CTAs that stay on screen — toast disappears too fast for
             // a "what do I do now" decision.
-            if (code === "site_limit_reached") {
+            if (code === "site_limit_reached" || code === "site_already_claimed") {
                 setActivateError({ code, message });
             } else {
                 toast({
@@ -144,6 +144,9 @@ export default function Overview({ state, onState, freeQuota, onGoToUpgrade, onG
                     </div>
                     {activateError?.code === "site_limit_reached" && (
                         <SiteLimitPanel onGoToUpgrade={onGoToUpgrade} onDismiss={() => setActivateError(null)} />
+                    )}
+                    {activateError?.code === "site_already_claimed" && (
+                        <SiteAlreadyClaimedPanel onDismiss={() => setActivateError(null)} />
                     )}
                 </Card>
             )}
@@ -488,6 +491,61 @@ function QuickAction({ icon, title, sub, onClick, href }: {
         return <a href={href} target="_blank" rel="noopener" className={className}>{inner}</a>;
     }
     return <button type="button" onClick={onClick} className={`${className} w-full text-left`}>{inner}</button>;
+}
+
+/**
+ * Inline panel for the "site_already_claimed" error path.
+ *
+ * Triggered when the user pastes a license_key that belongs to a
+ * different Tempaloo account than the one that originally activated
+ * this WordPress site. Anti-fraud rule: a site can only be linked to
+ * ONE account at a time. Otherwise users would chain free quotas by
+ * creating new accounts when one runs out.
+ *
+ * Honest UX: tell the user exactly why we blocked, and give them two
+ * legitimate paths (use the original account, or contact support to
+ * transfer ownership). Don't pretend the key is "invalid" — it isn't.
+ */
+function SiteAlreadyClaimedPanel({ onDismiss }: { onDismiss: () => void }) {
+    return (
+        <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-4">
+            <div className="flex items-start gap-3">
+                <span className="text-rose-600 text-base leading-none mt-0.5">🔒</span>
+                <div className="flex-1 min-w-0">
+                    <p className="m-0 text-sm font-semibold text-ink-900">
+                        This site is already linked to another Tempaloo account
+                    </p>
+                    <p className="mt-1 mb-3 text-[13px] text-ink-700 leading-snug">
+                        Each WordPress install can be linked to only one Tempaloo account.
+                        Sign in to the original account that activated this site, or contact
+                        support if you&apos;ve changed accounts and need to transfer ownership.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                        <a
+                            href="https://tempaloo.com/webp/dashboard"
+                            target="_blank"
+                            rel="noopener"
+                            className="inline-flex items-center gap-1.5 rounded-md bg-ink-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-ink-700"
+                        >
+                            Open my dashboard ↗
+                        </a>
+                        <a
+                            href="mailto:support@tempaloo.com?subject=Transfer%20site%20ownership"
+                            className="inline-flex items-center gap-1.5 rounded-md border border-ink-200 bg-white px-3 py-1.5 text-sm font-medium text-ink-900 hover:border-ink-400"
+                        >
+                            Contact support
+                        </a>
+                        <button
+                            onClick={onDismiss}
+                            className="ml-auto text-xs text-ink-500 hover:text-ink-900 underline"
+                        >
+                            Dismiss
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 }
 
 /**
