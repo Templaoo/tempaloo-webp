@@ -77,7 +77,50 @@ final class Tempaloo_WebP_Plugin {
         $current = self::get_settings();
         $next    = array_merge( $current, $patch );
         update_option( self::OPTION, $next, false );
+
+        // Settings like serve_webp / delivery_mode / cdn_passthrough change
+        // how every rendered page looks, so any cached HTML out there is
+        // immediately stale. Without this, users on LiteSpeed / WP Rocket /
+        // SG Optimizer have to manually "Purge all" every time they tweak
+        // a toggle — exactly the friction we're trying to remove.
+        self::purge_page_caches();
+
         return $next;
+    }
+
+    /**
+     * Best-effort purge of frontend caches across the popular plugins.
+     * Each branch is a no-op when the relevant plugin isn't installed,
+     * so this is safe to call unconditionally on every settings change.
+     */
+    public static function purge_page_caches() {
+        // LiteSpeed Cache (most common on Hostinger / managed-WP hosts).
+        do_action( 'litespeed_purge_all' );
+        // WP Rocket
+        if ( function_exists( 'rocket_clean_domain' ) ) {
+            rocket_clean_domain();
+        }
+        // W3 Total Cache
+        if ( function_exists( 'w3tc_flush_all' ) ) {
+            w3tc_flush_all();
+        }
+        // WP Super Cache
+        if ( function_exists( 'wp_cache_clear_cache' ) ) {
+            wp_cache_clear_cache();
+        }
+        // SiteGround Optimizer
+        if ( function_exists( 'sg_cachepress_purge_cache' ) ) {
+            sg_cachepress_purge_cache();
+        }
+        // Cache Enabler
+        do_action( 'cache_enabler_clear_complete_cache' );
+        // Hummingbird
+        do_action( 'wphb_clear_page_cache' );
+        // Autoptimize
+        if ( class_exists( 'autoptimizeCache' ) ) {
+            // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.NotCamelCaps
+            autoptimizeCache::clearall();
+        }
     }
 
     public static function on_activate() {

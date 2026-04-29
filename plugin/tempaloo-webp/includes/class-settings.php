@@ -123,6 +123,18 @@ class Tempaloo_WebP_Settings {
         if ( ! current_user_can( 'manage_options' ) ) {
             return;
         }
+        // Belt-and-suspenders against page-cache plugins.
+        //
+        // wp-admin is normally not cached because logged-in cookies bypass
+        // most cache layers. But on hosts running LiteSpeed Cache with
+        // aggressive defaults, the inline `window.TempalooBoot` script
+        // injected via wp_add_inline_script can end up in a stale snapshot
+        // of the page — the user saves a setting, refreshes, and the React
+        // app boots from a cached state where their change never happened.
+        // nocache_headers() emits Cache-Control: no-cache, no-store,
+        // must-revalidate + Pragma: no-cache, which every major cache
+        // plugin honors as "skip this page".
+        nocache_headers();
         $build_exists = file_exists( TEMPALOO_WEBP_DIR . 'build/admin.js' );
         ?>
         <div id="tempaloo-app-root">

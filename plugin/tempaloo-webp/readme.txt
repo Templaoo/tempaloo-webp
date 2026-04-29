@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.3.0
+Stable tag: 1.3.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -145,6 +145,10 @@ Example — skip conversion for any attachment in the `private/` upload subfolde
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 1.3.1 =
+* Fix: Settings changes now auto-purge known page caches (LiteSpeed Cache, WP Rocket, W3 Total Cache, WP Super Cache, SiteGround Optimizer, Cache Enabler, Hummingbird, Autoptimize) so toggles like Display method or CDN passthrough take effect immediately on the frontend instead of needing a manual "Purge all". Each branch is a no-op when the matching plugin isn't installed.
+* Fix: The plugin's admin page now sends `nocache_headers()` so aggressive cache layers (e.g. LiteSpeed on Hostinger) can't serve a stale snapshot of `window.TempalooBoot` that would silently roll back saved settings on refresh.
 
 = 1.3.0 =
 * New: **CDN passthrough toggle** (Settings → Display method). When you're already on Cloudflare Polish, BunnyCDN Optimizer, ImageKit, Cloudinary, or any similar service that serves WebP from the same `.jpg` URL via Accept negotiation, switch this on and the plugin stops touching your HTML. No URL rewriting, no `<picture>` wrapping — the CDN does its job uninterrupted. Conversion keeps running, so the siblings stay on disk if you ever turn passthrough off.
