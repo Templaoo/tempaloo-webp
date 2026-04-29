@@ -338,6 +338,48 @@ If this wasn't you: cd api && npm run admin:revoke-sessions`,
     };
 }
 
+interface BulkRetryCompleteCtx extends UserCtx {
+    siteUrl: string;
+    converted: number;
+    abandoned: number;
+}
+
+export function bulkRetryCompleteEmail(ctx: BulkRetryCompleteCtx): SendOpts {
+    const dashUrl = `${ctx.siteUrl.replace(/\/$/, "")}/wp-admin/admin.php?page=tempaloo-webp`;
+    const totalLine = ctx.abandoned > 0
+        ? `<strong>${ctx.converted.toLocaleString()}</strong> recovered · <strong>${ctx.abandoned.toLocaleString()}</strong> couldn't be converted after 6 retries`
+        : `<strong>${ctx.converted.toLocaleString()}</strong> image${ctx.converted === 1 ? "" : "s"} fully converted`;
+    const html = shell({
+        title: `Background conversion complete`,
+        preheader: `${ctx.converted.toLocaleString()} image${ctx.converted === 1 ? "" : "s"} converted while you were away.`,
+        bodyHtml: `
+            <h1 style="margin:0 0 12px;font-size:22px;font-weight:600;letter-spacing:-0.02em;color:${BRAND.ink};">Background conversion complete ✓</h1>
+            ${p(`${greet(ctx)}`)}
+            ${p(`The images that didn't convert on your last bulk run have all been retried in the background. ${totalLine}.`)}
+            ${ctx.abandoned > 0 ? p(`The ${ctx.abandoned} stragglers hit the retry cap (6 attempts over 24 h). Open your plugin's Bulk tab to see exactly which ones and why — usually a corrupt source or a permanent server-side rejection.`) : ""}
+            ${btn(dashUrl, "Open Tempaloo on your site →")}
+            ${p(`Nothing to do on your end. Originals are untouched, .webp / .avif siblings are now sitting next to each one and the <code style="background:${BRAND.bg2};padding:2px 6px;border-radius:4px;font-size:13px;">&lt;picture&gt;</code> on your front-end is already serving them.`)}
+        `,
+    });
+    return {
+        to: ctx.email, toName: ctx.firstName,
+        subject: ctx.abandoned > 0
+            ? `Tempaloo: ${ctx.converted.toLocaleString()} images recovered (${ctx.abandoned} need attention)`
+            : `Tempaloo: ${ctx.converted.toLocaleString()} image${ctx.converted === 1 ? "" : "s"} converted in the background ✓`,
+        html,
+        text: `${greet(ctx)}
+
+The images that didn't convert on your last bulk run have all been retried in the background.
+
+${ctx.converted.toLocaleString()} converted${ctx.abandoned > 0 ? ` · ${ctx.abandoned.toLocaleString()} couldn't be converted (hit the retry cap)` : ""}
+
+Open Tempaloo: ${dashUrl}
+
+— Julia, Tempaloo`,
+        tag: "bulk-retry-complete",
+    };
+}
+
 export function subscriptionCancelledEmail(ctx: LicenseCtx): SendOpts {
     const html = shell({
         title: `Your subscription has been cancelled`,

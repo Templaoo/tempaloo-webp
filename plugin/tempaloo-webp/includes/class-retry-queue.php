@@ -108,9 +108,17 @@ class Tempaloo_WebP_Retry_Queue {
         return self::process( /* due_only */ false );
     }
 
+    // Tracks the running tally for the email-on-completion notice.
+    // We persist the "we still owe the user a wrap-up email" state in a
+    // dedicated option so that across multiple cron ticks we know how
+    // many attachments were recovered and can fire ONE summary email
+    // when the queue finally drains, instead of one per tick or none.
+    const RUN_OPTION = 'tempaloo_webp_retry_run';
+
     /** Returns ['ran' => n, 'succeeded' => n, 'failed' => n]. */
     private static function process( $due_only ) {
         $queue = self::get_queue();
+        $size_before = count( $queue );
         if ( empty( $queue ) ) return [ 'ran' => 0, 'succeeded' => 0, 'failed' => 0 ];
 
         $settings = Tempaloo_WebP_Plugin::get_settings();
@@ -120,6 +128,7 @@ class Tempaloo_WebP_Retry_Queue {
 
         $now = time();
         $ran = 0; $ok = 0; $ko = 0;
+        $abandoned = 0;
 
         foreach ( $queue as $attachment_id => $entry ) {
             if ( $ran >= self::BATCH_LIMIT ) break;
@@ -142,14 +151,111 @@ class Tempaloo_WebP_Retry_Queue {
                 // App-level failures (quota, auth) → drop from queue, they need user action.
                 if ( in_array( $code, [ 'quota_exceeded', 'unauthorized', 'forbidden', 'site_limit_reached' ], true ) ) {
                     self::dequeue( $attachment_id );
+                    $abandoned++;
                 } else {
+                    // enqueue() bumps attempts; if we just hit MAX_ATTEMPTS
+                    // it self-removes. Compare queue size before/after to
+                    // tell whether the row still exists.
                     self::enqueue( $attachment_id, $code );
+                    $cur_queue = self::get_queue();
+                    if ( ! isset( $cur_queue[ (int) $attachment_id ] ) ) {
+                        $abandoned++;
+                    }
                 }
                 $ko++;
             }
         }
 
+        // Tally for the wrap-up email. We accumulate `recovered` and
+        // `abandoned` across every tick that had work, so the user gets
+        // a single accurate summary at the end ("28 recovered, 1
+        // couldn't be converted") rather than per-tick noise.
+        if ( $size_before > 0 && ( $ok > 0 || $abandoned > 0 ) ) {
+            self::accumulate_run_tally( $ok, $abandoned );
+        }
+
+        // Did this tick fully drain the queue? If so, fire the
+        // wrap-up email exactly once and reset the running tally.
+        $size_after = count( self::get_queue() );
+        if ( $size_before > 0 && $size_after === 0 ) {
+            self::flush_completion_email();
+        }
+
         return [ 'ran' => $ran, 'succeeded' => $ok, 'failed' => $ko ];
+    }
+
+    /**
+     * Adds the latest tick's outcome to the running tally. Persisted
+     * in a separate option so completion is durable across cron ticks
+     * (a single bulk run typically takes 5–30 mins of background work
+     * before the queue drains, and the option lives across PHP requests).
+     */
+    private static function accumulate_run_tally( $recovered, $abandoned ) {
+        $cur = get_option( self::RUN_OPTION, [] );
+        if ( ! is_array( $cur ) ) $cur = [];
+        $cur['recovered'] = (int) ( $cur['recovered'] ?? 0 ) + (int) $recovered;
+        $cur['abandoned'] = (int) ( $cur['abandoned'] ?? 0 ) + (int) $abandoned;
+        $cur['updated_at'] = time();
+        update_option( self::RUN_OPTION, $cur, false );
+    }
+
+    /**
+     * Queue just drained — ask the API to email the user a summary
+     * of what was recovered, then reset the running tally. The API
+     * dedups per-license per-day (claimNotification), so even if the
+     * user Cancel-and-restarts bulk a few times today they get one
+     * email for the day's work.
+     */
+    private static function flush_completion_email() {
+        $tally = get_option( self::RUN_OPTION );
+        delete_option( self::RUN_OPTION );
+        if ( ! is_array( $tally ) || ( ( $tally['recovered'] ?? 0 ) + ( $tally['abandoned'] ?? 0 ) ) === 0 ) {
+            return;
+        }
+
+        $settings = Tempaloo_WebP_Plugin::get_settings();
+        $license_key = (string) ( $settings['license_key'] ?? '' );
+        if ( '' === $license_key ) return;
+
+        $base = rtrim( TEMPALOO_WEBP_API_BASE, '/' );
+        wp_remote_post(
+            $base . '/notify/bulk-retry-complete',
+            [
+                'timeout' => 8,
+                'headers' => [
+                    'Content-Type'  => 'application/json',
+                    'X-License-Key' => $license_key,
+                ],
+                'body'    => wp_json_encode( [
+                    'converted' => (int) ( $tally['recovered'] ?? 0 ),
+                    'abandoned' => (int) ( $tally['abandoned'] ?? 0 ),
+                    'site_url'  => home_url(),
+                ] ),
+                // Fire-and-forget; we don't want a Brevo blip to leave
+                // the user's site spinning waiting for the cron tick
+                // to return. The API also dedupes server-side so a
+                // missed call here just means no email — never a
+                // duplicate one.
+                'blocking' => false,
+            ]
+        );
+
+        // Activity log so the admin sees the wrap-up event in their
+        // own UI even if Brevo is misconfigured / mail failed silently.
+        Tempaloo_WebP_Activity::log(
+            'retry_queue',
+            'success',
+            sprintf(
+                /* translators: 1: images recovered by background retries, 2: images abandoned after 6 attempts */
+                __( 'Background retries finished · %1$d recovered · %2$d abandoned', 'tempaloo-webp' ),
+                (int) ( $tally['recovered'] ?? 0 ),
+                (int) ( $tally['abandoned'] ?? 0 )
+            ),
+            [
+                'recovered' => (int) ( $tally['recovered'] ?? 0 ),
+                'abandoned' => (int) ( $tally['abandoned'] ?? 0 ),
+            ]
+        );
     }
 
     public static function stats() {

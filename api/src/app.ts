@@ -30,6 +30,7 @@ import adminAuthRoutes from "./routes/admin/auth.js";
 import adminDataRoutes from "./routes/admin/data.js";
 import convertRoute from "./routes/convert.js";
 import licenseRoutes from "./routes/license.js";
+import notifyRoute from "./routes/notify.js";
 import plansRoute from "./routes/plans.js";
 import quotaRoute from "./routes/quota.js";
 import webhooksRoute from "./routes/webhooks.js";
@@ -92,6 +93,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
             await api.register(convertRoute);
             await api.register(quotaRoute);
             await api.register(licenseRoutes);
+            await api.register(notifyRoute);
             await api.register(plansRoute);
             await api.register(webhooksRoute);
             await api.register(accountRoutes);

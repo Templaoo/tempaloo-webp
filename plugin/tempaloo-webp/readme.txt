@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.6.0
+Stable tag: 1.6.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -145,6 +145,12 @@ Example — skip conversion for any attachment in the `private/` upload subfolde
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 1.6.1 =
+* New: **"Conversion complete" email at the end of the background retry run.** When the WP-cron retry tick (every 5 minutes) drains the last attachment from the queue, the plugin asks the API to send a single wrap-up email summarising what was recovered (e.g. "28 images recovered · 1 couldn't be converted"). API-side dedup ensures one email per license per day even if the user cancels and restarts bulk a few times. Lets users close the tab, come back later, and trust that everything happened.
+* New: **"En cours de retry" indicator in Overview** — a small blue panel at the top of the Overview tab whenever the retry queue isn't empty. Tells the user how many images are still being processed in the background and when the next cron tick fires. Disappears the moment the queue drains.
+* New: API endpoint `POST /v1/notify/bulk-retry-complete` (license-authed) for plugins to trigger the wrap-up email. Brevo deliverability beats `wp_mail` on most shared hosts; rate-limit / dedup state lives next to the rest of the API's notification machinery.
+* Fix: Background retry tally is now persisted across cron ticks in a dedicated option (`tempaloo_webp_retry_run`). Without this the email could never fire — one tick recovers some, the next tick doesn't have the count, the queue drains and we'd lose the running total.
 
 = 1.6.0 =
 * New: **Classified error panel** in the Bulk Idle view replaces the old verbose error list. Failures are now sorted into two buckets: a friendly blue "🔄 X images en cours de retry — pas besoin d'attendre" panel for transient failures (network errors, server overload — already auto-enqueued in the background retry queue, with the planned email-on-completion in v1.6.1), and a separate amber "⚠ X images need attention — retry won't help" panel for permanent rejections (oversized for tier, broken file, missing on disk) with one-line explanations of each cause. Lifts the "everything is on fire" anxiety when most failures are recoverable in the background.
