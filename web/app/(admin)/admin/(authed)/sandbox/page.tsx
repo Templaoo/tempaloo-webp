@@ -4,7 +4,9 @@ import { SandboxButtons } from "@/components/admin/SandboxButtons";
 
 export const dynamic = "force-dynamic";
 
-interface PlansResp { plans: Array<{ code: string; name: string; freemius_plan_id: string | null; price_monthly_cents: number; price_annual_cents: number }> }
+// /plans returns camelCase keys (freemiusPlanId, priceMonthlyCents…),
+// see api/src/routes/plans.ts. Keep this interface in sync.
+interface PlansResp { plans: Array<{ code: string; name: string; freemiusPlanId: number | null; priceMonthlyCents: number; priceAnnualCents: number }> }
 
 export default async function SandboxPage() {
     // Re-use the public /plans endpoint via the server fetch — keeps the
@@ -14,7 +16,7 @@ export default async function SandboxPage() {
     let plans: PlansResp["plans"] = [];
     try {
         const data = await adminGet<PlansResp>("/plans");
-        plans = data.plans.filter((p) => p.freemius_plan_id != null);
+        plans = data.plans.filter((p) => p.freemiusPlanId != null);
     } catch { /* render empty state */ }
 
     return (

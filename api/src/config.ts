@@ -24,8 +24,15 @@ const schema = z.object({
     ADMIN_TOTP_KEY: z.string().min(16).optional(),
     // Cookie name for admin session. Different from the customer cookie.
     ADMIN_COOKIE_NAME: z.string().default("tempaloo_admin_sid"),
-    // Session lifetime in minutes — 30 by default, tighten to 15 in prod.
-    ADMIN_SESSION_TTL_MIN: z.coerce.number().int().positive().default(30),
+    // Session lifetime in minutes. Default 30 days (43200 min) — the
+    // longest "still safe" value given the surrounding controls:
+    //   · httpOnly cookie (no JS access)
+    //   · SameSite=Strict (no CSRF/cross-site replay)
+    //   · 2FA passed flag required on every request
+    //   · IP allowlist (web middleware) when ADMIN_IP_ALLOWLIST is set
+    //   · admin:revoke-sessions kill switch invalidates every session in 1 sec
+    // Drop this back to 30/60/240 in security-sensitive deployments.
+    ADMIN_SESSION_TTL_MIN: z.coerce.number().int().positive().default(43200),
     // Comma-separated CIDR allowlist for the /admin/* surface (web layer).
     // The API layer mostly trusts the cookie, but accepts an optional
     // ALLOWLIST too for defense-in-depth.

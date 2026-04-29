@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 
+// Mirrors the camelCase response from /v1/plans.
 interface Plan {
     code: string;
     name: string;
-    freemius_plan_id: string | null;
-    price_monthly_cents: number;
-    price_annual_cents: number;
+    freemiusPlanId: number | null;
+    priceMonthlyCents: number;
+    priceAnnualCents: number;
 }
 
 interface SandboxData { sandbox: { token: string; ctx: string } }
@@ -35,7 +36,7 @@ export function SandboxButtons({ plans }: { plans: Plan[] }) {
     const [err, setErr] = useState<string | null>(null);
 
     async function open(plan: Plan, billing: Billing) {
-        if (!plan.freemius_plan_id) return;
+        if (!plan.freemiusPlanId) return;
         const key = `${plan.code}:${billing}`;
         if (busy) return;
         setBusy(key);
@@ -58,7 +59,7 @@ export function SandboxButtons({ plans }: { plans: Plan[] }) {
             const checkout = new CheckoutCtor({
                 product_id: PRODUCT_ID,
                 public_key: PUBLIC_KEY,
-                plan_id: Number(plan.freemius_plan_id),
+                plan_id: plan.freemiusPlanId,
                 licenses,
                 currency: "eur",
                 billing_cycle: billing,
@@ -85,6 +86,8 @@ export function SandboxButtons({ plans }: { plans: Plan[] }) {
         );
     }
 
+    const eur = (cents: number) => `€${(cents / 100).toFixed(0)}`;
+
     return (
         <div style={{ display: "grid", gap: 12 }}>
             {err && (
@@ -98,7 +101,7 @@ export function SandboxButtons({ plans }: { plans: Plan[] }) {
                         <div className="eyebrow">PLAN</div>
                         <div style={{ marginTop: 4, fontSize: 16, fontWeight: 600, color: "var(--ink)" }}>{p.name}</div>
                         <div style={{ fontSize: 12.5, color: "var(--ink-3)" }}>
-                            €{(p.price_monthly_cents / 100).toFixed(0)}/mo · €{(p.price_annual_cents / 100).toFixed(0)}/yr · {p.code}
+                            {eur(p.priceMonthlyCents)}/mo · {eur(p.priceAnnualCents)}/yr · {p.code}
                         </div>
                     </div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
