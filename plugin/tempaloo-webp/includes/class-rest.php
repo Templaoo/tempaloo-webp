@@ -60,6 +60,16 @@ class Tempaloo_WebP_REST {
             'callback'            => [ $this, 'get_cpts' ],
             'permission_callback' => [ $this, 'perm_manage' ],
         ] );
+
+        // Force a fresh /license/verify roundtrip on demand. Same logic
+        // as the daily License Watch cron, but triggered manually so
+        // a user can sync immediately after upgrading on tempaloo.com
+        // instead of waiting up to 24h for the cron.
+        register_rest_route( self::NS, '/refresh-license', [
+            'methods'             => 'POST',
+            'callback'            => [ $this, 'post_refresh_license' ],
+            'permission_callback' => [ $this, 'perm_manage' ],
+        ] );
     }
 
     public function get_activity( WP_REST_Request $req ) {
@@ -201,6 +211,42 @@ class Tempaloo_WebP_REST {
             sprintf( __( 'License activated · %s plan', 'tempaloo-webp' ), strtoupper( (string) ( $res['data']['plan'] ?? 'free' ) ) ),
             [ 'plan' => (string) ( $res['data']['plan'] ?? 'free' ) ]
         );
+        return $this->state_response();
+    }
+
+    /**
+     * On-demand license re-verify. Calls /license/verify with the saved
+     * license_key, persists the latest plan / status / email, returns
+     * the same shape as state_response() so the React app can replace
+     * its store atomically.
+     */
+    public function post_refresh_license() {
+        $s = Tempaloo_WebP_Plugin::get_settings();
+        $key = (string) ( $s['license_key'] ?? '' );
+        if ( '' === $key ) {
+            return new WP_Error( 'no_license', 'No license key on file', [ 'status' => 400 ] );
+        }
+        $client = new Tempaloo_WebP_API_Client( $key );
+        $res    = $client->verify_license( home_url() );
+        if ( empty( $res['ok'] ) || ! is_array( $res['data'] ?? null ) ) {
+            $code = isset( $res['error']['code'] ) ? $res['error']['code'] : 'verify_failed';
+            $msg  = isset( $res['error']['message'] ) ? $res['error']['message'] : 'License verify failed';
+            return new WP_Error( $code, $msg, [ 'status' => 502 ] );
+        }
+        $data = $res['data'];
+
+        $patch = [
+            'license_status'   => isset( $data['status'] ) ? (string) $data['status'] : ( ! empty( $data['valid'] ) ? 'active' : 'unknown' ),
+            'license_valid'    => ! empty( $data['valid'] ),
+            'plan'             => isset( $data['plan'] ) ? (string) $data['plan'] : (string) ( $s['plan'] ?? '' ),
+            'last_verified_at' => time(),
+        ];
+        if ( isset( $data['user_email'] ) )    $patch['license_email'] = (string) $data['user_email'];
+        if ( isset( $data['supports_avif'] ) ) $patch['supports_avif'] = ! empty( $data['supports_avif'] );
+        if ( isset( $data['images_limit'] ) )  $patch['images_limit']  = (int) $data['images_limit'];
+        if ( isset( $data['sites_limit'] ) )   $patch['sites_limit']   = (int) $data['sites_limit'];
+        Tempaloo_WebP_Plugin::update_settings( $patch );
+
         return $this->state_response();
     }
 

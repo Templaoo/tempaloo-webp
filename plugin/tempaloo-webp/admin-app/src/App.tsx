@@ -59,6 +59,44 @@ function RetryQueueBanner({ state, onRunRetry, busy }: { state: AppState; onRunR
 }
 
 /**
+ * Manual "sync now" — calls /tempaloo-webp/v1/refresh-license, which
+ * re-runs /license/verify upstream and persists the latest plan +
+ * status + email + supports_avif. Useful right after the user upgrades
+ * their plan on tempaloo.com — the daily cron would catch up within
+ * 24h, this lets them see the new plan immediately.
+ */
+function RefreshLicenseButton({ onUpdated }: { onUpdated: (s: AppState) => void }) {
+    const [busy, setBusy] = useState(false);
+    async function go() {
+        if (busy) return;
+        setBusy(true);
+        try {
+            const next = await api.refreshLicense();
+            onUpdated(next);
+            toast("success", "License synced");
+        } catch (e) {
+            toast("error", e instanceof Error ? e.message : "Sync failed");
+        } finally {
+            setBusy(false);
+        }
+    }
+    return (
+        <button
+            onClick={go}
+            disabled={busy}
+            className="inline-flex items-center justify-center h-6 w-6 rounded-full text-ink-400 hover:text-ink-900 hover:bg-ink-50 transition-colors disabled:opacity-50"
+            title="Sync license — pulls the latest plan + status from Tempaloo"
+            aria-label="Sync license"
+        >
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" className={busy ? "animate-spin" : ""}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 8a5 5 0 0 1 8.5-3.5L13 6M13 8a5 5 0 0 1-8.5 3.5L3 10" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 3v3h-3M3 13v-3h3" />
+            </svg>
+        </button>
+    );
+}
+
+/**
  * Account chip — shows the subscriber's email next to the plan badge so
  * the site owner immediately knows WHICH Tempaloo account this site is
  * tied to. Click → opens the dashboard. Tooltip shows the full email
@@ -241,6 +279,9 @@ export default function App() {
                     </Badge>
                     {state.license.email && (
                         <AccountChip email={state.license.email} plan={planLabel} />
+                    )}
+                    {state.license.key && (
+                        <RefreshLicenseButton onUpdated={setState} />
                     )}
                     <a
                         className="text-xs font-medium text-ink-500 hover:text-ink-900"
