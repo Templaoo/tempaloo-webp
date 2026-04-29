@@ -174,20 +174,47 @@ export default function Bulk({ state, onUpgrade }: { state: AppState; onUpgrade?
 
     const start = async () => {
         setPreflightOpen(false);
+
+        // Optimistic UI: switch to the running pane IMMEDIATELY, before
+        // we even hit the server. The previous flow had a noticeable
+        // 0.5–1.5s dead window between popup close and the first poll
+        // tick rendering — UI showed the stale idle pane while
+        // bulk.start() was in flight, which read as "did my click do
+        // anything?". Now the running view is on screen the millisecond
+        // the user clicks; bulk.start() runs in the background; the
+        // first tick's real status replaces the optimistic one when it
+        // arrives. Rollback to idle if the API rejects.
+        const previousPane = pane;
+        runningRef.current = true;
+        startedAtRef.current = Date.now();
+        setStatus({
+            status: "running",
+            total: pending ?? 0,
+            processed: 0,
+            succeeded: 0,
+            failed: 0,
+            errors: [],
+        });
+        setPane("running");
+
         try {
             const s = await bulk.start();
             const norm = normalizeStatus(s);
             setStatus(norm);
-            // If the very first tick already returned terminal, route accordingly
             if (norm.status === "running") {
-                runningRef.current = true;
-                startedAtRef.current = Date.now();
-                setPane("running");
-                setTimeout(loop, 150);
+                // Schedule the first tick on the next microtask — no
+                // artificial delay. The 350ms between subsequent ticks
+                // (inside loop()) is the real polling interval.
+                queueMicrotask(loop);
             } else {
+                runningRef.current = false;
                 handleTerminalState(norm);
             }
         } catch (e) {
+            // Rollback: restore the pane the user came from + clear
+            // optimistic running flag so the next loop tick can't fire.
+            runningRef.current = false;
+            setPane(previousPane);
             toast("error", e instanceof Error ? e.message : "Could not start");
         }
     };
@@ -202,20 +229,32 @@ export default function Bulk({ state, onUpgrade }: { state: AppState; onUpgrade?
     };
 
     const resume = async () => {
+        // Same optimistic pattern as start(). Resuming from paused-quota
+        // or paused-daily had the same dead window — instant pane flip
+        // here means the user gets the "we picked up where we left off"
+        // payoff immediately.
         setResuming(true);
+        const previousPane = pane;
+        runningRef.current = true;
+        startedAtRef.current = Date.now();
+        // Keep the existing processed counts visible so the progress bar
+        // continues from where it was, instead of jumping back to 0.
+        setStatus((prev) => ({ ...prev, status: "running" }));
+        setPane("running");
+
         try {
             const s = await bulk.resume();
             const norm = normalizeStatus(s);
             setStatus(norm);
             if (norm.status === "running") {
-                runningRef.current = true;
-                startedAtRef.current = Date.now();
-                setPane("running");
-                setTimeout(loop, 150);
+                queueMicrotask(loop);
             } else {
+                runningRef.current = false;
                 handleTerminalState(norm);
             }
         } catch (e) {
+            runningRef.current = false;
+            setPane(previousPane);
             toast("error", e instanceof Error ? e.message : "Could not resume");
         } finally {
             setResuming(false);
