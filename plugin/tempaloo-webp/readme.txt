@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.2.0
+Stable tag: 1.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -145,6 +145,9 @@ Example — skip conversion for any attachment in the `private/` upload subfolde
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 1.3.0 =
+* New: **CDN passthrough toggle** (Settings → Display method). When you're already on Cloudflare Polish, BunnyCDN Optimizer, ImageKit, Cloudinary, or any similar service that serves WebP from the same `.jpg` URL via Accept negotiation, switch this on and the plugin stops touching your HTML. No URL rewriting, no `<picture>` wrapping — the CDN does its job uninterrupted. Conversion keeps running, so the siblings stay on disk if you ever turn passthrough off.
 
 = 1.2.0 =
 * New: **Picture tag display mode** (Settings → Display method). Wraps every `<img>` in `<picture>` with `<source type="image/avif">` + `<source type="image/webp">` entries, leaving the original `<img src="…jpg">` as the universal fallback. Same approach as Imagify (default) and ShortPixel (recommended). More robust than URL rewrite, CDN-friendly (Cloudflare/BunnyCDN/etc.), theme-tolerant. **Default for fresh installs.** Existing installs keep their current URL-rewrite mode — switch in Settings if you want.

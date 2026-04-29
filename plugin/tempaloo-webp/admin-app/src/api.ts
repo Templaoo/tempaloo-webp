@@ -62,6 +62,12 @@ export interface AppState {
         //   picture_tag — wrap <img> in <picture> with <source> entries.
         //                 CDN-friendly, theme-tolerant. Default for new installs.
         deliveryMode: "url_rewrite" | "picture_tag";
+        // When true, the plugin stops rewriting URLs and stops wrapping
+        // <img> in <picture>. The CDN (Cloudflare Polish, BunnyCDN
+        // Optimizer, ImageKit, Cloudinary…) serves WebP/AVIF transparently
+        // from the same .jpg URL via Accept + Vary. Conversion still runs
+        // server-side so siblings exist if the user disables passthrough later.
+        cdnPassthrough: boolean;
         // 0 = off; otherwise the max width in px above which uploads are
         // resized before conversion (hooks into core's big_image_size_threshold).
         resizeMaxWidth: number;
@@ -103,7 +109,7 @@ export const boot: BootState =
             quotaExceededAt: null,
             apiHealth: { ok: true, failedAt: 0, code: "", message: "", attempts: 0 },
             retryQueue: { pending: 0, dueNow: 0, nextRetryAt: 0 },
-            settings: { quality: 82, outputFormat: "webp", autoConvert: true, serveWebp: true, deliveryMode: "picture_tag", resizeMaxWidth: 2560, cptQuality: {} },
+            settings: { quality: 82, outputFormat: "webp", autoConvert: true, serveWebp: true, deliveryMode: "picture_tag", cdnPassthrough: false, resizeMaxWidth: 2560, cptQuality: {} },
             savings: null,
         },
     };

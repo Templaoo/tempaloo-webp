@@ -276,16 +276,18 @@ export default function Settings({ state, onState }: { state: AppState; onState:
                     <FormatOption
                         value="picture_tag"
                         current={s.deliveryMode}
-                        onSelect={() => setS({ ...s, deliveryMode: "picture_tag" })}
+                        onSelect={() => !s.cdnPassthrough && setS({ ...s, deliveryMode: "picture_tag" })}
                         title="Picture tag"
                         subtitle="Wraps <img> in <picture>. Works everywhere, CDN-friendly."
+                        disabled={s.cdnPassthrough}
                     />
                     <FormatOption
                         value="url_rewrite"
                         current={s.deliveryMode}
-                        onSelect={() => setS({ ...s, deliveryMode: "url_rewrite" })}
+                        onSelect={() => !s.cdnPassthrough && setS({ ...s, deliveryMode: "url_rewrite" })}
                         title="URL rewrite"
                         subtitle="Replaces .jpg → .jpg.webp inline. Lighter HTML."
+                        disabled={s.cdnPassthrough}
                     />
                 </div>
                 <p className="text-xs text-ink-500 mt-3 max-w-2xl leading-relaxed">
@@ -294,6 +296,15 @@ export default function Settings({ state, onState }: { state: AppState; onState:
                     as a universal fallback. <strong>URL rewrite</strong> is preserved for installs that already
                     work that way; switch only if a theme breaks on <code className="text-[11px] bg-ink-100 px-1 rounded">&lt;picture&gt;</code>.
                 </p>
+
+                <div className="mt-5 pt-5 border-t border-ink-100">
+                    <Switch
+                        checked={s.cdnPassthrough}
+                        onChange={(v) => setS({ ...s, cdnPassthrough: v })}
+                        label="My CDN handles WebP/AVIF (passthrough mode)"
+                        description="Turn this on if Cloudflare Polish, BunnyCDN Optimizer, ImageKit, Cloudinary or a similar service is already serving WebP from the same .jpg URL. The plugin stops touching HTML and lets the CDN do its job. Conversion keeps running so siblings exist if you turn this off later."
+                    />
+                </div>
             </Card>
 
             <Card>

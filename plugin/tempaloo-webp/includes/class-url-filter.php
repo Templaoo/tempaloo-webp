@@ -316,6 +316,13 @@ class Tempaloo_WebP_URL_Filter {
         if ( empty( $s['serve_webp'] ) ) {
             return $filtered_image;
         }
+        // CDN passthrough: a Cloudflare Polish / BunnyCDN Optimizer /
+        // ImageKit setup is serving WebP transparently from the same
+        // .jpg URL via Accept negotiation. Wrapping in <picture> or
+        // rewriting URLs would short-circuit that. Stay out of the way.
+        if ( ! empty( $s['cdn_passthrough'] ) ) {
+            return $filtered_image;
+        }
         if ( is_admin() || wp_doing_ajax() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
             return $filtered_image;
         }
@@ -456,6 +463,11 @@ class Tempaloo_WebP_URL_Filter {
     private function alternate_url( $url ) {
         $s = Tempaloo_WebP_Plugin::get_settings();
         if ( empty( $s['serve_webp'] ) ) {
+            return null;
+        }
+        // CDN passthrough — stay out of the way (see comment in
+        // replace_in_img_tag for the full rationale).
+        if ( ! empty( $s['cdn_passthrough'] ) ) {
             return null;
         }
 

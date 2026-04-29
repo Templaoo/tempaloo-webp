@@ -48,6 +48,14 @@ final class Tempaloo_WebP_Plugin {
             //                   tolerant. Default for fresh installs (set in
             //                   on_activate when the option doesn't exist yet).
             'delivery_mode'   => 'url_rewrite',
+            // CDN passthrough: when on, the plugin stops rewriting URLs
+            // and stops wrapping <img> in <picture>. The CDN (Cloudflare
+            // Polish, BunnyCDN Optimizer, ImageKit, Cloudinary…) is
+            // expected to serve WebP/AVIF transparently from the SAME
+            // .jpg URL based on the client's Accept header + Vary.
+            // Conversion still runs server-side so siblings exist if the
+            // user later disables passthrough — no need to re-bulk.
+            'cdn_passthrough' => false,
             // Resize uploads larger than this width before conversion. 0 = off.
             // Hooks into core's big_image_size_threshold filter; the user's
             // original is kept as a -scaled-original copy by WordPress itself.
