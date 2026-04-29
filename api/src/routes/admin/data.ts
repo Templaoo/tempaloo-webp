@@ -555,6 +555,140 @@ export default async function adminDataRoutes(app: FastifyInstance) {
         return reply.code(result.ok ? 200 : 502).send({ ok: result.ok, reason: result.reason, messageId: result.messageId });
     });
 
+    // ─── /admin/licenses/:id/block + /unblock ───────────────────────
+    // Admin-driven license shutdown. Bypasses Freemius status (a blocked
+    // license fails resolveLicense regardless of its Freemius state).
+    // Audited at severity=critical so every block triggers an owner alert
+    // email — destructive ops should never be silent.
+    const blockBody = z.object({
+        reason: z.string().min(8).max(500),
+    });
+    app.post<{ Params: { id: string } }>("/admin/licenses/:id/block", guard, async (req, reply) => {
+        const id = req.params.id;
+        if (!/^[0-9a-f-]{36}$/i.test(id)) {
+            return reply.code(400).send({ error: { code: "bad_id", message: "Invalid license id" } });
+        }
+        const parsed = blockBody.safeParse(req.body);
+        if (!parsed.success) {
+            return reply.code(400).send({ error: { code: "bad_body", message: "reason (8-500 chars) required" } });
+        }
+        const { rowCount } = await query(
+            `UPDATE licenses
+                SET blocked_at = NOW(),
+                    blocked_reason = $2,
+                    blocked_by_admin_id = $3,
+                    updated_at = NOW()
+              WHERE id = $1`,
+            [id, parsed.data.reason, req.admin!.id],
+        );
+        if (!rowCount) return reply.code(404).send({ error: { code: "not_found", message: "License not found" } });
+        await auditLog({
+            admin: req.admin!, req,
+            action: "license.block", severity: "critical",
+            targetType: "license", targetId: id,
+            reason: parsed.data.reason,
+        });
+        return { ok: true };
+    });
+
+    app.post<{ Params: { id: string } }>("/admin/licenses/:id/unblock", guard, async (req, reply) => {
+        const id = req.params.id;
+        if (!/^[0-9a-f-]{36}$/i.test(id)) {
+            return reply.code(400).send({ error: { code: "bad_id", message: "Invalid license id" } });
+        }
+        const { rowCount } = await query(
+            `UPDATE licenses
+                SET blocked_at = NULL,
+                    blocked_reason = NULL,
+                    blocked_by_admin_id = NULL,
+                    updated_at = NOW()
+              WHERE id = $1`,
+            [id],
+        );
+        if (!rowCount) return reply.code(404).send({ error: { code: "not_found", message: "License not found" } });
+        await auditLog({
+            admin: req.admin!, req,
+            action: "license.unblock", severity: "warn",
+            targetType: "license", targetId: id,
+        });
+        return { ok: true };
+    });
+
+    // ─── /admin/abuse — heuristic flagger ────────────────────────────
+    //
+    // Two signals computed on the fly (+ the explicit block list):
+    //
+    //   ipFlag    Live licenses with ≥3 distinct activation IPs in the
+    //             last 24h. A legitimate user activates from 1, maybe 2
+    //             IPs in a normal day. 3+ unique IPs in 24h on the same
+    //             key is the forum-sharing fingerprint.
+    //
+    //   siteFlag  Live licenses where the count of distinct site_hosts
+    //             activated in the last 30 days exceeds the plan's
+    //             max_sites cap. Catches the user re-cycling slots
+    //             (deactivate / reactivate elsewhere) to spread the key.
+    //
+    //   blocked   Currently-blocked rows, with the admin who blocked
+    //             them + the reason — surfaced for quick review.
+    //
+    // All three queries hit indexed columns (sites.license_id,
+    // licenses.blocked_at) so this stays cheap as the install base grows.
+    app.get("/admin/abuse", guard, async (req) => {
+        const [{ rows: blocked }, { rows: ipFlag }, { rows: siteFlag }] = await Promise.all([
+            query(
+                `SELECT l.id, l.license_key, l.blocked_at, l.blocked_reason,
+                        u.email, p.name AS plan_name,
+                        a.email AS blocked_by_email
+                   FROM licenses l
+                   JOIN users u ON u.id = l.user_id
+                   JOIN plans p ON p.id = l.plan_id
+              LEFT JOIN admin_users a ON a.id = l.blocked_by_admin_id
+                  WHERE l.blocked_at IS NOT NULL
+                  ORDER BY l.blocked_at DESC
+                  LIMIT 100`,
+            ),
+            query(
+                `SELECT l.id, l.license_key, u.email, p.name AS plan_name,
+                        COUNT(DISTINCT s.activation_ip) AS distinct_ips_24h,
+                        ARRAY_AGG(DISTINCT host(s.activation_ip))
+                          FILTER (WHERE s.activation_ip IS NOT NULL) AS ip_samples
+                   FROM licenses l
+                   JOIN users u ON u.id = l.user_id
+                   JOIN plans p ON p.id = l.plan_id
+                   JOIN sites s ON s.license_id = l.id
+                  WHERE l.blocked_at IS NULL
+                    AND l.status IN ('active','trialing')
+                    AND s.activated_at >= NOW() - INTERVAL '24 hours'
+                    AND s.activation_ip IS NOT NULL
+                  GROUP BY l.id, u.email, p.name
+                 HAVING COUNT(DISTINCT s.activation_ip) >= 3
+                  ORDER BY distinct_ips_24h DESC
+                  LIMIT 50`,
+            ),
+            query(
+                `SELECT l.id, l.license_key, u.email, p.name AS plan_name,
+                        COUNT(DISTINCT s.site_host) AS distinct_hosts_30d,
+                        p.max_sites
+                   FROM licenses l
+                   JOIN users u ON u.id = l.user_id
+                   JOIN plans p ON p.id = l.plan_id
+                   JOIN sites s ON s.license_id = l.id
+                  WHERE l.blocked_at IS NULL
+                    AND l.status IN ('active','trialing')
+                    AND s.activated_at >= NOW() - INTERVAL '30 days'
+                  GROUP BY l.id, u.email, p.name, p.max_sites
+                 HAVING COUNT(DISTINCT s.site_host) > GREATEST(p.max_sites, 1)
+                  ORDER BY distinct_hosts_30d DESC
+                  LIMIT 50`,
+            ),
+        ]);
+        await auditLog({
+            admin: req.admin!, req,
+            action: "abuse.list", severity: "info",
+        });
+        return { blocked, ipFlag, siteFlag };
+    });
+
     // ─── /admin/freemius/sandbox-params ─────────────────────────────
     // Returns { token, ctx } for opening the Freemius overlay in sandbox
     // mode. Lets the admin test the FULL prod checkout flow (overlay +

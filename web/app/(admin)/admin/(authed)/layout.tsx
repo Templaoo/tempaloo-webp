@@ -66,6 +66,7 @@ function Sidebar() {
         { href: "/admin/licenses",   label: "Licenses",   icon: "◇" },
         { href: "/admin/installs",   label: "Installs",   icon: "▢" },
         { href: "/admin/webhooks",   label: "Webhooks",   icon: "↯" },
+        { href: "/admin/abuse",      label: "Abuse",      icon: "⚠" },
         { href: "/admin/audit",      label: "Audit",      icon: "✓" },
         { href: "/admin/sandbox",    label: "Sandbox",    icon: "▶" },
     ];

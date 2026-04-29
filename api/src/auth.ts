@@ -28,10 +28,12 @@ export async function resolveLicense(licenseKey: string | undefined): Promise<Li
         max_sites: number;
         supports_avif: boolean;
         status: string;
+        blocked_at: Date | null;
     }>(
         `SELECT l.id AS license_id, l.user_id, p.code AS plan_code,
                 p.images_per_month, p.max_sites, p.supports_avif,
-                l.status::text AS status
+                l.status::text AS status,
+                l.blocked_at
          FROM licenses l
          JOIN plans p ON p.id = l.plan_id
          WHERE l.license_key = $1
@@ -41,6 +43,10 @@ export async function resolveLicense(licenseKey: string | undefined): Promise<Li
 
     const row = rows[0];
     if (!row) throw err.unauthorized();
+    // Admin block override beats Freemius status — reconcile won't
+    // accidentally un-block, and we can shut down abuse without waiting
+    // for the upstream cancel.
+    if (row.blocked_at) throw err.unauthorized("License blocked");
     if (row.status !== "active" && row.status !== "trialing") {
         throw err.unauthorized(`License ${row.status}`);
     }
