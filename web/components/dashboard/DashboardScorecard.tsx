@@ -16,7 +16,15 @@ import type { DashLicense } from "./LicenseCard";
  *     × bytes saved → multiplied by €0.04 / GB (Bunny pricing)
  */
 export function DashboardScorecard({ licenses }: { licenses: DashLicense[] }) {
-    const totalConverted = licenses.reduce((a, l) => a + l.quota.imagesUsed, 0);
+    // Same rule as StatsRow — only include licenses that are actually
+    // delivering value right now, so the "67% lighter on N converted
+    // images across M licenses" copy stays truthful after a plan
+    // change. (A canceled Free license still counts toward historical
+    // savings via its quota.imagesUsed, but for the headline we want
+    // current-state, not lifetime aggregate.)
+    const live = licenses.filter((l) => l.status === "active" || l.status === "trialing");
+
+    const totalConverted = live.reduce((a, l) => a + l.quota.imagesUsed, 0);
     const estimatedBytesSaved = totalConverted * 700_000;
     const savedMb = estimatedBytesSaved / (1024 * 1024);
 
@@ -75,7 +83,7 @@ export function DashboardScorecard({ licenses }: { licenses: DashLicense[] }) {
                     </div>
                     <div style={{ fontSize: 14, color: "var(--ink-3)", marginTop: 8 }}>
                         Across <strong style={{ color: "var(--ink)" }}>{totalConverted.toLocaleString()}</strong> converted image{totalConverted !== 1 ? "s" : ""}
-                        {licenses.length > 1 && <> on <strong style={{ color: "var(--ink)" }}>{licenses.length}</strong> licenses</>}
+                        {live.length > 1 && <> on <strong style={{ color: "var(--ink)" }}>{live.length}</strong> licenses</>}
                     </div>
                 </div>
 

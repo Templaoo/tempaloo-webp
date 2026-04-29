@@ -30,8 +30,12 @@ const PAID: PlanRow[] = [
 ];
 
 export function UpgradeCardSmart({ licenses }: { licenses: DashLicense[] }) {
-    const hasPaid = licenses.some((l) => l.plan.code !== "free");
-    const freeLicense = licenses.find((l) => l.plan.code === "free");
+    // Only "live" licenses (active or trialing) count toward the
+    // upgrade-vs-already-paid decision. An expired Free row from a
+    // previous lifetime should NOT trigger the Free upsell.
+    const live = licenses.filter((l) => l.status === "active" || l.status === "trialing");
+    const hasPaid = live.some((l) => l.plan.code !== "free");
+    const freeLicense = live.find((l) => l.plan.code === "free");
 
     if (hasPaid) {
         return (

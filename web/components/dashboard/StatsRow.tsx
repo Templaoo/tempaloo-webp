@@ -1,13 +1,19 @@
 import type { DashLicense } from "./LicenseCard";
 
 export function StatsRow({ licenses }: { licenses: DashLicense[] }) {
-    const active = licenses.filter((l) => l.status === "active" || l.status === "trialing").length;
-    const totalUsed = licenses.reduce((a, l) => a + l.quota.imagesUsed, 0);
-    const totalSites = licenses.reduce((a, l) => a + l.sites.length, 0);
-    const hasUnlimited = licenses.some((l) => l.plan.imagesPerMonth === -1);
+    // Aggregates are the user's CURRENT capacity — only count licenses
+    // that actually deliver service. Showing Free quota next to a paid
+    // plan after an upgrade was misleading ("89 / 5250" instead of
+    // "0 / 5000").
+    const live = licenses.filter((l) => l.status === "active" || l.status === "trialing");
+
+    const active = live.length;
+    const totalUsed = live.reduce((a, l) => a + l.quota.imagesUsed, 0);
+    const totalSites = live.reduce((a, l) => a + l.sites.length, 0);
+    const hasUnlimited = live.some((l) => l.plan.imagesPerMonth === -1);
     const totalLimit = hasUnlimited
         ? "∞"
-        : licenses.reduce((a, l) => a + Math.max(0, l.plan.imagesPerMonth), 0).toLocaleString();
+        : live.reduce((a, l) => a + Math.max(0, l.plan.imagesPerMonth), 0).toLocaleString();
 
     return (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>

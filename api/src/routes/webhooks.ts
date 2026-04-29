@@ -357,6 +357,24 @@ async function upsertLicenseFromEvent(objects: unknown): Promise<UpsertResult | 
             licenseKey = updated[0]!.license_key;
         }
 
+        // Auto-expire any stale Free license for this user when a paid
+        // license becomes (or stays) active. Reason: dashboard aggregates
+        // were showing Free + Paid totals merged ("89 images this month
+        // of 5250") — confusing right after an upgrade. The Free row is
+        // also no longer useful (the user has a paid quota now).
+        // Skipped when the incoming license IS the Free plan (a Free
+        // signup must obviously not nuke itself).
+        if (planRow.code !== "free" && (status === "active" || status === "trialing")) {
+            await client.query(
+                `UPDATE licenses
+                    SET status = 'expired'::license_status, updated_at = NOW()
+                  WHERE user_id = $1
+                    AND plan_id IN (SELECT id FROM plans WHERE code = 'free')
+                    AND status IN ('active','trialing')`,
+                [userId],
+            );
+        }
+
         return {
             wasNew, status, planName, licenseKey,
             userEmail, userFirstName, trialEndsAt,
