@@ -312,7 +312,11 @@ class Tempaloo_WebP_REST {
             $patch['quality'] = max( 1, min( 100, (int) $p['quality'] ) );
         }
         if ( isset( $p['outputFormat'] ) ) {
-            $patch['output_format'] = 'avif' === $p['outputFormat'] ? 'avif' : 'webp';
+            // 'both' generates AVIF + WebP siblings in one batch (still
+            // 1 credit per upload). Anything else falls back to WebP.
+            $patch['output_format'] = in_array( $p['outputFormat'], [ 'webp', 'avif', 'both' ], true )
+                ? $p['outputFormat']
+                : 'webp';
         }
         if ( array_key_exists( 'autoConvert', $p ) ) {
             $patch['auto_convert'] = ! empty( $p['autoConvert'] );

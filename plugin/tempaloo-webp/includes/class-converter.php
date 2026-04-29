@@ -69,8 +69,16 @@ class Tempaloo_WebP_Converter {
             return [ 'metadata' => $metadata, 'converted' => 0, 'failed' => 0, 'error_code' => 'skipped' ];
         }
 
-        $format = $settings['output_format'];
-        if ( 'avif' === $format && empty( $settings['supports_avif'] ) ) {
+        // Output format selection. 'both' generates AVIF + WebP siblings
+        // in a single batch (1 credit, ShortPixel-style coverage). Free
+        // and unverified plans don't include AVIF, so anything that asks
+        // for it gets gracefully demoted to WebP.
+        $format = isset( $settings['output_format'] ) ? (string) $settings['output_format'] : 'webp';
+        if ( 'both' === $format && empty( $settings['supports_avif'] ) ) {
+            $format = 'webp';
+        } elseif ( 'avif' === $format && empty( $settings['supports_avif'] ) ) {
+            $format = 'webp';
+        } elseif ( ! in_array( $format, [ 'webp', 'avif', 'both' ], true ) ) {
             $format = 'webp';
         }
 
@@ -127,21 +135,32 @@ class Tempaloo_WebP_Converter {
             if ( empty( $f['name'] ) || empty( $f['data'] ) ) { $failed++; continue; }
             $src_path = isset( $by_name[ $f['name'] ] ) ? $by_name[ $f['name'] ] : null;
             if ( ! $src_path ) { $failed++; continue; }
-            $target   = $src_path . '.' . $format;
+            // Per-file format from the API response (set when format='both'
+            // returns two entries per source — one webp, one avif). Falls
+            // back to the requested format for legacy single-format batches.
+            $entry_fmt = isset( $f['format'] ) && in_array( $f['format'], [ 'webp', 'avif' ], true )
+                ? $f['format']
+                : ( 'both' === $format ? 'webp' : $format );
+            $target   = $src_path . '.' . $entry_fmt;
             $binary   = base64_decode( $f['data'], true );
-            // Writing a WebP sibling next to the original on the same disk —
-            // WP_Filesystem is for remote/credentialed writes and doesn't
-            // apply here. The @ silences a benign E_WARNING on read-only
-            // hosts; we already return a failed++ below if the write fails.
+            // Writing a WebP/AVIF sibling next to the original on the same
+            // disk — WP_Filesystem is for remote/credentialed writes and
+            // doesn't apply here. The @ silences a benign E_WARNING on
+            // read-only hosts; we already return a failed++ below if the
+            // write fails.
             // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
             if ( false === $binary || ! @file_put_contents( $target, $binary ) ) {
                 $failed++;
                 continue;
             }
             $converted++;
-            $generated[ $f['name'] ] = [
-                'file'  => basename( $target ),
-                'bytes' => isset( $f['output_bytes'] ) ? (int) $f['output_bytes'] : strlen( $binary ),
+            // Key by name+format so that for 'both' both formats live in
+            // the meta block and the savings calc can find each sibling.
+            $generated[ $f['name'] . '|' . $entry_fmt ] = [
+                'name'   => $f['name'],
+                'format' => $entry_fmt,
+                'file'   => basename( $target ),
+                'bytes'  => isset( $f['output_bytes'] ) ? (int) $f['output_bytes'] : strlen( $binary ),
             ];
         }
 

@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.3.2
+Stable tag: 1.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -145,6 +145,10 @@ Example — skip conversion for any attachment in the `private/` upload subfolde
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 1.4.0 =
+* New: **Dual-format generation** — pick "Both" in Settings → Image format(s) and the plugin generates AVIF + WebP siblings in a single API call. Same approach as ShortPixel's "Create WebP versions" + "Create AVIF versions" combo. **Still 1 credit per upload**, regardless of how many output formats. The `<picture>` automatically serves AVIF to browsers that support it (≈80% of 2026 traffic — Chrome / Edge / Safari 16+ / Firefox 113+ / iOS 16+) and falls back to WebP everywhere else. Requires Starter plan or above for AVIF.
+* Improved: Settings UI cleanup. The "Serve WebP/AVIF" toggle was removed (it duplicated the CDN passthrough switch). The "Convert on upload" toggle is now grouped under the Conversion card as "Auto-convert new uploads". The Output format dropdown is renamed "Image format(s) to generate" with three explicit choices: Both / WebP only / AVIF only.
 
 = 1.3.2 =
 * Fix: **Picture-tag mode now works on page builders** (Elementor, Bricks, Divi, Beaver Builder, Oxygen…). Previously the wrapper relied on the `wp_content_img_tag` filter, which only fires for output that goes through `the_content()` — page-builder output bypasses that filter entirely, so most images were never wrapped. We now post-process the full HTML response on `template_redirect` via output buffering (same approach as Imagify, ShortPixel and other mature WebP plugins). Coverage is total: every `<img>` in `/uploads/` gets wrapped, regardless of which renderer emitted it. Existing manual `<picture>` blocks (theme retina sources, etc.) are detected and left untouched.

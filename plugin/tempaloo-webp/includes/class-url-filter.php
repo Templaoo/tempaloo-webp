@@ -98,24 +98,54 @@ class Tempaloo_WebP_URL_Filter {
                 }
             }
         }
-        $fmt = isset( $tw['format'] ) ? $tw['format'] : 'webp';
+        // Setting may say 'webp', 'avif' or 'both'. The savings figure
+        // shown in the admin column reflects what most browsers see, so
+        // we pick whichever sibling exists per source path — preferring
+        // WebP when both exist (broader audience), falling back to AVIF.
+        // For 'both' we ALSO sum the avif bytes so the meta panel can
+        // surface "WebP & AVIF · saved X%".
+        $stored_fmt = isset( $tw['format'] ) ? (string) $tw['format'] : 'webp';
+        $is_dual = ( 'both' === $stored_fmt );
+        $check_order = $is_dual ? [ 'webp', 'avif' ] : [ $stored_fmt ];
+
         $in = 0; $out = 0; $count = 0;
+        $avif_out = 0; $avif_count = 0;
         foreach ( $paths as $p ) {
-            $alt = $p . '.' . $fmt;
-            if ( file_exists( $p ) && file_exists( $alt ) ) {
-                $in  += filesize( $p );
-                $out += filesize( $alt );
-                $count++;
+            if ( ! file_exists( $p ) ) continue;
+            // Primary metric uses the first format we find. WebP wins on
+            // ties (broader browser support).
+            $picked = null;
+            foreach ( $check_order as $f ) {
+                if ( file_exists( $p . '.' . $f ) ) { $picked = $f; break; }
+            }
+            if ( null === $picked ) continue;
+            $in  += filesize( $p );
+            $out += filesize( $p . '.' . $picked );
+            $count++;
+            // For 'both' track AVIF separately so the UI can show the
+            // bonus tier when applicable.
+            if ( $is_dual && file_exists( $p . '.avif' ) ) {
+                $avif_out += filesize( $p . '.avif' );
+                $avif_count++;
             }
         }
         if ( $count === 0 || $in === 0 ) return null;
+
+        $display_fmt = $is_dual && $avif_count > 0
+            ? 'WEBP+AVIF'
+            : strtoupper( $check_order[0] ?? 'webp' );
+
         return [
-            'format'    => strtoupper( $fmt ),
-            'sizes'     => $count,
-            'bytes_in'  => $in,
-            'bytes_out' => $out,
-            'saved_pct' => max( 0, (int) round( ( 1 - ( $out / $in ) ) * 100 ) ),
-            'at'        => isset( $tw['at'] ) ? (int) $tw['at'] : 0,
+            'format'      => $display_fmt,
+            'sizes'       => $count,
+            'bytes_in'    => $in,
+            'bytes_out'   => $out,
+            'saved_pct'   => max( 0, (int) round( ( 1 - ( $out / $in ) ) * 100 ) ),
+            'at'          => isset( $tw['at'] ) ? (int) $tw['at'] : 0,
+            // Bonus AVIF coverage when stored_fmt='both'. Zero otherwise
+            // so the React side can simply test the field and skip rendering.
+            'avif_bytes'  => $avif_out,
+            'avif_sizes'  => $avif_count,
         ];
     }
 

@@ -128,24 +128,49 @@ export default function Settings({ state, onState }: { state: AppState; onState:
                     </label>
 
                     <div>
-                        <div className="text-sm font-medium text-ink-900 mb-2">Output format</div>
-                        <div className="grid grid-cols-2 gap-2 max-w-sm">
+                        <div className="text-sm font-medium text-ink-900 mb-2">Image format(s) to generate</div>
+                        <div className="grid grid-cols-3 gap-2 max-w-2xl">
+                            <FormatOption
+                                value="both"
+                                current={s.outputFormat}
+                                onSelect={() => state.license.supportsAvif && setS({ ...s, outputFormat: "both" })}
+                                title="Both (recommended)"
+                                subtitle={state.license.supportsAvif
+                                    ? "AVIF + WebP, browser picks best. 1 credit."
+                                    : "Requires Starter+ for AVIF"}
+                                disabled={!state.license.supportsAvif}
+                            />
                             <FormatOption
                                 value="webp"
                                 current={s.outputFormat}
                                 onSelect={() => setS({ ...s, outputFormat: "webp" })}
-                                title="WebP"
-                                subtitle="Best compatibility"
+                                title="WebP only"
+                                subtitle="Universal modern browsers"
                             />
                             <FormatOption
                                 value="avif"
                                 current={s.outputFormat}
                                 onSelect={() => state.license.supportsAvif && setS({ ...s, outputFormat: "avif" })}
-                                title="AVIF"
-                                subtitle={state.license.supportsAvif ? "Smaller files" : "Requires Starter+"}
+                                title="AVIF only"
+                                subtitle={state.license.supportsAvif
+                                    ? "Smaller files, less coverage"
+                                    : "Requires Starter+"}
                                 disabled={!state.license.supportsAvif}
                             />
                         </div>
+                        <p className="text-xs text-ink-500 mt-2 max-w-2xl leading-relaxed">
+                            <strong>Both</strong> stores AVIF + WebP siblings next to each original. The <code className="text-[11px] bg-ink-100 px-1 rounded">&lt;picture&gt;</code> serves
+                            AVIF to Chrome / Edge / Safari 16+ / Firefox 113+ / iOS 16+ (≈80% of 2026 traffic) and WebP everywhere else. <strong>1 credit per upload</strong> — same cost as a single format.
+                        </p>
+                    </div>
+
+                    <div className="pt-4 border-t border-ink-100">
+                        <Switch
+                            checked={s.autoConvert}
+                            onChange={(v) => setS({ ...s, autoConvert: v })}
+                            label="Auto-convert new uploads"
+                            description="Run the conversion as soon as an image lands in the media library. Off = only the Bulk tab triggers conversion."
+                        />
                     </div>
                 </div>
             </Card>
@@ -249,23 +274,6 @@ export default function Settings({ state, onState }: { state: AppState; onState:
                 )}
             </Card>
 
-            <Card>
-                <CardHeader title="Automation" description="When should the plugin kick in?" />
-                <div className="grid gap-4">
-                    <Switch
-                        checked={s.autoConvert}
-                        onChange={(v) => setS({ ...s, autoConvert: v })}
-                        label="Convert on upload"
-                        description="Every new image added to the library is optimized automatically."
-                    />
-                    <Switch
-                        checked={s.serveWebp}
-                        onChange={(v) => setS({ ...s, serveWebp: v })}
-                        label="Serve WebP/AVIF"
-                        description="Replace image URLs at render time for browsers that support the new formats. Originals remain untouched."
-                    />
-                </div>
-            </Card>
 
             <Card>
                 <CardHeader

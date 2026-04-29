@@ -53,7 +53,10 @@ export interface AppState {
     };
     settings: {
         quality: number;
-        outputFormat: "webp" | "avif";
+        // 'both' generates AVIF + WebP siblings in one API batch (1 credit).
+        // Best browser coverage; same approach as ShortPixel's "Create WebP
+        // versions" + "Create AVIF versions" combo. AVIF requires a paid plan.
+        outputFormat: "webp" | "avif" | "both";
         autoConvert: boolean;
         serveWebp: boolean;
         // How the optimized version reaches the browser:

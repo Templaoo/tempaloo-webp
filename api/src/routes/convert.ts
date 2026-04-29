@@ -10,7 +10,11 @@ import { quotaExceededEmail, quotaWarnEmail } from "../lib/email-templates.js";
 import { claimNotification, currentMonthBucket } from "../lib/notifications.js";
 
 const optionsSchema = z.object({
-    format: z.enum(["webp", "avif"]).default("webp"),
+    // 'both' generates AVIF + WebP siblings in a single batch (1 credit
+    // total). Same approach ShortPixel uses — best browser coverage:
+    // AVIF for Chrome/Edge/Safari 16+/Firefox 113+/iOS 16+, WebP for
+    // older modern browsers, JPG for the long tail.
+    format: z.enum(["webp", "avif", "both"]).default("webp"),
     quality: z.coerce.number().int().min(1).max(100).default(config.DEFAULT_QUALITY),
 });
 
@@ -75,7 +79,7 @@ export default async function convertRoute(app: FastifyInstance) {
             }
         }
 
-        let fmt: "webp" | "avif" = "webp";
+        let fmt: "webp" | "avif" | "both" = "webp";
         let quality = config.DEFAULT_QUALITY;
         const files: { name: string; buffer: Buffer }[] = [];
 
@@ -90,7 +94,10 @@ export default async function convertRoute(app: FastifyInstance) {
                     throw err.unprocessable(`Batch size exceeds ${MAX_BATCH_FILES} files`);
                 }
             } else if (p.type === "field") {
-                if (p.fieldname === "format") fmt = String(p.value) === "avif" ? "avif" : "webp";
+                if (p.fieldname === "format") {
+                    const v = String(p.value);
+                    fmt = v === "avif" ? "avif" : v === "both" ? "both" : "webp";
+                }
                 if (p.fieldname === "quality") {
                     const q = Number(p.value);
                     if (Number.isFinite(q) && q >= 1 && q <= 100) quality = Math.round(q);
@@ -99,11 +106,12 @@ export default async function convertRoute(app: FastifyInstance) {
         }
 
         if (files.length === 0) throw err.unprocessable("No files provided");
-        if (fmt === "avif" && !license.supportsAvif) {
+        if ((fmt === "avif" || fmt === "both") && !license.supportsAvif) {
             throw err.forbidden("AVIF not included in your plan — upgrade to Starter or above");
         }
 
-        // ONE credit for the whole batch — regardless of how many sizes.
+        // ONE credit for the whole batch — regardless of how many sizes
+        // OR how many output formats. 'both' costs the same as 'webp'.
         const period = currentPeriod();
         const consumed = await query<{ consume_quota: boolean }>(
             "SELECT consume_quota($1::uuid, $2::date, 1) AS consume_quota",
@@ -111,32 +119,49 @@ export default async function convertRoute(app: FastifyInstance) {
         );
         if (!consumed.rows[0]?.consume_quota) throw err.quotaExceeded();
 
+        // Build the format list to encode. 'both' fans out to webp + avif
+        // for each source file; the response carries one entry per
+        // (file × format), and the plugin uses the `format` field to
+        // choose the sibling extension when writing back to disk.
+        const targetFormats: ("webp" | "avif")[] = fmt === "both" ? ["webp", "avif"] : [fmt];
+
         const start = Date.now();
-        const results = await Promise.all(
+        const results = (await Promise.all(
             files.map(async (f) => {
                 const pipeline = sharp(f.buffer, { failOnError: false });
-                const out =
-                    fmt === "avif"
-                        ? await pipeline.avif({ quality }).toBuffer()
-                        : await pipeline.webp({ quality }).toBuffer();
-                return {
-                    name: f.name,
-                    input_bytes: f.buffer.length,
-                    output_bytes: out.length,
-                    data: out.toString("base64"),
-                };
+                const perFile = await Promise.all(targetFormats.map(async (tf) => {
+                    const out = tf === "avif"
+                        ? await pipeline.clone().avif({ quality }).toBuffer()
+                        : await pipeline.clone().webp({ quality }).toBuffer();
+                    return {
+                        name: f.name,
+                        format: tf,
+                        input_bytes: f.buffer.length,
+                        output_bytes: out.length,
+                        data: out.toString("base64"),
+                    };
+                }));
+                return perFile;
             }),
-        );
+        )).flat();
         const durationMs = Date.now() - start;
 
-        const totalIn = results.reduce((a, r) => a + r.input_bytes, 0);
-        const totalOut = results.reduce((a, r) => a + r.output_bytes, 0);
+        // Per-format usage logs — when fmt='both' we emit one row per
+        // format so the analytics view in /admin reflects the real work
+        // Sharp did and we can spot if AVIF or WebP is suddenly slower.
+        for (const tf of targetFormats) {
+            const formatRows = results.filter((r) => r.format === tf);
+            const totalIn = formatRows.reduce((a, r) => a + r.input_bytes, 0);
+            const totalOut = formatRows.reduce((a, r) => a + r.output_bytes, 0);
+            query(
+                `INSERT INTO usage_logs (license_id, output_format, input_bytes, output_bytes, quality, duration_ms, status, mode)
+                 VALUES ($1, $2::output_format, $3, $4, $5, $6, 'success', $7)`,
+                [license.licenseId, tf, totalIn, totalOut, quality, durationMs, mode],
+            ).catch((e) => req.log.error({ e, tf }, "usage_log insert failed"));
+        }
 
-        query(
-            `INSERT INTO usage_logs (license_id, output_format, input_bytes, output_bytes, quality, duration_ms, status, mode)
-             VALUES ($1, $2::output_format, $3, $4, $5, $6, 'success', $7)`,
-            [license.licenseId, fmt, totalIn, totalOut, quality, durationMs, mode],
-        ).catch((e) => req.log.error({ e }, "usage_log insert failed"));
+        const totalIn = results.reduce((a, r) => a + r.input_bytes, 0) / targetFormats.length;
+        const totalOut = results.reduce((a, r) => a + r.output_bytes, 0);
 
         const { rows: qRows } = await query<{ used: number; limit: number }>(
             `SELECT uc.images_used AS used, p.images_per_month AS limit
@@ -206,6 +231,11 @@ export default async function convertRoute(app: FastifyInstance) {
             }
             if (!imageBuf) throw err.unprocessable("Missing image field");
             const opts = optionsSchema.parse(fields);
+            // Single-file /convert returns a single binary with one Content-Type
+            // header — 'both' makes no sense here. Use /convert/batch instead.
+            if (opts.format === "both") {
+                throw err.unprocessable("format=both is only supported on /convert/batch — use that endpoint to receive WebP + AVIF together");
+            }
             fmt = opts.format;
             quality = opts.quality;
             if (fmt === "avif" && !license.supportsAvif) {
@@ -216,6 +246,7 @@ export default async function convertRoute(app: FastifyInstance) {
             const body = z
                 .object({
                     image_url: z.string().url(),
+                    // format=both isn't accepted on single /convert — see comment above.
                     format: z.enum(["webp", "avif"]).default("webp"),
                     quality: z.coerce.number().int().min(1).max(100).default(config.DEFAULT_QUALITY),
                 })
