@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.1.9
+Stable tag: 1.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -145,6 +145,10 @@ Example — skip conversion for any attachment in the `private/` upload subfolde
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 1.2.0 =
+* New: **Picture tag display mode** (Settings → Display method). Wraps every `<img>` in `<picture>` with `<source type="image/avif">` + `<source type="image/webp">` entries, leaving the original `<img src="…jpg">` as the universal fallback. Same approach as Imagify (default) and ShortPixel (recommended). More robust than URL rewrite, CDN-friendly (Cloudflare/BunnyCDN/etc.), theme-tolerant. **Default for fresh installs.** Existing installs keep their current URL-rewrite mode — switch in Settings if you want.
+* Improved: When picture-tag mode is on, all URL-rewrite filters short-circuit so a single `<img>` never gets double-processed.
 
 = 1.1.9 =
 * Fix: Front-end `<img src="…">` now rewrites to the WebP/AVIF sibling on every render. The Gutenberg / classic editor saves the literal `src` into post_content and core only recalculates `srcset` at render time, so without this hook the visible `src` stayed on the original JPG/PNG even when every srcset URL was rewritten — it looked like the bulk did nothing when you viewed the page source. Hooks `wp_content_img_tag` (WP 6.0+).

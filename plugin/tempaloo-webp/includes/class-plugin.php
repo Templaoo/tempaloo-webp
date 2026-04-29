@@ -36,6 +36,18 @@ final class Tempaloo_WebP_Plugin {
             'output_format'   => 'webp',   // webp | avif (avif only if supported)
             'auto_convert'    => true,
             'serve_webp'      => true,
+            // How the plugin tells the browser about the optimized version:
+            //   'url_rewrite' — replace .jpg URLs with .jpg.webp at PHP filter
+            //                   level. Lighter HTML, depends on the host serving
+            //                   the right MIME type for double-extension files.
+            //                   Original behavior up to 1.1.x; default for
+            //                   upgrades to avoid breaking sites that already work.
+            //   'picture_tag' — wrap <img> in <picture><source type="image/avif">
+            //                   <source type="image/webp">…</picture>. The browser
+            //                   negotiates at HTML level. CDN-friendly, theme-
+            //                   tolerant. Default for fresh installs (set in
+            //                   on_activate when the option doesn't exist yet).
+            'delivery_mode'   => 'url_rewrite',
             // Resize uploads larger than this width before conversion. 0 = off.
             // Hooks into core's big_image_size_threshold filter; the user's
             // original is kept as a -scaled-original copy by WordPress itself.
@@ -62,7 +74,13 @@ final class Tempaloo_WebP_Plugin {
 
     public static function on_activate() {
         if ( false === get_option( self::OPTION ) ) {
-            add_option( self::OPTION, self::default_settings(), '', false );
+            // Fresh install — default to picture_tag, the more robust mode.
+            // Existing installs whose option already exists keep whatever
+            // they had (default_settings() returns 'url_rewrite' for the
+            // missing-key fallback, so reactivation doesn't switch them).
+            $defaults = self::default_settings();
+            $defaults['delivery_mode'] = 'picture_tag';
+            add_option( self::OPTION, $defaults, '', false );
         }
     }
 

@@ -297,23 +297,38 @@ class Tempaloo_WebP_URL_Filter {
     }
 
     /**
-     * Rewrites the literal `src="…"` attribute on every <img> in post
-     * content. Runs once per tag, only on the frontend, only when the
-     * URL points inside our uploads dir AND a sibling .webp/.avif file
-     * exists. Doesn't touch anything else (lazyload attrs, classes,
-     * width/height — left as-is).
+     * Per-img dispatcher run on every <img> in post content.
      *
-     * The srcset filter handles the multi-size attribute separately,
-     * and the early-return below skips this work in admin contexts so
-     * the media library keeps showing originals.
+     * In url_rewrite mode  — rewrites the literal src="…" to its
+     *                        .webp/.avif sibling (existing behavior).
+     * In picture_tag mode  — wraps the <img> in <picture> with
+     *                        <source type="image/avif"> + <source
+     *                        type="image/webp">, leaves the inner
+     *                        <img src="…jpg"> intact as the fallback.
+     *
+     * Both modes are no-op in admin / AJAX / REST contexts.
      */
     public function replace_in_img_tag( $filtered_image, $context, $attachment_id ) {
         if ( ! is_string( $filtered_image ) || '' === $filtered_image ) {
             return $filtered_image;
         }
-        // Match the FIRST src="…" (single or double quotes). preg_replace_callback
-        // is overkill for one expected match per tag; a single regex + str_replace
-        // is faster on long contents.
+        $s = Tempaloo_WebP_Plugin::get_settings();
+        if ( empty( $s['serve_webp'] ) ) {
+            return $filtered_image;
+        }
+        if ( is_admin() || wp_doing_ajax() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
+            return $filtered_image;
+        }
+
+        $mode = isset( $s['delivery_mode'] ) && 'picture_tag' === $s['delivery_mode']
+            ? 'picture_tag'
+            : 'url_rewrite';
+
+        if ( 'picture_tag' === $mode ) {
+            return $this->wrap_img_in_picture( $filtered_image, $s );
+        }
+
+        // url_rewrite mode — rewrite the literal src
         if ( ! preg_match( '/\bsrc\s*=\s*([\'"])([^\'"]+?)\1/i', $filtered_image, $m ) ) {
             return $filtered_image;
         }
@@ -322,14 +337,102 @@ class Tempaloo_WebP_URL_Filter {
         if ( ! $alt || $alt === $original_url ) {
             return $filtered_image;
         }
-        // Replace ONLY the first occurrence of the exact URL — guards
-        // against pathological cases where the URL also appears elsewhere
-        // in the tag (e.g. inside a data-* attribute we don't own).
         $pos = strpos( $filtered_image, $original_url );
         if ( false === $pos ) {
             return $filtered_image;
         }
         return substr_replace( $filtered_image, $alt, $pos, strlen( $original_url ) );
+    }
+
+    /**
+     * picture_tag mode — wraps a single <img> tag in a <picture> with
+     * <source> entries pointing at the WebP and AVIF siblings of every
+     * URL in src + srcset. The original <img> stays untouched as the
+     * universal fallback (legacy browsers, broken CDN headers, etc.).
+     *
+     * Returns the original $img unchanged if no siblings exist (so the
+     * page never gets `<picture>` wrapper churn for nothing).
+     *
+     * Why this is run from wp_content_img_tag rather than the_content:
+     * core hands us each <img> already isolated, with a stable parser,
+     * and runs ONCE per render cycle — so we can't double-wrap. Themes
+     * that emit their own <picture> manually live outside post_content
+     * and aren't reached by this filter.
+     */
+    private function wrap_img_in_picture( $img, $settings ) {
+        // Need both a src AND a path inside our uploads dir. If either
+        // fails we abort — never wrap an image we can't safely match
+        // to a sibling on disk.
+        if ( ! preg_match( '/\bsrc\s*=\s*([\'"])([^\'"]+?)\1/i', $img, $src_m ) ) {
+            return $img;
+        }
+        $src = $src_m[2];
+        $uploads = wp_get_upload_dir();
+        $base_url = $uploads['baseurl'];
+        $base_dir = $uploads['basedir'];
+        if ( 0 !== strpos( $src, $base_url ) ) {
+            return $img;
+        }
+
+        $supports_avif = ! empty( $settings['supports_avif'] );
+
+        // Build sibling srcsets. Two paths: the <img> already has a
+        // srcset (typical for sized media in Gutenberg) → transform every
+        // entry; or only a bare src → derive a single-entry srcset.
+        $avif_parts = [];
+        $webp_parts = [];
+
+        if ( preg_match( '/\bsrcset\s*=\s*([\'"])([^\'"]+?)\1/i', $img, $srcset_m ) ) {
+            $entries = explode( ',', $srcset_m[2] );
+            foreach ( $entries as $entry ) {
+                $entry = trim( $entry );
+                if ( '' === $entry ) continue;
+                // Format: "url 1024w" or "url 2x" — split on first whitespace.
+                $space = strpos( $entry, ' ' );
+                $entry_url = false === $space ? $entry : substr( $entry, 0, $space );
+                $entry_descriptor = false === $space ? '' : substr( $entry, $space );
+                if ( 0 !== strpos( $entry_url, $base_url ) ) continue;
+                $entry_path = $base_dir . substr( $entry_url, strlen( $base_url ) );
+                if ( $supports_avif && file_exists( $entry_path . '.avif' ) ) {
+                    $avif_parts[] = $entry_url . '.avif' . $entry_descriptor;
+                }
+                if ( file_exists( $entry_path . '.webp' ) ) {
+                    $webp_parts[] = $entry_url . '.webp' . $entry_descriptor;
+                }
+            }
+        } else {
+            $src_path = $base_dir . substr( $src, strlen( $base_url ) );
+            if ( $supports_avif && file_exists( $src_path . '.avif' ) ) {
+                $avif_parts[] = $src . '.avif';
+            }
+            if ( file_exists( $src_path . '.webp' ) ) {
+                $webp_parts[] = $src . '.webp';
+            }
+        }
+
+        if ( empty( $avif_parts ) && empty( $webp_parts ) ) {
+            return $img;
+        }
+
+        // Mirror the <img>'s sizes attribute on each <source> so the
+        // browser picks the right candidate at the same breakpoints.
+        $sizes_attr = '';
+        if ( preg_match( '/\bsizes\s*=\s*([\'"])([^\'"]+?)\1/i', $img, $sizes_m ) ) {
+            $sizes_attr = ' sizes="' . esc_attr( $sizes_m[2] ) . '"';
+        }
+
+        // Order matters — browsers pick the FIRST matching <source>.
+        // AVIF first (better compression where supported), then WebP,
+        // then the bare <img> as a final fallback for legacy clients.
+        $sources = '';
+        if ( ! empty( $avif_parts ) ) {
+            $sources .= '<source srcset="' . esc_attr( implode( ', ', $avif_parts ) ) . '"' . $sizes_attr . ' type="image/avif">';
+        }
+        if ( ! empty( $webp_parts ) ) {
+            $sources .= '<source srcset="' . esc_attr( implode( ', ', $webp_parts ) ) . '"' . $sizes_attr . ' type="image/webp">';
+        }
+
+        return '<picture>' . $sources . $img . '</picture>';
     }
 
     public function maybe_replace_srcset( $sources, $size_array, $image_src, $image_meta, $attachment_id ) {
@@ -353,6 +456,16 @@ class Tempaloo_WebP_URL_Filter {
     private function alternate_url( $url ) {
         $s = Tempaloo_WebP_Plugin::get_settings();
         if ( empty( $s['serve_webp'] ) ) {
+            return null;
+        }
+
+        // picture_tag mode owns the <img> output via wrap_img_in_picture —
+        // the URL-rewrite filters (wp_get_attachment_url, srcset, image_src,
+        // js_data) all become no-op here so we don't double-process. We
+        // can't unhook them at register() time because the option might
+        // change after boot, so the cheapest gate is a single early-return.
+        $mode = isset( $s['delivery_mode'] ) ? (string) $s['delivery_mode'] : 'url_rewrite';
+        if ( 'url_rewrite' !== $mode ) {
             return null;
         }
 

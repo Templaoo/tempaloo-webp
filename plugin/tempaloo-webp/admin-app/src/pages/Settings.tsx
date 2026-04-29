@@ -269,6 +269,35 @@ export default function Settings({ state, onState }: { state: AppState; onState:
 
             <Card>
                 <CardHeader
+                    title="Display method"
+                    description="How browsers learn about the optimized version. Picture tag is more robust and CDN-friendly; URL rewrite is lighter HTML but depends on your host serving the right MIME type for double-extension files."
+                />
+                <div className="grid grid-cols-2 gap-2 max-w-2xl">
+                    <FormatOption
+                        value="picture_tag"
+                        current={s.deliveryMode}
+                        onSelect={() => setS({ ...s, deliveryMode: "picture_tag" })}
+                        title="Picture tag"
+                        subtitle="Wraps <img> in <picture>. Works everywhere, CDN-friendly."
+                    />
+                    <FormatOption
+                        value="url_rewrite"
+                        current={s.deliveryMode}
+                        onSelect={() => setS({ ...s, deliveryMode: "url_rewrite" })}
+                        title="URL rewrite"
+                        subtitle="Replaces .jpg → .jpg.webp inline. Lighter HTML."
+                    />
+                </div>
+                <p className="text-xs text-ink-500 mt-3 max-w-2xl leading-relaxed">
+                    Same as Imagify and ShortPixel: <strong>Picture tag</strong> is the recommended default — the browser
+                    negotiates the format at HTML level, the original <code className="text-[11px] bg-ink-100 px-1 rounded">.jpg</code> stays
+                    as a universal fallback. <strong>URL rewrite</strong> is preserved for installs that already
+                    work that way; switch only if a theme breaks on <code className="text-[11px] bg-ink-100 px-1 rounded">&lt;picture&gt;</code>.
+                </p>
+            </Card>
+
+            <Card>
+                <CardHeader
                     title="Restore originals"
                     description="One-click delete of every .webp/.avif file we generated. Your original JPEG/PNG/GIF files are never touched and remain on the server."
                 />

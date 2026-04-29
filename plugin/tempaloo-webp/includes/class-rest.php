@@ -320,6 +320,11 @@ class Tempaloo_WebP_REST {
         if ( array_key_exists( 'serveWebp', $p ) ) {
             $patch['serve_webp'] = ! empty( $p['serveWebp'] );
         }
+        if ( isset( $p['deliveryMode'] ) ) {
+            // Whitelisted enum — anything else falls back to url_rewrite
+            // so a stray client value can never wedge the rendering path.
+            $patch['delivery_mode'] = 'picture_tag' === $p['deliveryMode'] ? 'picture_tag' : 'url_rewrite';
+        }
         if ( array_key_exists( 'resizeMaxWidth', $p ) ) {
             $w = (int) $p['resizeMaxWidth'];
             // 0 = off; clamp the max so a typo can't turn off the resize
@@ -421,6 +426,7 @@ class Tempaloo_WebP_REST {
                 'outputFormat'   => (string) $s['output_format'],
                 'autoConvert'    => ! empty( $s['auto_convert'] ),
                 'serveWebp'      => ! empty( $s['serve_webp'] ),
+                'deliveryMode'   => 'picture_tag' === ( $s['delivery_mode'] ?? '' ) ? 'picture_tag' : 'url_rewrite',
                 'resizeMaxWidth' => (int) ( $s['resize_max_width'] ?? 0 ),
                 'cptQuality'     => is_array( $s['cpt_quality'] ?? null ) ? $s['cpt_quality'] : (object) [],
             ],

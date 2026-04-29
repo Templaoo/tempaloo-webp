@@ -56,6 +56,12 @@ export interface AppState {
         outputFormat: "webp" | "avif";
         autoConvert: boolean;
         serveWebp: boolean;
+        // How the optimized version reaches the browser:
+        //   url_rewrite — replace .jpg URLs with .jpg.webp at PHP filter
+        //                 level. Lighter HTML, depends on host MIME config.
+        //   picture_tag — wrap <img> in <picture> with <source> entries.
+        //                 CDN-friendly, theme-tolerant. Default for new installs.
+        deliveryMode: "url_rewrite" | "picture_tag";
         // 0 = off; otherwise the max width in px above which uploads are
         // resized before conversion (hooks into core's big_image_size_threshold).
         resizeMaxWidth: number;
@@ -97,7 +103,7 @@ export const boot: BootState =
             quotaExceededAt: null,
             apiHealth: { ok: true, failedAt: 0, code: "", message: "", attempts: 0 },
             retryQueue: { pending: 0, dueNow: 0, nextRetryAt: 0 },
-            settings: { quality: 82, outputFormat: "webp", autoConvert: true, serveWebp: true, resizeMaxWidth: 2560, cptQuality: {} },
+            settings: { quality: 82, outputFormat: "webp", autoConvert: true, serveWebp: true, deliveryMode: "picture_tag", resizeMaxWidth: 2560, cptQuality: {} },
             savings: null,
         },
     };
