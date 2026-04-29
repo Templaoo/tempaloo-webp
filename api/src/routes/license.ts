@@ -48,12 +48,15 @@ export default async function licenseRoutes(app: FastifyInstance) {
             license_id: string; plan_code: string; plan_name: string;
             images_per_month: number; max_sites: number; supports_avif: boolean;
             status: string; current_period_end: Date | null;
+            user_email: string;
         }>(
             `SELECT l.id AS license_id, p.code AS plan_code, p.name AS plan_name,
                     p.images_per_month, p.max_sites, p.supports_avif,
-                    l.status::text AS status, l.current_period_end
+                    l.status::text AS status, l.current_period_end,
+                    u.email AS user_email
                FROM licenses l
                JOIN plans p ON p.id = l.plan_id
+               JOIN users u ON u.id = l.user_id
               WHERE l.license_key = $1
               LIMIT 1`,
             [body.license_key],
@@ -73,6 +76,7 @@ export default async function licenseRoutes(app: FastifyInstance) {
                 images_limit: row.images_per_month,
                 sites_limit: row.max_sites,
                 period_end: row.current_period_end?.toISOString() ?? null,
+                user_email: row.user_email,
             };
         }
 
@@ -124,6 +128,7 @@ export default async function licenseRoutes(app: FastifyInstance) {
                 supports_avif: license.supportsAvif,
                 images_limit: license.imagesPerMonth,
                 sites_limit: license.maxSites,
+                user_email: row.user_email,
             };
         });
     });

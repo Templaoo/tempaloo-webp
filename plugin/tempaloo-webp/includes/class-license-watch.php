@@ -87,6 +87,7 @@ final class Tempaloo_WebP_License_Watch {
             'plan'             => isset( $data['plan'] ) ? (string) $data['plan'] : (string) ( $s['plan'] ?? '' ),
             'last_verified_at' => time(),
         ];
+        if ( isset( $data['user_email'] ) )    $patch['license_email'] = (string) $data['user_email'];
         if ( isset( $data['supports_avif'] ) ) $patch['supports_avif'] = ! empty( $data['supports_avif'] );
         if ( isset( $data['images_limit'] ) )  $patch['images_limit']  = (int) $data['images_limit'];
         if ( isset( $data['sites_limit'] ) )   $patch['sites_limit']   = (int) $data['sites_limit'];

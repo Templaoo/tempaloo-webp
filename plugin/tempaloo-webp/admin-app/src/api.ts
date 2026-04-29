@@ -18,6 +18,9 @@ export interface AppState {
         key: string;
         plan: string;
         status: LicenseStatus;
+        /** Email of the Tempaloo account that owns this license. Empty
+         *  on Free/unverified installs; filled after /license/verify. */
+        email: string;
         supportsAvif: boolean;
         imagesLimit: number;
         sitesLimit: number;
@@ -85,7 +88,7 @@ export const boot: BootState =
         apiBase: "https://api.tempaloo.com/v1",
         siteUrl: "",
         state: {
-            license: { valid: false, key: "", plan: "", status: "unknown", supportsAvif: false, imagesLimit: 0, sitesLimit: 0 },
+            license: { valid: false, key: "", plan: "", status: "unknown", email: "", supportsAvif: false, imagesLimit: 0, sitesLimit: 0 },
             quota: null,
             quotaExceededAt: null,
             apiHealth: { ok: true, failedAt: 0, code: "", message: "", attempts: 0 },

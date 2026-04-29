@@ -22,6 +22,12 @@ final class Tempaloo_WebP_Plugin {
             // Set by daily verify cron + activation. Drives the WP admin
             // notice in class-license-watch + the React banner.
             'license_status'  => 'unknown',
+            // Email of the Tempaloo account that owns this license — shown
+            // in the plugin top bar so a site owner can see "I'm using
+            // foo@bar.com here, my partner is using baz@bar.com on the
+            // other site". Filled by /license/verify, refreshed by the
+            // daily License Watch cron.
+            'license_email'   => '',
             'plan'            => '',
             'supports_avif'   => false,
             'images_limit'    => 0,

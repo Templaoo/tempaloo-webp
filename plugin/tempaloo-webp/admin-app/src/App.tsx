@@ -58,6 +58,30 @@ function RetryQueueBanner({ state, onRunRetry, busy }: { state: AppState; onRunR
     );
 }
 
+/**
+ * Account chip — shows the subscriber's email next to the plan badge so
+ * the site owner immediately knows WHICH Tempaloo account this site is
+ * tied to. Click → opens the dashboard. Tooltip shows the full email
+ * (truncated visually for narrow viewports).
+ */
+function AccountChip({ email, plan }: { email: string; plan: string }) {
+    const initial = email.trim()[0]?.toUpperCase() ?? "?";
+    return (
+        <a
+            href="https://tempaloo.com/webp/dashboard"
+            target="_blank"
+            rel="noopener"
+            className="inline-flex items-center gap-2 rounded-full border border-ink-200 bg-white pr-3 pl-1 py-0.5 text-[12px] font-medium text-ink-700 hover:border-ink-400 hover:text-ink-900 transition-colors"
+            title={`Signed in as ${email} · ${plan} plan — click to open the web dashboard`}
+        >
+            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-ink-900 text-[10px] font-semibold text-white">
+                {initial}
+            </span>
+            <span className="max-w-[180px] truncate">{email}</span>
+        </a>
+    );
+}
+
 function ApiStatusChip({ ok }: { ok: boolean }) {
     return (
         <span
@@ -215,6 +239,9 @@ export default function App() {
                     <Badge variant={state.license.valid ? "brand" : "neutral"}>
                         {state.license.valid ? `${planLabel} plan` : "No license"}
                     </Badge>
+                    {state.license.email && (
+                        <AccountChip email={state.license.email} plan={planLabel} />
+                    )}
                     <a
                         className="text-xs font-medium text-ink-500 hover:text-ink-900"
                         href="https://tempaloo.com/webp/dashboard"
