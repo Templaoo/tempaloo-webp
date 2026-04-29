@@ -17,6 +17,15 @@ class Tempaloo_WebP_URL_Filter {
         // Admin media library (grid + modal) uses this to build previews.
         add_filter( 'wp_prepare_attachment_for_js',   [ $this, 'maybe_replace_js_data' ], 10, 3 );
 
+        // Block-editor / classic-editor static HTML doesn't pass through
+        // wp_get_attachment_image_src — Gutenberg saves the <img src="…">
+        // straight into post_content, and core only recalculates srcset
+        // at render time. Without this hook, the visible `src` stays on
+        // the original JPG/PNG even when every srcset URL was rewritten,
+        // which makes it LOOK like the bulk did nothing in source view.
+        // Available since WP 6.0 (matches our Requires at least header).
+        add_filter( 'wp_content_img_tag',             [ $this, 'replace_in_img_tag' ], 10, 3 );
+
         // Media library status column.
         add_filter( 'manage_upload_columns',        [ $this, 'media_column' ] );
         add_action( 'manage_media_custom_column',   [ $this, 'media_column_value' ], 10, 2 );
@@ -285,6 +294,42 @@ class Tempaloo_WebP_URL_Filter {
             }
         }
         return $response;
+    }
+
+    /**
+     * Rewrites the literal `src="…"` attribute on every <img> in post
+     * content. Runs once per tag, only on the frontend, only when the
+     * URL points inside our uploads dir AND a sibling .webp/.avif file
+     * exists. Doesn't touch anything else (lazyload attrs, classes,
+     * width/height — left as-is).
+     *
+     * The srcset filter handles the multi-size attribute separately,
+     * and the early-return below skips this work in admin contexts so
+     * the media library keeps showing originals.
+     */
+    public function replace_in_img_tag( $filtered_image, $context, $attachment_id ) {
+        if ( ! is_string( $filtered_image ) || '' === $filtered_image ) {
+            return $filtered_image;
+        }
+        // Match the FIRST src="…" (single or double quotes). preg_replace_callback
+        // is overkill for one expected match per tag; a single regex + str_replace
+        // is faster on long contents.
+        if ( ! preg_match( '/\bsrc\s*=\s*([\'"])([^\'"]+?)\1/i', $filtered_image, $m ) ) {
+            return $filtered_image;
+        }
+        $original_url = $m[2];
+        $alt = $this->alternate_url( $original_url );
+        if ( ! $alt || $alt === $original_url ) {
+            return $filtered_image;
+        }
+        // Replace ONLY the first occurrence of the exact URL — guards
+        // against pathological cases where the URL also appears elsewhere
+        // in the tag (e.g. inside a data-* attribute we don't own).
+        $pos = strpos( $filtered_image, $original_url );
+        if ( false === $pos ) {
+            return $filtered_image;
+        }
+        return substr_replace( $filtered_image, $alt, $pos, strlen( $original_url ) );
     }
 
     public function maybe_replace_srcset( $sources, $size_array, $image_src, $image_meta, $attachment_id ) {

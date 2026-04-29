@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.1.8
+Stable tag: 1.1.9
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -145,6 +145,9 @@ Example — skip conversion for any attachment in the `private/` upload subfolde
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 1.1.9 =
+* Fix: Front-end `<img src="…">` now rewrites to the WebP/AVIF sibling on every render. The Gutenberg / classic editor saves the literal `src` into post_content and core only recalculates `srcset` at render time, so without this hook the visible `src` stayed on the original JPG/PNG even when every srcset URL was rewritten — it looked like the bulk did nothing when you viewed the page source. Hooks `wp_content_img_tag` (WP 6.0+).
 
 = 1.1.8 =
 * Fix: Media Library thumbnails appeared as solid blue tiles after conversion on some hosts. Root cause: the URL filter rewrote admin URLs to the `.jpg.webp` sibling, and a number of web servers map MIME types from the first recognised extension and end up serving WebP bytes with `Content-Type: image/jpeg`, which the browser can't decode. Admin / AJAX / REST contexts now always serve the original; frontend `<img>` requests still negotiate WebP normally via the Accept header.
