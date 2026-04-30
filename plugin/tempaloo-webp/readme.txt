@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.8.1
+Stable tag: 1.8.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -145,6 +145,10 @@ Example — skip conversion for any attachment in the `private/` upload subfolde
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 1.8.2 =
+* New: **Filesystem self-test** in the Diagnostic tab. Writes a real (tiny, 26-byte) WebP into `/uploads/`, immediately re-checks existence, sleeps 5 seconds, re-checks again, then fetches the file via HTTP and inspects the Content-Type. Returns one verdict line that names the failure mode: `WRITE_FAILED` (permissions), `POST_WRITE_VANISH` (host security caught the write), `PERSISTENCE_FAILURE` (something deleted it within 5s — LiteSpeed Image Optimization, Wordfence, host WAF), `WRONG_MIME` (file persists but served as image/jpeg → browser can't decode), or `OK`. Surfaces in one button click why the user's converter writes WebPs the disk doesn't keep.
+* New: REST endpoint `POST /tempaloo-webp/v1/filesystem-test` returning the same data scriptable for support.
 
 = 1.8.1 =
 * New: **Inspect attachment by ID** in the Diagnostic tab. Type any attachment ID, get a forensic dump: meta in both storage locations side-by-side (`_tempaloo_webp` post_meta vs legacy in-metadata), the original file existence + bytes, and per-size disk state for `.webp` and `.avif` siblings. Surfaces immediately whether the converter actually wrote files, whether they got deleted right after by another plugin, or whether the meta got stripped — instead of guessing between Activity log success and a "Convert now" button on the same row.

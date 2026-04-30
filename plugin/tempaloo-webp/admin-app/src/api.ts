@@ -219,7 +219,26 @@ export const api = {
         }),
     attachmentDebug: (id: number) =>
         restFetch<AttachmentDebugReport>(`/attachment-debug?id=${encodeURIComponent(String(id))}`),
+    filesystemTest: () =>
+        restFetch<FilesystemTestReport>("/filesystem-test", { method: "POST", body: "{}" }),
 };
+
+/** Result of the write+persistence+serve self-test for .webp siblings. */
+export interface FilesystemTestReport {
+    targetPath: string;
+    targetUrl: string;
+    payloadBytes: number;
+    writeOk: boolean;
+    writtenBytes: number;
+    existsAfterWrite: boolean;
+    sizeAfterWrite: number;
+    existsAfter5s: boolean;
+    sizeAfter5s: number;
+    fetchHttpCode: number;
+    fetchContentType: string;
+    cleanupOk: boolean;
+    verdict: string;
+}
 
 /** Full per-attachment forensic — both meta locations, disk state per size. */
 export interface AttachmentDebugReport {

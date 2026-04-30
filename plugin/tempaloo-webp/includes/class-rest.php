@@ -111,6 +111,18 @@ class Tempaloo_WebP_REST {
                 'id' => [ 'required' => true, 'type' => 'integer' ],
             ],
         ] );
+
+        // Filesystem self-test. Writes a tiny .webp marker into
+        // wp-content/uploads/, immediately re-checks existence, then
+        // sleeps 5s and re-checks again. Confirms whether something
+        // active on the host (LiteSpeed image optimization, security
+        // plugin scanner, mod_security, host-level WAF) is silently
+        // deleting our .webp siblings between conversion and serve time.
+        register_rest_route( self::NS, '/filesystem-test', [
+            'methods'             => 'POST',
+            'callback'            => [ $this, 'post_filesystem_test' ],
+            'permission_callback' => [ $this, 'perm_manage' ],
+        ] );
     }
 
     public function get_activity( WP_REST_Request $req ) {
@@ -1062,6 +1074,132 @@ class Tempaloo_WebP_REST {
                 'supportsAvif'  => ! empty( $s['supports_avif'] ),
             ],
         ] );
+    }
+
+    /**
+     * Filesystem self-test. Verifies that the host actually persists
+     * .webp files we write into the uploads directory, by emulating
+     * what the converter does on every attachment:
+     *
+     *   1. Write a marker file foo.png.webp containing valid (tiny)
+     *      WebP bytes. Same double-extension scheme as a real sibling.
+     *   2. file_exists() check immediately after write.
+     *   3. Sleep 5s.
+     *   4. file_exists() check again.
+     *   5. Report each step + clean up.
+     *
+     * If step 4 says "missing" while step 2 said "exists" → something
+     * on the host (LiteSpeed image optimization plugin, security
+     * scanner, mod_security cleanup, WAF) is actively deleting WebP
+     * files between conversion and serve. The user knows exactly
+     * which fix applies (disable LiteSpeed image-opt, allowlist .webp
+     * in WAF, etc.) instead of guessing.
+     *
+     * Limited to admin caller via perm_manage, sleeps server-side
+     * (max 5s) — won't tie up workers. Cleans up the marker even
+     * on early return.
+     */
+    public function post_filesystem_test( WP_REST_Request $req ) {
+        $uploads = wp_get_upload_dir();
+        if ( empty( $uploads['basedir'] ) || empty( $uploads['baseurl'] ) ) {
+            return new WP_Error( 'no_uploads_dir', 'wp_get_upload_dir returned no basedir', [ 'status' => 500 ] );
+        }
+        // Smallest valid WebP — 26 bytes lossy VP8 1×1 pixel. Real
+        // bytes (not "fake_webp_marker") so a strict WAF/image-scanner
+        // sees an actual WebP file, not a sus payload.
+        $payload = base64_decode(
+            'UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA',
+            true
+        );
+        if ( false === $payload ) {
+            return new WP_Error( 'payload_error', 'failed to build test payload', [ 'status' => 500 ] );
+        }
+
+        // Write into the uploads root with a randomized name so we
+        // never clobber a real file. Double-extension on purpose —
+        // we want to test exactly what the converter produces.
+        $token   = 'tempaloo-fstest-' . wp_generate_password( 12, false ) . '.png.webp';
+        $abspath = trailingslashit( $uploads['basedir'] ) . $token;
+        $url     = trailingslashit( $uploads['baseurl'] ) . $token;
+
+        $report = [
+            'targetPath'     => str_replace( ABSPATH, '/', $abspath ),
+            'targetUrl'      => $url,
+            'payloadBytes'   => strlen( $payload ),
+            'writeOk'        => false,
+            'writtenBytes'   => 0,
+            'existsAfterWrite' => false,
+            'sizeAfterWrite' => 0,
+            'existsAfter5s'  => false,
+            'sizeAfter5s'    => 0,
+            'fetchHttpCode'  => 0,
+            'fetchContentType' => '',
+            'cleanupOk'      => false,
+            'verdict'        => '',
+        ];
+
+        // Step 1: write
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+        $bytes = @file_put_contents( $abspath, $payload );
+        $report['writeOk']      = ( false !== $bytes && $bytes > 0 );
+        $report['writtenBytes'] = (int) $bytes;
+        clearstatcache( true, $abspath );
+        $report['existsAfterWrite'] = file_exists( $abspath );
+        $report['sizeAfterWrite']   = $report['existsAfterWrite'] ? (int) filesize( $abspath ) : 0;
+
+        // Step 2: HTTP fetch via the public URL — does the host actually
+        // serve .webp double-extension files with the right Content-Type?
+        // This is the OTHER half of "is the .webp working" that a pure
+        // filesystem check misses. If the file persists on disk but
+        // returns 404 / image/jpeg / WAF block, the URL filter +
+        // <picture> will appear correct but the browser receives nothing.
+        if ( $report['existsAfterWrite'] ) {
+            $resp = wp_remote_head(
+                $url,
+                [ 'timeout' => 8, 'redirection' => 2, 'sslverify' => false ]
+            );
+            if ( ! is_wp_error( $resp ) ) {
+                $report['fetchHttpCode']    = (int) wp_remote_retrieve_response_code( $resp );
+                $report['fetchContentType'] = (string) wp_remote_retrieve_header( $resp, 'content-type' );
+            }
+        }
+
+        // Step 3: wait — let any host-level scanner / image-opt plugin
+        // fire its async cleanup pass. 5s is enough for LiteSpeed Cache
+        // image-opt and most WAFs.
+        // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+        @sleep( 5 );
+
+        // Step 4: re-check
+        clearstatcache( true, $abspath );
+        $report['existsAfter5s'] = file_exists( $abspath );
+        $report['sizeAfter5s']   = $report['existsAfter5s'] ? (int) filesize( $abspath ) : 0;
+
+        // Step 5: cleanup
+        if ( file_exists( $abspath ) ) {
+            wp_delete_file( $abspath );
+            clearstatcache( true, $abspath );
+            $report['cleanupOk'] = ! file_exists( $abspath );
+        } else {
+            $report['cleanupOk'] = true; // already gone
+        }
+
+        // Verdict — the actionable summary the user reads first.
+        if ( ! $report['writeOk'] ) {
+            $report['verdict'] = 'WRITE_FAILED — uploads directory is not writable. Check filesystem permissions on wp-content/uploads/.';
+        } elseif ( ! $report['existsAfterWrite'] ) {
+            $report['verdict'] = 'POST_WRITE_VANISH — file_put_contents reported success but file_exists() right after returns false. Host-level write interception (mod_security, security plugin pre-flight scanner). Contact host support.';
+        } elseif ( ! $report['existsAfter5s'] ) {
+            $report['verdict'] = 'PERSISTENCE_FAILURE — file existed right after write but was deleted within 5 seconds. Almost always a host-level WebP cleanup process: LiteSpeed Image Optimization wiping non-LiteSpeed WebPs, Wordfence/iThemes Security flagging double-extension files, or Hostinger WAF removing .webp uploads. Disable LiteSpeed Image Optimization and re-test.';
+        } elseif ( $report['fetchHttpCode'] !== 200 ) {
+            $report['verdict'] = 'SERVE_FAILURE — file is on disk but HTTP fetch returned ' . $report['fetchHttpCode'] . '. Either the WebPs are not being served (host config, .htaccess deny, CDN config) or our test URL is wrong.';
+        } elseif ( false === stripos( $report['fetchContentType'], 'image/webp' ) ) {
+            $report['verdict'] = 'WRONG_MIME — file served but Content-Type is "' . $report['fetchContentType'] . '" instead of image/webp. Browser cannot decode the .webp body; the <picture> source falls back to JPG. Add an .htaccess rule forcing image/webp on .webp files.';
+        } else {
+            $report['verdict'] = 'OK — write, persistence and serve all healthy. If conversion still fails for real attachments, investigate the converter / API path specifically.';
+        }
+
+        return rest_ensure_response( $report );
     }
 
     /**

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type StateAuditReport, type ReconcileOp, type ReconcileResult, type AttachmentDebugReport } from "../api";
+import { api, type StateAuditReport, type ReconcileOp, type ReconcileResult, type AttachmentDebugReport, type FilesystemTestReport } from "../api";
 import { Badge, Button, Card, CardHeader, Input, Skeleton, toast } from "../components/ui";
 
 /**
@@ -245,12 +245,99 @@ export default function Diagnostic() {
                 </div>
             </Card>
 
+            <FilesystemSelfTest />
+
             <AttachmentInspector />
 
             <div className="text-[10px] text-ink-400 text-right font-mono">
                 Audit took {report.durationMs}ms · last refreshed {new Date().toLocaleTimeString()}
             </div>
         </div>
+    );
+}
+
+/* ── Filesystem self-test ──────────────────────────────────────────
+ * Writes a tiny real WebP to /uploads/, verifies it persists 5s
+ * later, fetches it via HTTP and checks the Content-Type. Surfaces
+ * exactly which step is failing in one verdict line — way faster
+ * than chasing it through Activity logs + FTP inspections.
+ */
+function FilesystemSelfTest() {
+    const [busy, setBusy] = useState(false);
+    const [report, setReport] = useState<FilesystemTestReport | null>(null);
+
+    const run = async () => {
+        setBusy(true);
+        setReport(null);
+        try {
+            const r = await api.filesystemTest();
+            setReport(r);
+        } catch (e) {
+            toast("error", e instanceof Error ? e.message : "Self-test failed");
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <Card>
+            <CardHeader
+                title="Filesystem self-test"
+                description="Writes a real (tiny) WebP into /uploads/, waits 5s, re-checks. Fetches it via HTTP and checks Content-Type. Tells you in one line whether the host actually persists and serves .webp files."
+            />
+            <Button onClick={run} loading={busy}>
+                {report ? "Run again" : "Run self-test (takes ~6s)"}
+            </Button>
+
+            {report && (
+                <div className="mt-5 space-y-3">
+                    <div className={`rounded-lg border-2 px-4 py-3 ${
+                        report.verdict.startsWith("OK")
+                            ? "border-emerald-300 bg-emerald-50/70"
+                            : "border-red-300 bg-red-50/70"
+                    }`}>
+                        <div className="text-xs uppercase tracking-wide font-bold opacity-70">Verdict</div>
+                        <div className="text-sm text-ink-900 mt-1 font-medium">{report.verdict}</div>
+                    </div>
+
+                    <div className="rounded-lg border border-ink-200 p-4 grid grid-cols-2 gap-3 text-xs font-mono">
+                        <div>
+                            <div className="text-ink-500 text-[10px] uppercase tracking-wider">Step 1 — write</div>
+                            <div className={report.writeOk ? "text-emerald-700" : "text-red-700"}>
+                                {report.writeOk ? "✓" : "✗"} file_put_contents = {report.writtenBytes} B
+                            </div>
+                        </div>
+                        <div>
+                            <div className="text-ink-500 text-[10px] uppercase tracking-wider">Step 2 — exists immediately</div>
+                            <div className={report.existsAfterWrite ? "text-emerald-700" : "text-red-700"}>
+                                {report.existsAfterWrite ? "✓" : "✗"} {report.sizeAfterWrite} B on disk
+                            </div>
+                        </div>
+                        <div>
+                            <div className="text-ink-500 text-[10px] uppercase tracking-wider">Step 3 — exists after 5s</div>
+                            <div className={report.existsAfter5s ? "text-emerald-700" : "text-red-700"}>
+                                {report.existsAfter5s ? "✓ persisted" : "✗ DELETED by something"} {report.sizeAfter5s > 0 ? "· " + report.sizeAfter5s + " B" : ""}
+                            </div>
+                        </div>
+                        <div>
+                            <div className="text-ink-500 text-[10px] uppercase tracking-wider">Step 4 — HTTP fetch</div>
+                            <div className={report.fetchHttpCode === 200 ? "text-emerald-700" : "text-red-700"}>
+                                HTTP {report.fetchHttpCode || "—"} · {report.fetchContentType || "no content-type"}
+                            </div>
+                        </div>
+                    </div>
+
+                    <details className="text-[11px] font-mono text-ink-500">
+                        <summary className="cursor-pointer">Test target details</summary>
+                        <div className="mt-1.5 space-y-0.5 break-all">
+                            <div>path: {report.targetPath}</div>
+                            <div>url: {report.targetUrl}</div>
+                            <div>cleanup: {report.cleanupOk ? "✓" : "✗ (file may still be on disk)"}</div>
+                        </div>
+                    </details>
+                </div>
+            )}
+        </Card>
     );
 }
 
