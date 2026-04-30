@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.7.2
+Stable tag: 1.7.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -145,6 +145,9 @@ Example — skip conversion for any attachment in the `private/` upload subfolde
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 1.7.3 =
+* New: Every auto-convert outcome on upload is now logged to Activity. Until now the only way to know why a freshly-uploaded image hadn't been converted was to guess: license expired? Toggle off? Unsupported mime? API error? The Optimized column just showed "—" silently. Each upload now produces one of: `success`, `warn` (license inactive), `info` (mime not convertible), or `error` (API failure with code). The user can open Activity right after upload and see exactly what happened.
 
 = 1.7.2 =
 * New: **"Convert now" button** on every unconverted row in the Media Library list view (`wp-admin/upload.php`). One AJAX call per click triggers the same code path as Bulk (`convert_all_sizes` in auto mode → 1 credit, every WordPress thumbnail size in one batch). The cell updates in place to show the post-conversion stats — no page reload, no leaving the Media Library. Errors (quota exceeded, unauthorized, network) surface inline below the button so the user knows why and can retry.

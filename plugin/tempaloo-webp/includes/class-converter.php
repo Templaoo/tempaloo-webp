@@ -12,15 +12,81 @@ class Tempaloo_WebP_Converter {
      * Converts the original + every generated size to WebP/AVIF.
      */
     public function on_generate_metadata( $metadata, $attachment_id ) {
+        $attachment_id = (int) $attachment_id;
         $s = Tempaloo_WebP_Plugin::get_settings();
-        if ( empty( $s['license_valid'] ) || empty( $s['auto_convert'] ) ) {
+
+        // Every branch below logs to Activity so the user can audit
+        // exactly what happened to a freshly-uploaded image. Without
+        // this log, an early-return (no license, mime not supported,
+        // auto_convert toggled off) was completely silent — the
+        // Optimized column just showed "—" and the user had no way
+        // to know WHY no conversion fired.
+
+        if ( empty( $s['license_valid'] ) ) {
+            Tempaloo_WebP_Activity::log(
+                'auto_convert', 'warn',
+                sprintf(
+                    /* translators: %d: attachment ID */
+                    __( 'Auto-convert skipped for #%d — license is not active', 'tempaloo-webp' ),
+                    $attachment_id
+                ),
+                [ 'attachment_id' => $attachment_id, 'reason' => 'no_license' ]
+            );
+            return $metadata;
+        }
+        if ( empty( $s['auto_convert'] ) ) {
+            // User deliberately turned this off — don't pollute the log
+            // every upload. The Diagnostic tab surfaces the toggle state.
             return $metadata;
         }
         if ( ! self::is_supported_attachment( $attachment_id ) ) {
+            $mime = (string) get_post_mime_type( $attachment_id );
+            Tempaloo_WebP_Activity::log(
+                'auto_convert', 'info',
+                sprintf(
+                    /* translators: 1: attachment ID, 2: mime type */
+                    __( 'Auto-convert skipped for #%1$d — mime %2$s is not convertible (only JPEG/PNG/GIF)', 'tempaloo-webp' ),
+                    $attachment_id, $mime
+                ),
+                [ 'attachment_id' => $attachment_id, 'reason' => 'unsupported_mime', 'mime' => $mime ]
+            );
             return $metadata;
         }
 
         $result = self::convert_all_sizes( $attachment_id, $metadata, $s );
+
+        if ( $result['converted'] > 0 ) {
+            Tempaloo_WebP_Activity::log(
+                'auto_convert', 'success',
+                sprintf(
+                    /* translators: 1: attachment ID, 2: number of sizes converted */
+                    __( 'Auto-convert #%1$d — %2$d sizes converted', 'tempaloo-webp' ),
+                    $attachment_id, (int) $result['converted']
+                ),
+                [
+                    'attachment_id' => $attachment_id,
+                    'converted'     => (int) $result['converted'],
+                    'failed'        => (int) ( $result['failed'] ?? 0 ),
+                ]
+            );
+        } else {
+            $code = isset( $result['error_code'] ) && '' !== $result['error_code']
+                ? (string) $result['error_code']
+                : 'no_output';
+            Tempaloo_WebP_Activity::log(
+                'auto_convert', 'error',
+                sprintf(
+                    /* translators: 1: attachment ID, 2: error code */
+                    __( 'Auto-convert FAILED for #%1$d — %2$s', 'tempaloo-webp' ),
+                    $attachment_id, $code
+                ),
+                [
+                    'attachment_id' => $attachment_id,
+                    'error_code'    => $code,
+                    'failed'        => (int) ( $result['failed'] ?? 0 ),
+                ]
+            );
+        }
 
         // Conversion failed for an infra reason → enqueue for cron retry.
         // Quota / auth failures stay out of the queue (need user action).
