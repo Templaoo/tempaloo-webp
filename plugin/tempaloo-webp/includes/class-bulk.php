@@ -323,9 +323,11 @@ class Tempaloo_WebP_Bulk {
             // (filename × format) pairs MUST be excluded from the pending
             // check — otherwise the scan re-queues them every time and
             // each retry burns 1 credit for a known-bad encode.
+            // Reads via helper (prefers _tempaloo_webp post_meta).
             $skipped_map = [];
-            if ( ! empty( $meta['tempaloo_webp']['skipped'] ) && is_array( $meta['tempaloo_webp']['skipped'] ) ) {
-                foreach ( $meta['tempaloo_webp']['skipped'] as $key => $_reason ) {
+            $tw_meta = Tempaloo_WebP_Plugin::get_conversion_meta( (int) $id );
+            if ( ! empty( $tw_meta['skipped'] ) && is_array( $tw_meta['skipped'] ) ) {
+                foreach ( $tw_meta['skipped'] as $key => $_reason ) {
                     $skipped_map[ (string) $key ] = true;
                 }
             }

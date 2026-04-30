@@ -255,6 +255,21 @@ class Tempaloo_WebP_Converter {
         if ( ! empty( $skipped_pairs ) ) {
             $tempaloo_meta['skipped'] = $skipped_pairs;
         }
+
+        // Persist into our dedicated post_meta key — _tempaloo_webp —
+        // bypassing the wp_generate_attachment_metadata filter chain
+        // entirely. Image-optimizer plugins hooked there (LiteSpeed
+        // Cache, Smush, Imagify, ShortPixel) sometimes rebuild the
+        // standard metadata array for their own queues and strip
+        // unknown sub-keys in the process; we lose the audit trail
+        // and the user sees "not converted" right after the converter
+        // logs success. Direct update_post_meta is immune.
+        Tempaloo_WebP_Plugin::set_conversion_meta( $attachment_id, $tempaloo_meta );
+
+        // ALSO mirror into $metadata['tempaloo_webp'] for backward
+        // compatibility — older code paths or third-party plugins
+        // looking at the standard metadata key still see the data,
+        // even if it's not authoritative anymore.
         $metadata['tempaloo_webp'] = $tempaloo_meta;
 
         /**

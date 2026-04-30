@@ -152,7 +152,10 @@ class Tempaloo_WebP_URL_Filter {
      */
     private function compute_attachment_savings( $post_id ) {
         $meta = wp_get_attachment_metadata( $post_id );
-        $tw   = isset( $meta['tempaloo_webp'] ) ? $meta['tempaloo_webp'] : null;
+        // Authoritative read goes through the helper which prefers
+        // _tempaloo_webp post_meta and falls back to the legacy
+        // in-metadata key. Sidesteps any filter-chain stripping.
+        $tw = Tempaloo_WebP_Plugin::get_conversion_meta( $post_id );
         if ( empty( $tw ) ) return null;
 
         $orig_file = get_attached_file( $post_id );

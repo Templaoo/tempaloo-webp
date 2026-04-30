@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.7.3
+Stable tag: 1.8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -145,6 +145,11 @@ Example — skip conversion for any attachment in the `private/` upload subfolde
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 1.8.0 =
+* **Architectural fix**: Conversion state moved from inside `_wp_attachment_metadata.tempaloo_webp` to a dedicated `_tempaloo_webp` post_meta key. Reason: when LiteSpeed Cache (default on Hostinger), Smush, ShortPixel, Imagify or any image optimizer hooks `wp_generate_attachment_metadata` at a later priority than ours, they sometimes rebuild the standard metadata array for their own queue and strip non-WP sub-keys in the process. Result for the user: Activity logs "Auto-convert success — 6 sizes converted", but the Optimized column shows nothing, Bulk says pending, and the frontend has no `<picture>` wrap — because the meta marker we wrote got overwritten right after. The new dedicated post_meta key is invisible to those filters; nothing can strip what nothing else knows about. Same approach ShortPixel uses (`_shortpixel_status` post_meta).
+* New: helper trio `Tempaloo_WebP_Plugin::get_conversion_meta()` / `set_conversion_meta()` / `delete_conversion_meta()`. Single source of truth for our state. Reads always check the new key first, fall back to the legacy in-metadata key for backward compat (so attachments converted before this release keep working until they get re-converted). Writes go to the new key only. Deletes clear both, plus dual cache invalidation.
+* Updated: every reader (`compute_attachment_savings`, `scan_breakdown`, audit endpoint, reconcile endpoint, restore endpoint, attachment field, REST stats, JS data filter) now goes through the helper. No more direct `$meta['tempaloo_webp']` reads anywhere — the access pattern is centralised and immune to future filter-chain regressions.
 
 = 1.7.3 =
 * New: Every auto-convert outcome on upload is now logged to Activity. Until now the only way to know why a freshly-uploaded image hadn't been converted was to guess: license expired? Toggle off? Unsupported mime? API error? The Optimized column just showed "—" silently. Each upload now produces one of: `success`, `warn` (license inactive), `info` (mime not convertible), or `error` (API failure with code). The user can open Activity right after upload and see exactly what happened.

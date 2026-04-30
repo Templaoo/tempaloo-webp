@@ -135,6 +135,70 @@ final class Tempaloo_WebP_Plugin {
         }
     }
 
+    // ─── Conversion meta storage ────────────────────────────────────────
+    //
+    // Up to v1.7.x we kept our per-attachment conversion record inside
+    // the standard _wp_attachment_metadata array, under a tempaloo_webp
+    // sub-key. That worked until we ran on a site where LiteSpeed Cache
+    // (Hostinger default) hooked the same wp_generate_attachment_metadata
+    // filter at a later priority and rebuilt the metadata array for its
+    // own queue — without our sub-key. WP saved their version, ours
+    // got stripped, and downstream code (compute_attachment_savings,
+    // scan_breakdown, etc.) had no idea conversion had succeeded.
+    //
+    // v1.8.0 stores conversion state in a SEPARATE post_meta key
+    // (_tempaloo_webp). No other plugin can touch what they don't know
+    // exists. Reads still fall back to the legacy in-metadata key, so
+    // attachments converted before this release keep working until they
+    // get re-converted.
+    const META_KEY = '_tempaloo_webp';
+
+    /**
+     * Returns the conversion record for an attachment, or null if not
+     * converted. Always check `_tempaloo_webp` first (the new home),
+     * then fall back to `$attachment_metadata['tempaloo_webp']` for
+     * backward compatibility with installs that haven't re-bulked yet.
+     */
+    public static function get_conversion_meta( $attachment_id ) {
+        $direct = get_post_meta( (int) $attachment_id, self::META_KEY, true );
+        if ( is_array( $direct ) && ! empty( $direct ) ) {
+            return $direct;
+        }
+        $att = wp_get_attachment_metadata( (int) $attachment_id );
+        if ( is_array( $att ) && ! empty( $att['tempaloo_webp'] ) ) {
+            return $att['tempaloo_webp'];
+        }
+        return null;
+    }
+
+    /**
+     * Persists the conversion record. Goes through update_post_meta
+     * directly — sidesteps wp_generate_attachment_metadata, the
+     * filter chain image optimizers love to hook into.
+     */
+    public static function set_conversion_meta( $attachment_id, array $data ) {
+        if ( $attachment_id <= 0 || empty( $data ) ) return;
+        update_post_meta( (int) $attachment_id, self::META_KEY, $data );
+    }
+
+    /**
+     * Removes our conversion record from BOTH locations. Used by the
+     * Restore flow and the Reconcile-ghost-meta operation. Drops the
+     * legacy in-metadata key too so the attachment is clean.
+     */
+    public static function delete_conversion_meta( $attachment_id ) {
+        $attachment_id = (int) $attachment_id;
+        if ( $attachment_id <= 0 ) return;
+        delete_post_meta( $attachment_id, self::META_KEY );
+        $att = wp_get_attachment_metadata( $attachment_id );
+        if ( is_array( $att ) && isset( $att['tempaloo_webp'] ) ) {
+            unset( $att['tempaloo_webp'] );
+            wp_update_attachment_metadata( $attachment_id, $att );
+        }
+        clean_post_cache( $attachment_id );
+        wp_cache_delete( $attachment_id, 'post_meta' );
+    }
+
     public static function on_deactivate() {
         // Nothing destructive. Settings kept for convenience on reactivation.
     }

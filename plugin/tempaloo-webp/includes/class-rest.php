@@ -166,7 +166,8 @@ class Tempaloo_WebP_REST {
 
         foreach ( $ids as $id ) {
             $meta = wp_get_attachment_metadata( $id );
-            if ( empty( $meta['tempaloo_webp'] ) ) continue;
+            $tw   = Tempaloo_WebP_Plugin::get_conversion_meta( $id );
+            if ( empty( $tw ) ) continue;
 
             $original = get_attached_file( $id );
             if ( $original ) {
@@ -212,12 +213,10 @@ class Tempaloo_WebP_REST {
                 }
             }
 
-            unset( $meta['tempaloo_webp'] );
-            wp_update_attachment_metadata( $id, $meta );
-            // Drop the per-attachment metadata cache so any subsequent
-            // call (savings panel, scan, REST attachment) sees the
-            // post-restore truth instead of the pre-restore cached copy.
-            clean_post_cache( (int) $id );
+            // Helper handles BOTH _tempaloo_webp post_meta AND legacy
+            // in-metadata key, plus dual cache invalidation. Single
+            // source of truth for "drop our marks from this attachment".
+            Tempaloo_WebP_Plugin::delete_conversion_meta( $id );
             $restored++;
         }
 
@@ -656,7 +655,11 @@ class Tempaloo_WebP_REST {
                 continue;
             }
             $meta = wp_get_attachment_metadata( (int) $id );
-            $tw   = isset( $meta['tempaloo_webp'] ) ? $meta['tempaloo_webp'] : null;
+            // Read via helper — picks up _tempaloo_webp post_meta first,
+            // falls back to legacy. Lets the audit reflect reality
+            // even when LiteSpeed/Smush/etc. stripped our key from
+            // the standard metadata array.
+            $tw            = Tempaloo_WebP_Plugin::get_conversion_meta( (int) $id );
             $has_meta      = ! empty( $tw );
             $has_converted = $has_meta && ! empty( $tw['converted'] );
             $has_skipped   = $has_meta && ! empty( $tw['skipped'] );
@@ -872,7 +875,8 @@ class Tempaloo_WebP_REST {
                 $orig = get_attached_file( (int) $id );
                 if ( ! $orig || ! file_exists( $orig ) ) continue;
                 $meta = wp_get_attachment_metadata( (int) $id );
-                if ( empty( $meta['tempaloo_webp']['converted'] ) ) continue;
+                $tw   = Tempaloo_WebP_Plugin::get_conversion_meta( (int) $id );
+                if ( empty( $tw ) || empty( $tw['converted'] ) ) continue;
 
                 $paths = [ $orig ];
                 if ( ! empty( $meta['sizes'] ) && is_array( $meta['sizes'] ) ) {
@@ -885,8 +889,7 @@ class Tempaloo_WebP_REST {
 
                 // Drift = at least one size has no sibling. Matches the
                 // audit. Catches "partial" ghosts (some sizes converted
-                // but others lost to a Restore mid-flight) which v1.7.0
-                // missed entirely.
+                // but others lost to a Restore mid-flight).
                 $missing_any = false;
                 foreach ( $paths as $p ) {
                     if ( ! file_exists( $p . '.webp' ) && ! file_exists( $p . '.avif' ) ) {
@@ -897,20 +900,11 @@ class Tempaloo_WebP_REST {
 
                 if ( $missing_any ) {
                     if ( ! $dry_run ) {
-                        unset( $meta['tempaloo_webp'] );
-                        // Direct update_post_meta + dual cache flush.
-                        // wp_update_attachment_metadata can be intercepted
-                        // by other image-optimizer plugins on the
-                        // wp_update_attachment_metadata filter, which
-                        // sometimes re-writes parts of meta or short-
-                        // circuits the save. Going through update_post_meta
-                        // hits the DB directly. The two cache deletes
-                        // belt-and-suspender against persistent object
-                        // cache backends (Redis, LiteSpeed Object Cache)
-                        // that don't always honor clean_post_cache.
-                        update_post_meta( (int) $id, '_wp_attachment_metadata', $meta );
-                        clean_post_cache( (int) $id );
-                        wp_cache_delete( (int) $id, 'post_meta' );
+                        // Helper drops BOTH _tempaloo_webp post_meta AND
+                        // the legacy in-metadata key, plus runs the dual
+                        // cache invalidation needed for persistent object
+                        // caches.
+                        Tempaloo_WebP_Plugin::delete_conversion_meta( (int) $id );
                     }
                     $cleared++;
                 }
@@ -937,7 +931,8 @@ class Tempaloo_WebP_REST {
                 $orig = get_attached_file( (int) $id );
                 if ( ! $orig || ! file_exists( $orig ) ) continue;
                 $meta = wp_get_attachment_metadata( (int) $id );
-                if ( ! empty( $meta['tempaloo_webp'] ) ) continue;  // not orphan if meta present
+                $tw   = Tempaloo_WebP_Plugin::get_conversion_meta( (int) $id );
+                if ( ! empty( $tw ) ) continue;  // not orphan if conversion meta present
 
                 $paths = [ $orig ];
                 if ( ! empty( $meta['sizes'] ) && is_array( $meta['sizes'] ) ) {
