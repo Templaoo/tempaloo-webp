@@ -8,8 +8,9 @@ import Settings from "./pages/Settings";
 import Upgrade from "./pages/Upgrade";
 import Activity from "./pages/Activity";
 import Sites from "./pages/Sites";
+import Diagnostic from "./pages/Diagnostic";
 
-type Tab = "overview" | "bulk" | "activity" | "sites" | "settings" | "upgrade";
+type Tab = "overview" | "bulk" | "activity" | "sites" | "settings" | "upgrade" | "diagnostic";
 
 function daysUntil(iso: string): number | null {
     if (!iso) return null;
@@ -421,6 +422,7 @@ export default function App() {
                                 : []),
                             { value: "settings", label: "Settings", icon: <IconSettings /> },
                             { value: "upgrade",  label: "Upgrade",  icon: <IconUpgrade /> },
+                            { value: "diagnostic", label: "Diagnostic", icon: <IconDiagnostic /> },
                         ]}
                     />
                     {!state.license.valid && (
@@ -477,6 +479,7 @@ export default function App() {
                     {tab === "sites"    && <Sites state={state} onUpgrade={() => setTab("upgrade")} />}
                     {tab === "settings" && <Settings state={state} onState={setStateLockingPolling} />}
                     {tab === "upgrade"  && <Upgrade state={state} />}
+                    {tab === "diagnostic" && <Diagnostic />}
                 </main>
             </div>
         </div>
@@ -555,6 +558,19 @@ function IconSites() {
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="9" />
             <path d="M3 12 H21 M12 3 C8 8 8 16 12 21 M12 3 C16 8 16 16 12 21" />
+        </svg>
+    );
+}
+
+function IconDiagnostic() {
+    // Stethoscope-ish: a magnifying glass over a heart-rate line. Makes
+    // the "look at the state" intent visually unambiguous next to the
+    // other tabs that all use simpler shapes.
+    return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 12 H7 L9 7 L12 17 L14 12 H17" />
+            <circle cx="19" cy="14" r="2" />
+            <path d="M20.5 15.5 L22 17" />
         </svg>
     );
 }

@@ -210,7 +210,75 @@ export const api = {
         restFetch<{ ok: boolean }>("/activity", { method: "DELETE" }),
     cpts: () =>
         restFetch<{ cpts: { slug: string; label: string }[] }>("/cpts"),
+    stateAudit: () =>
+        restFetch<StateAuditReport>("/state-audit"),
+    stateReconcile: (input: { dryRun: boolean; fix: ReconcileOp[] }) =>
+        restFetch<ReconcileResult>("/state-reconcile", {
+            method: "POST",
+            body: JSON.stringify({ dry_run: input.dryRun, fix: input.fix }),
+        }),
 };
+
+/**
+ * Side-by-side counts across the 4 sources of truth (filesystem, attachment
+ * meta, bulk_state option, retry queue option). Drift between any two is
+ * what we surface in the Diagnostic tab.
+ */
+export interface StateAuditReport {
+    attachments: {
+        total: number;
+        withMeta: number;
+        withConverted: number;
+        withSkipped: number;
+        brokenPaths: number;
+    };
+    filesystem: {
+        webpSiblings: number;
+        avifSiblings: number;
+        orphans: number;
+        orphanSamples: { id: number; title: string; file: string }[];
+        ghosts: number;
+        ghostSamples: { id: number; title: string; file: string }[];
+    };
+    bulkState: {
+        status: string;
+        total: number;
+        processed: number;
+        remaining: number;
+        errors: number;
+        startedAt: number;
+        finishedAt: number;
+        stuckRunning: boolean;
+    };
+    retryQueue: {
+        pending: number;
+        dueNow: number;
+        nextRetryAt: number;
+        oldestEnqueuedAt: number;
+        overMaxAttempts: number;
+    };
+    settings: {
+        outputFormat: string;
+        autoConvert: boolean;
+        serveWebp: boolean;
+        deliveryMode: string;
+        cdnPassthrough: boolean;
+        licenseValid: boolean;
+        plan: string;
+        supportsAvif: boolean;
+    };
+    durationMs: number;
+}
+
+export type ReconcileOp = "stuck_bulk" | "overage_retries" | "ghost_meta" | "orphan_files";
+
+export interface ReconcileResult {
+    stuckBulkReset: number;
+    retriesDropped: number;
+    ghostMetaCleared: number;
+    orphanFilesRemoved: number;
+    dryRun: boolean;
+}
 
 export interface ActivityEvent {
     id: number;

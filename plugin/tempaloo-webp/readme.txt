@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.6.3
+Stable tag: 1.7.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -145,6 +145,11 @@ Example — skip conversion for any attachment in the `private/` upload subfolde
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 1.7.0 =
+* New: **Diagnostic tab** in the plugin admin. Walks the four sources of truth side by side — WordPress attachments table, `tempaloo_webp` meta on each attachment, the `.webp`/`.avif` files actually on disk, and the bulk + retry queue options — and surfaces every drift between them. Counts orphans (siblings on disk with no meta), ghosts (meta says converted but no file), stuck-running bulks (>30 min idle), retry queue entries past max-attempts, and effective settings.
+* New: **Reconcile button** with dry-run preview. Resets stuck-running bulks to idle, drops retry queue entries past the attempt cap, clears ghost meta so the next bulk re-flags those attachments. Optional opt-in for orphan file deletion (destructive — separate flag). Activity log records every reconcile pass.
+* New: REST endpoints `GET /tempaloo-webp/v1/state-audit` (read-only inventory) and `POST /tempaloo-webp/v1/state-reconcile` (idempotent fixer). Power tooling for support/debug — same data the new tab shows, scriptable.
 
 = 1.6.3 =
 * Fix: Bulk breakdown card now refreshes automatically the moment a run finishes. Previously the panel held the snapshot taken BEFORE the run ("Pending: 1, Already done: 0"), and only flipped to the right numbers after the user manually clicked Scan again or refreshed the page. We now re-scan from disk in `handleTerminalState` once the bulk loop reports `done` — the visible state matches the actual filesystem state without an extra click.

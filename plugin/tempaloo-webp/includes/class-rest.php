@@ -81,6 +81,22 @@ class Tempaloo_WebP_REST {
             'callback'            => [ $this, 'post_disconnect_license' ],
             'permission_callback' => [ $this, 'perm_manage' ],
         ] );
+
+        // ─── Diagnostics & state reconciliation ─────────────────────────
+        // The plugin holds 4 sources of truth that MUST agree but
+        // historically have drifted (filesystem, attachment meta,
+        // bulk_state option, retry_queue option). These two routes
+        // surface the drift and let the user fix it without touching DB.
+        register_rest_route( self::NS, '/state-audit', [
+            'methods'             => 'GET',
+            'callback'            => [ $this, 'get_state_audit' ],
+            'permission_callback' => [ $this, 'perm_manage' ],
+        ] );
+        register_rest_route( self::NS, '/state-reconcile', [
+            'methods'             => 'POST',
+            'callback'            => [ $this, 'post_state_reconcile' ],
+            'permission_callback' => [ $this, 'perm_manage' ],
+        ] );
     }
 
     public function get_activity( WP_REST_Request $req ) {
@@ -551,6 +567,384 @@ class Tempaloo_WebP_REST {
             'bytesOut'  => $out,
             'converted' => $converted,
         ];
+    }
+
+    // ─── State audit + reconciliation ───────────────────────────────────
+    //
+    // The plugin's "is this image converted?" state lives in 4 places:
+    //   1. Filesystem      — .jpg.webp / .jpg.avif siblings on disk
+    //   2. Attachment meta — wp_postmeta._wp_attachment_metadata.tempaloo_webp
+    //   3. Bulk state      — option tempaloo_webp_bulk_state
+    //   4. Retry queue     — option tempaloo_webp_retry_queue
+    //
+    // For Overview, Bulk and Activity to tell the same story, all four
+    // must agree. They drift in real-world failure modes:
+    //   · A failed Restore leaves siblings on disk but clears the meta
+    //     → orphaned siblings.
+    //   · A bulk_state stuck on "running" because a tab was closed
+    //     mid-tick → stale running state.
+    //   · A retry queue with attempts > MAX after a network outage
+    //     → ghost queue items.
+    //
+    // get_state_audit walks all 4 sources, returns the per-source counts
+    // side-by-side + flags for drift. post_state_reconcile fixes them
+    // without destroying user data.
+
+    /**
+     * Returns the full state inventory across the 4 sources of truth.
+     * Read-only — safe to call from a UI auto-refresh.
+     *
+     * Heavy on disk I/O for big libraries (one stat() per size per
+     * attachment). Capped at 5000 attachments — enough for the MVP, the
+     * audit becomes a custom-table problem past that scale anyway.
+     */
+    public function get_state_audit( WP_REST_Request $req ) {
+        global $wpdb;
+
+        $start = microtime( true );
+
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+        $ids = $wpdb->get_col(
+            $wpdb->prepare(
+                "SELECT ID FROM {$wpdb->posts}
+                  WHERE post_type = %s AND post_status = %s
+                    AND post_mime_type IN ('image/jpeg','image/png','image/gif')
+                  ORDER BY ID ASC
+                  LIMIT 5000",
+                'attachment', 'inherit'
+            )
+        );
+
+        $report = [
+            'attachments' => [
+                'total'              => count( (array) $ids ),
+                'withMeta'           => 0,
+                'withConverted'      => 0,  // tempaloo_webp.converted > 0
+                'withSkipped'        => 0,  // tempaloo_webp.skipped non-empty
+                'brokenPaths'        => 0,  // get_attached_file returns false / file missing
+            ],
+            'filesystem' => [
+                'webpSiblings'       => 0,
+                'avifSiblings'       => 0,
+                'orphans'            => 0,  // siblings on disk, no tempaloo_webp meta
+                'orphanSamples'      => [],
+                'ghosts'             => 0,  // meta exists, no siblings on disk
+                'ghostSamples'       => [],
+            ],
+            'bulkState' => [],
+            'retryQueue' => [],
+            'settings' => [
+                'outputFormat'       => '',
+                'autoConvert'        => false,
+                'serveWebp'          => false,
+                'deliveryMode'       => '',
+                'cdnPassthrough'     => false,
+                'licenseValid'       => false,
+                'plan'               => '',
+                'supportsAvif'       => false,
+            ],
+            'durationMs' => 0,
+        ];
+
+        $expected_exts = [ '.webp' ]; // we always count both, regardless of setting
+        $expected_avif = [ '.avif' ];
+
+        foreach ( (array) $ids as $id ) {
+            $orig = get_attached_file( (int) $id );
+            if ( ! $orig || ! file_exists( $orig ) ) {
+                $report['attachments']['brokenPaths']++;
+                continue;
+            }
+            $meta = wp_get_attachment_metadata( (int) $id );
+            $tw   = isset( $meta['tempaloo_webp'] ) ? $meta['tempaloo_webp'] : null;
+            $has_meta      = ! empty( $tw );
+            $has_converted = $has_meta && ! empty( $tw['converted'] );
+            $has_skipped   = $has_meta && ! empty( $tw['skipped'] );
+            if ( $has_meta )      $report['attachments']['withMeta']++;
+            if ( $has_converted ) $report['attachments']['withConverted']++;
+            if ( $has_skipped )   $report['attachments']['withSkipped']++;
+
+            $paths = [ $orig ];
+            if ( ! empty( $meta['sizes'] ) && is_array( $meta['sizes'] ) ) {
+                foreach ( $meta['sizes'] as $size ) {
+                    if ( ! empty( $size['file'] ) ) {
+                        $paths[] = trailingslashit( dirname( $orig ) ) . $size['file'];
+                    }
+                }
+            }
+
+            $any_webp = false; $any_avif = false; $missing_for_meta = false;
+            foreach ( $paths as $p ) {
+                if ( file_exists( $p . '.webp' ) ) { $report['filesystem']['webpSiblings']++; $any_webp = true; }
+                if ( file_exists( $p . '.avif' ) ) { $report['filesystem']['avifSiblings']++; $any_avif = true; }
+                // For ghost detection: meta says it's converted, but at
+                // least one expected sibling for "converted" is missing.
+                if ( $has_converted && ! file_exists( $p . '.webp' ) && ! file_exists( $p . '.avif' ) ) {
+                    $missing_for_meta = true;
+                }
+            }
+
+            // Orphan = siblings on disk but tempaloo_webp meta absent.
+            if ( ! $has_meta && ( $any_webp || $any_avif ) ) {
+                $report['filesystem']['orphans']++;
+                if ( count( $report['filesystem']['orphanSamples'] ) < 10 ) {
+                    $report['filesystem']['orphanSamples'][] = [
+                        'id'    => (int) $id,
+                        'title' => get_the_title( (int) $id ),
+                        'file'  => str_replace( ABSPATH, '/', $orig ),
+                    ];
+                }
+            }
+            // Ghost = meta says converted but no siblings exist for at
+            // least one expected size.
+            if ( $missing_for_meta ) {
+                $report['filesystem']['ghosts']++;
+                if ( count( $report['filesystem']['ghostSamples'] ) < 10 ) {
+                    $report['filesystem']['ghostSamples'][] = [
+                        'id'    => (int) $id,
+                        'title' => get_the_title( (int) $id ),
+                        'file'  => str_replace( ABSPATH, '/', $orig ),
+                    ];
+                }
+            }
+        }
+
+        // Bulk state snapshot
+        $bulk = get_option( Tempaloo_WebP_Bulk::STATE_OPTION );
+        if ( is_array( $bulk ) ) {
+            $started   = (int) ( $bulk['started_at'] ?? 0 );
+            $finished  = (int) ( $bulk['finished_at'] ?? 0 );
+            $report['bulkState'] = [
+                'status'        => (string) ( $bulk['status'] ?? 'idle' ),
+                'total'         => (int) ( $bulk['total'] ?? 0 ),
+                'processed'     => (int) ( $bulk['processed'] ?? 0 ),
+                'remaining'     => is_array( $bulk['remaining'] ?? null ) ? count( $bulk['remaining'] ) : 0,
+                'errors'        => is_array( $bulk['errors'] ?? null ) ? count( $bulk['errors'] ) : 0,
+                'startedAt'     => $started,
+                'finishedAt'    => $finished,
+                // "Stuck running" — a bulk_state where status='running'
+                // but no tick has updated it in 30 minutes. Almost
+                // always a closed tab mid-run; reconcile resets to idle.
+                'stuckRunning'  => ( 'running' === ( $bulk['status'] ?? '' ) ) && ( $started > 0 ) && ( time() - $started > 1800 ),
+            ];
+        } else {
+            $report['bulkState'] = [
+                'status' => 'idle', 'total' => 0, 'processed' => 0,
+                'remaining' => 0, 'errors' => 0,
+                'startedAt' => 0, 'finishedAt' => 0, 'stuckRunning' => false,
+            ];
+        }
+
+        // Retry queue snapshot — class-retry-queue exposes stats() but
+        // it lacks the "oldest enqueued" field useful for diagnostics.
+        $rq_stats = Tempaloo_WebP_Retry_Queue::stats();
+        $rq_raw   = get_option( 'tempaloo_webp_retry_queue', [] );
+        if ( ! is_array( $rq_raw ) ) $rq_raw = [];
+        $oldest = 0;
+        foreach ( $rq_raw as $entry ) {
+            $added = (int) ( $entry['added_at'] ?? 0 );
+            if ( $added > 0 && ( $oldest === 0 || $added < $oldest ) ) $oldest = $added;
+        }
+        $report['retryQueue'] = array_merge( $rq_stats, [
+            'oldestEnqueuedAt' => $oldest,
+            // "Past max attempts" entries — these should be auto-dropped
+            // by enqueue() but a manual MAX_ATTEMPTS bump leaves stragglers.
+            'overMaxAttempts'  => count( array_filter( $rq_raw, static function ( $e ) {
+                return (int) ( $e['attempts'] ?? 0 ) > Tempaloo_WebP_Retry_Queue::MAX_ATTEMPTS;
+            } ) ),
+        ] );
+
+        // Settings snapshot — the values that drive every other code
+        // path. If license is invalid or auto_convert is false, the
+        // user thinks "nothing converts" but the plugin is doing
+        // exactly what they asked. Surface it in the audit.
+        $s = Tempaloo_WebP_Plugin::get_settings();
+        $report['settings'] = [
+            'outputFormat'   => (string) ( $s['output_format'] ?? 'webp' ),
+            'autoConvert'    => ! empty( $s['auto_convert'] ),
+            'serveWebp'      => ! empty( $s['serve_webp'] ),
+            'deliveryMode'   => (string) ( $s['delivery_mode'] ?? 'url_rewrite' ),
+            'cdnPassthrough' => ! empty( $s['cdn_passthrough'] ),
+            'licenseValid'   => ! empty( $s['license_valid'] ),
+            'plan'           => (string) ( $s['plan'] ?? '' ),
+            'supportsAvif'   => ! empty( $s['supports_avif'] ),
+        ];
+
+        $report['durationMs'] = (int) round( ( microtime( true ) - $start ) * 1000 );
+
+        return rest_ensure_response( $report );
+    }
+
+    /**
+     * Reconciles the 4 sources of truth so they agree.
+     *
+     * Operations performed (each independent, all idempotent):
+     *   · stuck-running bulk → reset status to idle, drop remaining queue
+     *   · retry queue past MAX_ATTEMPTS → drop entries
+     *   · orphaned siblings → optionally delete (dry-run by default)
+     *   · ghost meta → drop tempaloo_webp from meta so next bulk re-flags
+     *
+     * Body params:
+     *   · dry_run (bool, default true) — when true, returns what WOULD
+     *     change without touching anything.
+     *   · fix (array of strings, default ['stuck_bulk','overage_retries','ghost_meta'])
+     *     Subset of operations to perform. Orphan deletion requires the
+     *     explicit 'orphan_files' flag because it touches user data.
+     */
+    public function post_state_reconcile( WP_REST_Request $req ) {
+        $body = $req->get_json_params();
+        if ( ! is_array( $body ) ) $body = [];
+        $dry_run = isset( $body['dry_run'] ) ? (bool) $body['dry_run'] : true;
+        $fix     = isset( $body['fix'] ) && is_array( $body['fix'] )
+            ? array_map( 'strval', $body['fix'] )
+            : [ 'stuck_bulk', 'overage_retries', 'ghost_meta' ];
+
+        $changes = [
+            'stuckBulkReset'   => 0,
+            'retriesDropped'   => 0,
+            'ghostMetaCleared' => 0,
+            'orphanFilesRemoved' => 0,
+            'dryRun' => $dry_run,
+        ];
+
+        // 1. Stuck-running bulk
+        if ( in_array( 'stuck_bulk', $fix, true ) ) {
+            $bulk = get_option( Tempaloo_WebP_Bulk::STATE_OPTION );
+            if ( is_array( $bulk )
+                && 'running' === ( $bulk['status'] ?? '' )
+                && (int) ( $bulk['started_at'] ?? 0 ) > 0
+                && time() - (int) $bulk['started_at'] > 1800 ) {
+                if ( ! $dry_run ) {
+                    $bulk['status']    = 'canceled';
+                    $bulk['remaining'] = [];
+                    update_option( Tempaloo_WebP_Bulk::STATE_OPTION, $bulk, false );
+                }
+                $changes['stuckBulkReset'] = 1;
+            }
+        }
+
+        // 2. Retry queue entries past MAX_ATTEMPTS
+        if ( in_array( 'overage_retries', $fix, true ) ) {
+            $rq = get_option( 'tempaloo_webp_retry_queue', [] );
+            if ( is_array( $rq ) ) {
+                $cleaned = $rq;
+                $dropped = 0;
+                foreach ( $rq as $att_id => $entry ) {
+                    if ( (int) ( $entry['attempts'] ?? 0 ) > Tempaloo_WebP_Retry_Queue::MAX_ATTEMPTS ) {
+                        unset( $cleaned[ $att_id ] );
+                        $dropped++;
+                    }
+                }
+                if ( $dropped > 0 && ! $dry_run ) {
+                    if ( empty( $cleaned ) ) delete_option( 'tempaloo_webp_retry_queue' );
+                    else update_option( 'tempaloo_webp_retry_queue', $cleaned, false );
+                }
+                $changes['retriesDropped'] = $dropped;
+            }
+        }
+
+        // 3. Ghost meta — meta says converted but no siblings on disk
+        if ( in_array( 'ghost_meta', $fix, true ) ) {
+            global $wpdb;
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+            $ids = $wpdb->get_col(
+                $wpdb->prepare(
+                    "SELECT ID FROM {$wpdb->posts}
+                      WHERE post_type=%s AND post_status=%s
+                        AND post_mime_type IN ('image/jpeg','image/png','image/gif')
+                      LIMIT 5000",
+                    'attachment', 'inherit'
+                )
+            );
+            $cleared = 0;
+            foreach ( (array) $ids as $id ) {
+                $orig = get_attached_file( (int) $id );
+                if ( ! $orig || ! file_exists( $orig ) ) continue;
+                $meta = wp_get_attachment_metadata( (int) $id );
+                if ( empty( $meta['tempaloo_webp']['converted'] ) ) continue;
+                // Build paths
+                $paths = [ $orig ];
+                if ( ! empty( $meta['sizes'] ) && is_array( $meta['sizes'] ) ) {
+                    foreach ( $meta['sizes'] as $size ) {
+                        if ( ! empty( $size['file'] ) ) {
+                            $paths[] = trailingslashit( dirname( $orig ) ) . $size['file'];
+                        }
+                    }
+                }
+                // Ghost = NO sibling exists for ANY size
+                $any_sibling = false;
+                foreach ( $paths as $p ) {
+                    if ( file_exists( $p . '.webp' ) || file_exists( $p . '.avif' ) ) {
+                        $any_sibling = true; break;
+                    }
+                }
+                if ( ! $any_sibling ) {
+                    if ( ! $dry_run ) {
+                        unset( $meta['tempaloo_webp'] );
+                        wp_update_attachment_metadata( (int) $id, $meta );
+                        clean_post_cache( (int) $id );
+                    }
+                    $cleared++;
+                }
+            }
+            $changes['ghostMetaCleared'] = $cleared;
+        }
+
+        // 4. Orphan files (siblings on disk, no meta) — destructive,
+        //    explicit opt-in only.
+        if ( in_array( 'orphan_files', $fix, true ) ) {
+            global $wpdb;
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+            $ids = $wpdb->get_col(
+                $wpdb->prepare(
+                    "SELECT ID FROM {$wpdb->posts}
+                      WHERE post_type=%s AND post_status=%s
+                        AND post_mime_type IN ('image/jpeg','image/png','image/gif')
+                      LIMIT 5000",
+                    'attachment', 'inherit'
+                )
+            );
+            $removed = 0;
+            foreach ( (array) $ids as $id ) {
+                $orig = get_attached_file( (int) $id );
+                if ( ! $orig || ! file_exists( $orig ) ) continue;
+                $meta = wp_get_attachment_metadata( (int) $id );
+                if ( ! empty( $meta['tempaloo_webp'] ) ) continue;  // not orphan if meta present
+
+                $paths = [ $orig ];
+                if ( ! empty( $meta['sizes'] ) && is_array( $meta['sizes'] ) ) {
+                    foreach ( $meta['sizes'] as $size ) {
+                        if ( ! empty( $size['file'] ) ) {
+                            $paths[] = trailingslashit( dirname( $orig ) ) . $size['file'];
+                        }
+                    }
+                }
+                foreach ( $paths as $p ) {
+                    foreach ( [ '.webp', '.avif' ] as $ext ) {
+                        $sibling = $p . $ext;
+                        if ( file_exists( $sibling ) ) {
+                            if ( ! $dry_run ) {
+                                wp_delete_file( $sibling );
+                                clearstatcache( true, $sibling );
+                            }
+                            $removed++;
+                        }
+                    }
+                }
+            }
+            $changes['orphanFilesRemoved'] = $removed;
+        }
+
+        if ( ! $dry_run ) {
+            Tempaloo_WebP_Activity::log(
+                'reconcile',
+                'warn',
+                __( 'State reconcile applied', 'tempaloo-webp' ),
+                $changes
+            );
+        }
+
+        return rest_ensure_response( $changes );
     }
 }
 
