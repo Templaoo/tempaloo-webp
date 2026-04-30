@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, bulk, type AppState, type BulkScanReport, type BulkStatus } from "../api";
-import { Badge, Button, Card, CardHeader, CompressionFactory, Confetti, FilesStream, Modal, ProgressRing, toast } from "../components/ui";
+import { Badge, Button, Card, CardHeader, CompressionFactory, Confetti, CurrentlyProcessing, Modal, ProgressRing, QuotaProgressBar, SavingsCounter, fmtBytes, toast, useCountUp } from "../components/ui";
 
 const EMPTY_STATUS: BulkStatus = {
     status: "idle", total: 0, processed: 0, succeeded: 0, failed: 0, errors: [],
@@ -27,6 +27,12 @@ function normalizeStatus(partial: Partial<BulkStatus> | null | undefined): BulkS
         succeeded: partial.succeeded ?? 0,
         failed:    partial.failed    ?? 0,
         errors:    Array.isArray(partial.errors) ? partial.errors : [],
+        // Preserve optional live-feedback fields from the tick response.
+        // Without explicit pass-through they'd be silently dropped on
+        // every normalize call, killing the SavingsCounter + CurrentlyProcessing animations.
+        quota:     partial.quota,
+        savings:   partial.savings,
+        lastItem:  partial.lastItem,
     };
 }
 
@@ -171,6 +177,28 @@ export default function Bulk({ state, onState, onUpgrade }: {
             const norm = normalizeStatus(s);
             setStatus(norm);
 
+            // Propagate the live quota the API just returned (via X-Quota-*
+            // headers) up to the app shell so the header chip + Overview
+            // tick down image-by-image during the run, instead of staying
+            // frozen until /state is re-polled on tab focus. We avoid a
+            // round-trip on every bulk tick by piggy-backing on data the
+            // bulk endpoint already had locally.
+            if (s.quota && state.quota && onState) {
+                const live = s.quota;
+                const cur = state.quota;
+                if (live.remaining !== cur.imagesRemaining || live.used !== cur.imagesUsed) {
+                    onState({
+                        ...state,
+                        quota: {
+                            ...cur,
+                            imagesUsed: live.used,
+                            imagesLimit: live.limit || cur.imagesLimit,
+                            imagesRemaining: live.remaining,
+                        },
+                    });
+                }
+            }
+
             // Look for infra errors in this tick's batch. We only count
             // a tick as "infra-erroring" if at least one of the new
             // errors carries an http/5xx code — quota_exceeded and
@@ -264,6 +292,12 @@ export default function Bulk({ state, onState, onUpgrade }: {
             succeeded: 0,
             failed: 0,
             errors: [],
+            // Reset live-feedback fields for the new run — without this
+            // the previous run's "X MB freed" + last filename leaks
+            // into the optimistic mount, then resets on the first real
+            // tick (visual flicker).
+            savings: { bytesIn: 0, bytesOut: 0 },
+            lastItem: null,
         });
         setPane("running");
 
@@ -339,7 +373,7 @@ export default function Bulk({ state, onState, onUpgrade }: {
                 {pane === "loading" && <LoadingSkeleton />}
 
                 {pane === "running" && (
-                    <RunningView status={status} pct={pct} eta={eta} onCancel={() => setCancelOpen(true)} />
+                    <RunningView status={status} pct={pct} eta={eta} quota={state.quota} onCancel={() => setCancelOpen(true)} />
                 )}
 
                 {pane === "celebrating" && (
@@ -698,12 +732,17 @@ function PreflightModal({
 }
 
 /* ── Live running view ──────────────────────────────────────────────── */
-function RunningView({ status, pct, eta, onCancel }: {
+function RunningView({ status, pct, eta, quota, onCancel }: {
     status: BulkStatus;
     pct: number;
     eta: number | null;
+    quota: AppState["quota"];
     onCancel: () => void;
 }) {
+    // Unlimited plan = imagesLimit 0 from the API. Skip the bar
+    // entirely (no point gauging an infinite tank).
+    const unlimited = !quota || quota.imagesLimit === 0;
+
     return (
         <Card className="bg-gradient-to-br from-brand-50/50 to-white border-brand-200">
             <div className="flex flex-col sm:flex-row gap-6 items-center sm:items-start">
@@ -713,6 +752,7 @@ function RunningView({ status, pct, eta, onCancel }: {
                         size={160}
                         label={`${status.processed} / ${status.total}`}
                         sub={eta !== null ? `ETA ${fmtSecs(eta)}` : "computing…"}
+                        shimmer
                     />
                 </div>
                 <div className="min-w-0 flex-1 w-full">
@@ -728,29 +768,54 @@ function RunningView({ status, pct, eta, onCancel }: {
                     </p>
 
                     <div className="grid grid-cols-3 gap-3 mb-4">
-                        <Mini value={status.succeeded} label="converted" tone="success" />
-                        <Mini value={status.failed}    label="failed"    tone={status.failed > 0 ? "error" : "neutral"} />
-                        <Mini value={Math.max(0, status.total - status.processed)} label="remaining" tone="neutral" />
+                        <Mini value={status.succeeded} label="converted" tone="success" animate />
+                        <Mini value={status.failed}    label="failed"    tone={status.failed > 0 ? "error" : "neutral"} animate />
+                        <Mini value={Math.max(0, status.total - status.processed)} label="remaining" tone="neutral" animate />
                     </div>
+
+                    {/* Live monthly-credit gauge — depletes image-by-image
+                        thanks to the X-Quota-* headers piped through the
+                        bulk tick. Hidden on Unlimited plan (no cap). */}
+                    {quota && (
+                        <div className="mb-4">
+                            <QuotaProgressBar
+                                used={quota.imagesUsed}
+                                limit={quota.imagesEffective || quota.imagesLimit}
+                                unlimited={unlimited}
+                                label="Monthly credits"
+                            />
+                        </div>
+                    )}
 
                     <Button variant="ghost" size="sm" onClick={onCancel}>Cancel job</Button>
                 </div>
             </div>
             <div className="mt-5 pt-4 border-t border-ink-100">
-                <div className="text-[10px] font-mono uppercase tracking-wider text-ink-400 mb-2">
-                    LIVE · processing in batches
+                <div className="text-[10px] font-mono uppercase tracking-wider text-ink-400 mb-3">
+                    LIVE · last conversion + cumulative savings
                 </div>
-                <FilesStream count={12} kind="compress" />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    <CurrentlyProcessing item={status.lastItem} />
+                    <SavingsCounter
+                        bytesIn={status.savings?.bytesIn ?? 0}
+                        bytesOut={status.savings?.bytesOut ?? 0}
+                        compact
+                    />
+                </div>
             </div>
         </Card>
     );
 }
 
-function Mini({ value, label, tone }: { value: number; label: string; tone: "success" | "error" | "neutral" }) {
+function Mini({ value, label, tone, animate = false }: { value: number; label: string; tone: "success" | "error" | "neutral"; animate?: boolean }) {
     const color = tone === "success" ? "text-emerald-600" : tone === "error" ? "text-red-600" : "text-ink-700";
+    // Tween the displayed value when animate is on. ease-out 400ms feels
+    // tactile on per-batch updates without lagging behind reality.
+    const animatedValue = useCountUp(value, animate ? 400 : 0);
+    const display = animate ? Math.round(animatedValue) : value;
     return (
         <div className="rounded-lg bg-white border border-ink-200 px-3 py-2 text-center">
-            <div className={`text-xl font-bold tabular-nums ${color}`}>{value.toLocaleString()}</div>
+            <div className={`text-xl font-bold tabular-nums ${color}`}>{display.toLocaleString()}</div>
             <div className="text-[11px] uppercase tracking-wider text-ink-500 font-medium">{label}</div>
         </div>
     );
@@ -777,6 +842,25 @@ function CompletionCard({ status, onDismiss, onUpgrade, isFree }: {
                     <strong>{status.succeeded.toLocaleString()}</strong> image{status.succeeded > 1 ? "s" : ""} converted
                     {status.failed > 0 && <> · <span className="text-red-600">{status.failed} failed</span></>}
                 </p>
+                {/* Cumulative savings hero — the metric that actually
+                    answers "what did I just buy?". Only rendered when
+                    the run produced measurable savings (skipped if a
+                    bulk hit only AVIF-oversized inputs, etc.). */}
+                {status.savings && status.savings.bytesIn > status.savings.bytesOut && (
+                    <div className="mt-5 mx-auto max-w-md">
+                        <div className="text-[11px] uppercase tracking-wider text-emerald-700 font-medium mb-1">
+                            You freed
+                        </div>
+                        <div className="text-5xl font-bold text-emerald-700 tabular-nums leading-none">
+                            {fmtBytes(status.savings.bytesIn - status.savings.bytesOut)}
+                        </div>
+                        <div className="text-xs text-ink-500 mt-2 tabular-nums">
+                            {fmtBytes(status.savings.bytesIn)} → <span className="text-emerald-700 font-medium">{fmtBytes(status.savings.bytesOut)}</span>
+                            {" · "}
+                            {Math.round(((status.savings.bytesIn - status.savings.bytesOut) / status.savings.bytesIn) * 100)}% smaller
+                        </div>
+                    </div>
+                )}
                 <div className="grid grid-cols-3 gap-3 max-w-md mx-auto mt-5">
                     <Mini value={status.succeeded} label="converted" tone="success" />
                     <Mini value={status.succeeded * 7} label="sizes processed" tone="neutral" />

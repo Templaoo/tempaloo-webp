@@ -54,6 +54,17 @@ class Tempaloo_WebP_URL_Filter {
         add_filter( 'manage_upload_columns',        [ $this, 'media_column' ] );
         add_action( 'manage_media_custom_column',   [ $this, 'media_column_value' ], 10, 2 );
 
+        // Bulk row-actions on wp-admin/upload.php list view. Native
+        // WordPress pattern: filter to register the actions in the
+        // dropdown, action to handle the redirect with selected ids.
+        // Lets users optimize / restore N attachments at once via
+        // the standard "Bulk actions" dropdown above the list.
+        add_filter( 'bulk_actions-upload',          [ $this, 'register_bulk_actions' ] );
+        add_filter( 'handle_bulk_actions-upload',   [ $this, 'handle_bulk_actions' ], 10, 3 );
+        // Renders a notice on the redirect-back showing how many
+        // attachments were processed in the last bulk action.
+        add_action( 'admin_notices',                [ $this, 'render_bulk_notice' ] );
+
         // "Tempaloo optimization" field in the attachment edit panel — shown
         // both in the post.php?post=N edit screen AND in the right sidebar
         // of the Media Library modal (the one that pops up after an upload
@@ -76,6 +87,10 @@ class Tempaloo_WebP_URL_Filter {
         // Per-row "Convert now" button on wp-admin/upload.php — converts
         // a single attachment in-place without leaving the Media Library.
         add_action( 'wp_ajax_tempaloo_convert_one', [ $this, 'ajax_convert_one' ] );
+        // Per-row "Restore original" button — symmetric to convert_one,
+        // deletes our .webp / .avif siblings and clears conversion meta
+        // for one attachment without leaving the Media Library.
+        add_action( 'wp_ajax_tempaloo_restore_one', [ $this, 'ajax_restore_one' ] );
     }
 
     /**
@@ -141,6 +156,75 @@ class Tempaloo_WebP_URL_Filter {
             'message' => $message,
             'code'    => $code,
         ], 500 );
+    }
+
+    /**
+     * One-click restore of a single attachment from the Media Library
+     * "Optimized" column. Symmetric counterpart to ajax_convert_one:
+     * same nonce/capability shape, same admin-ajax action prefix, same
+     * shaped JSON response. Delegates the actual work to
+     * Tempaloo_WebP_REST::restore_single_attachment so the bulk
+     * /restore endpoint, the per-image /restore-one REST endpoint, and
+     * this Media Library button all run identical code — no risk of
+     * "restore via X works, restore via Y leaves orphans" drift.
+     */
+    public function ajax_restore_one() {
+        $post_id = isset( $_POST['id'] ) ? absint( wp_unslash( $_POST['id'] ) ) : 0;
+        if ( $post_id <= 0 ) {
+            wp_send_json_error( [ 'message' => __( 'Missing attachment id', 'tempaloo-webp' ) ], 400 );
+        }
+        // Per-attachment nonce — same scheme as convert_one. Means a
+        // page that lists 50 attachments has 50 distinct nonces, so
+        // CSRFing one row doesn't compromise the others.
+        check_ajax_referer( 'tempaloo_restore_one_' . $post_id, 'nonce' );
+        if ( ! current_user_can( 'upload_files' ) ) {
+            wp_send_json_error( [ 'message' => __( 'Not allowed', 'tempaloo-webp' ) ], 403 );
+        }
+
+        $r = Tempaloo_WebP_REST::restore_single_attachment( $post_id );
+
+        // Page-cache bust + Activity log only when something actually
+        // changed. Restoring an already-restored image stays silent
+        // so a frantic user who clicks twice doesn't pollute the log
+        // with empty events.
+        if ( $r['restored'] > 0 || $r['files_removed'] > 0 ) {
+            if ( method_exists( 'Tempaloo_WebP_Plugin', 'purge_page_caches' ) ) {
+                Tempaloo_WebP_Plugin::purge_page_caches();
+            }
+            Tempaloo_WebP_Activity::log(
+                'restore',
+                $r['delete_failures'] > 0 ? 'error' : 'warn',
+                $r['delete_failures'] > 0
+                    ? sprintf(
+                        /* translators: 1: attachment id, 2: files removed, 3: delete failures */
+                        __( 'Restored #%1$d · %2$d files removed · %3$d delete failure(s)', 'tempaloo-webp' ),
+                        $post_id, $r['files_removed'], $r['delete_failures']
+                    )
+                    : sprintf(
+                        /* translators: 1: attachment id, 2: files removed */
+                        __( 'Restored #%1$d · %2$d files removed', 'tempaloo-webp' ),
+                        $post_id, $r['files_removed']
+                    ),
+                [
+                    'attachment_id'   => $post_id,
+                    'files_removed'   => $r['files_removed'],
+                    'delete_failures' => $r['delete_failures'],
+                    'failure_samples' => $r['failure_samples'],
+                    'source'          => 'media_library_button',
+                ]
+            );
+        }
+
+        wp_send_json_success( [
+            'restored'       => (int) $r['restored'],
+            'filesRemoved'   => (int) $r['files_removed'],
+            'deleteFailures' => (int) $r['delete_failures'],
+            'failureSamples' => $r['failure_samples'],
+            // Empty=true when the attachment had no conversion meta —
+            // UI renders "Already restored" instead of "0 files removed"
+            // which feels like a silent failure.
+            'wasNoOp'        => $r['restored'] === 0,
+        ] );
     }
 
     /**
@@ -333,6 +417,14 @@ class Tempaloo_WebP_URL_Filter {
                     'ajaxUrl' => admin_url( 'admin-ajax.php' ),
                 ]
             );
+            // Pro design styles for the Optimized column — badge,
+            // detail accordion, inline confirm panel, flash messages.
+            wp_enqueue_style(
+                'tempaloo-webp-media-column',
+                TEMPALOO_WEBP_URL . 'assets/media-column.css',
+                [],
+                TEMPALOO_WEBP_VERSION
+            );
         }
     }
 
@@ -375,37 +467,376 @@ class Tempaloo_WebP_URL_Filter {
 
     public function media_column_value( $column, $post_id ) {
         if ( 'tempaloo_webp' !== $column ) return;
+        $post_id = (int) $post_id;
+
+        // Both nonces emitted on every row so the JS can flip between
+        // convert ↔ restore in-place without a server round-trip to
+        // refresh the action token after each click.
+        $licensed   = ! empty( Tempaloo_WebP_Plugin::get_settings()['license_valid'] );
+        $supported  = Tempaloo_WebP_Converter::is_supported_attachment( $post_id );
+        $convert_nonce = ( $licensed && $supported ) ? wp_create_nonce( 'tempaloo_convert_one_' . $post_id ) : '';
+        $restore_nonce = wp_create_nonce( 'tempaloo_restore_one_' . $post_id );
+
         $s = $this->compute_attachment_savings( $post_id );
+
+        printf(
+            '<div class="tempaloo-media-cell" data-id="%d" data-convert-nonce="%s" data-restore-nonce="%s">',
+            $post_id,
+            esc_attr( $convert_nonce ),
+            esc_attr( $restore_nonce )
+        );
+
         if ( ! $s ) {
-            // Not yet converted — surface a one-click "Convert now"
-            // button straight in the column. Same exact code path as
-            // bulk (convert_all_sizes in 'auto' mode → 1 credit) but
-            // without the user having to leave the Media Library.
-            // Only render if the attachment is actually convertible
-            // (jpeg/png/gif) and the license is active — otherwise
-            // we'd just throw away the click.
-            $licensed   = ! empty( Tempaloo_WebP_Plugin::get_settings()['license_valid'] );
-            $supported  = Tempaloo_WebP_Converter::is_supported_attachment( (int) $post_id );
             if ( ! $licensed || ! $supported ) {
-                echo '<span style="color:#9a6700;">—</span>';
+                echo '<span class="tempaloo-cell-na">—</span></div>';
                 return;
             }
-            $nonce = wp_create_nonce( 'tempaloo_convert_one_' . (int) $post_id );
             printf(
-                '<button type="button" class="button button-small tempaloo-convert-now" data-id="%d" data-nonce="%s">%s</button>',
-                (int) $post_id,
-                esc_attr( $nonce ),
+                '<button type="button" class="button button-small tempaloo-convert-now" data-id="%d" data-nonce="%s">%s</button></div>',
+                $post_id,
+                esc_attr( $convert_nonce ),
                 esc_html__( 'Convert now', 'tempaloo-webp' )
             );
             return;
         }
+
+        // Converted state — full pro layout. Renders three regions:
+        //
+        //   1. Summary (always visible) — format badge, savings %,
+        //      bytes line, action buttons (Detail toggle + Restore).
+        //   2. Detail accordion (hidden by default) — per-size
+        //      breakdown table + meta footer (format, conversion time).
+        //      Toggled by the chevron button.
+        //   3. Confirm panel (hidden) — destructive-action confirmation
+        //      shown when the user clicks Restore. Replaces the native
+        //      confirm() dialog with an inline, themed dialog that
+        //      stays scoped to the row.
+        //
+        // All three regions are server-rendered with `hidden` attributes
+        // so the JS only flips visibility — no innerHTML rebuilds, no
+        // chance of leaving the cell in an inconsistent state.
+        $format_raw = isset( $s['format'] ) ? (string) $s['format'] : 'webp';
+        $format     = strtoupper( $format_raw );
+        $badge_class = 'tempaloo-badge-webp';
+        if ( 'AVIF' === $format )      $badge_class = 'tempaloo-badge-avif';
+        if ( 'BOTH' === $format
+            || 'WEBP+AVIF' === $format ) $badge_class = 'tempaloo-badge-both';
+
+        // Per-size breakdown for the Detail accordion. Walks the same
+        // (original + WP sizes) source list compute_attachment_savings
+        // walked, but tracks each path individually so the UI can
+        // render one row per size with its bytes_in / bytes_out / pct.
+        $rows = [];
+        $orig_file = get_attached_file( $post_id );
+        $meta_full = wp_get_attachment_metadata( $post_id );
+        if ( $orig_file ) {
+            $size_paths = [ [ 'label' => 'original', 'path' => $orig_file ] ];
+            if ( is_array( $meta_full ) && ! empty( $meta_full['sizes'] ) ) {
+                foreach ( $meta_full['sizes'] as $size_key => $size_meta ) {
+                    if ( empty( $size_meta['file'] ) ) continue;
+                    $size_paths[] = [
+                        'label' => (string) $size_key,
+                        'path'  => trailingslashit( dirname( $orig_file ) ) . $size_meta['file'],
+                    ];
+                }
+            }
+            $picked_fmt = ( 'AVIF' === $format ) ? 'avif' : 'webp';
+            foreach ( $size_paths as $sp ) {
+                if ( ! file_exists( $sp['path'] ) ) continue;
+                $sib = $sp['path'] . '.' . $picked_fmt;
+                if ( ! file_exists( $sib ) ) {
+                    // Try the other format if the primary picked is absent
+                    // (dual-format edge case where WebP missed for one size).
+                    $alt = ( $picked_fmt === 'webp' ) ? 'avif' : 'webp';
+                    if ( file_exists( $sp['path'] . '.' . $alt ) ) {
+                        $sib = $sp['path'] . '.' . $alt;
+                    } else {
+                        continue;
+                    }
+                }
+                $rows[] = [
+                    'label' => $sp['label'],
+                    'in'    => filesize( $sp['path'] ),
+                    'out'   => filesize( $sib ),
+                ];
+            }
+        }
+        // Pre-build the breakdown rows HTML so the printf() below stays readable.
+        $rows_html = '';
+        foreach ( $rows as $r ) {
+            $pct = $r['in'] > 0 ? max( 0, (int) round( ( 1 - ( $r['out'] / $r['in'] ) ) * 100 ) ) : 0;
+            $rows_html .= sprintf(
+                '<div class="tempaloo-detail-row">' .
+                    '<span class="tempaloo-detail-name">%s</span>' .
+                    '<span class="tempaloo-detail-bytes">%s → <strong>%s</strong></span>' .
+                    '<span class="tempaloo-detail-pct">−%d%%</span>' .
+                '</div>',
+                esc_html( $r['label'] ),
+                esc_html( size_format( $r['in'] ) ),
+                esc_html( size_format( $r['out'] ) ),
+                $pct
+            );
+        }
+
+        $converted_at = isset( $s['at'] ) ? (int) $s['at'] : 0;
+        $when_label = $converted_at > 0
+            ? sprintf(
+                /* translators: %s: human-readable time difference, e.g. "2 hours" */
+                __( 'Converted %s ago', 'tempaloo-webp' ),
+                human_time_diff( $converted_at )
+            )
+            : __( 'Converted', 'tempaloo-webp' );
+
         printf(
-            '<span style="color:#1a7f37;font-weight:600;">✓ %s</span><br><span style="color:#555;font-size:11px;">−%d%% · %s → %s</span>',
-            esc_html( $s['format'] ),
+            '<div class="tempaloo-cell-summary">' .
+                '<div class="tempaloo-cell-row">' .
+                    '<span class="tempaloo-badge %s">%s</span>' .
+                    '<span class="tempaloo-saved">−%d%%</span>' .
+                    '<button type="button" class="tempaloo-detail-toggle" aria-expanded="false" aria-label="%s">' .
+                        '<span class="tempaloo-detail-toggle-label">%s</span>' .
+                        '<svg class="tempaloo-chevron" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' .
+                            '<polyline points="3 5 6 8 9 5" />' .
+                        '</svg>' .
+                    '</button>' .
+                '</div>' .
+                '<div class="tempaloo-cell-bytes">%s → <strong>%s</strong></div>' .
+                '<div class="tempaloo-cell-actions">' .
+                    '<button type="button" class="tempaloo-restore-now" data-id="%d" data-nonce="%s" title="%s">' .
+                        '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' .
+                            '<polyline points="1 4 1 10 7 10" />' .
+                            '<path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />' .
+                        '</svg>' .
+                        '<span>%s</span>' .
+                    '</button>' .
+                '</div>' .
+            '</div>' .
+            '<div class="tempaloo-cell-detail" hidden>' .
+                '%s' .
+                '<div class="tempaloo-detail-meta">%s · %d %s</div>' .
+            '</div>' .
+            '<div class="tempaloo-cell-confirm" hidden role="dialog" aria-label="%s">' .
+                '<div class="tempaloo-confirm-icon">' .
+                    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' .
+                        '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />' .
+                        '<line x1="12" y1="9" x2="12" y2="13" />' .
+                        '<line x1="12" y1="17" x2="12.01" y2="17" />' .
+                    '</svg>' .
+                '</div>' .
+                '<div class="tempaloo-confirm-body">' .
+                    '<div class="tempaloo-confirm-title">%s</div>' .
+                    '<div class="tempaloo-confirm-text">%s</div>' .
+                    '<div class="tempaloo-confirm-actions">' .
+                        '<button type="button" class="tempaloo-confirm-cancel">%s</button>' .
+                        '<button type="button" class="tempaloo-confirm-yes" data-id="%d" data-nonce="%s">%s</button>' .
+                    '</div>' .
+                '</div>' .
+            '</div>' .
+        '</div>',
+            // .tempaloo-cell-summary
+            esc_attr( $badge_class ), esc_html( $format ),
             (int) $s['saved_pct'],
+            esc_attr__( 'Toggle conversion details', 'tempaloo-webp' ),
+            esc_html__( 'Detail', 'tempaloo-webp' ),
             esc_html( size_format( $s['bytes_in'] ) ),
-            esc_html( size_format( $s['bytes_out'] ) )
+            esc_html( size_format( $s['bytes_out'] ) ),
+            $post_id, esc_attr( $restore_nonce ),
+            esc_attr__( 'Delete the .webp / .avif siblings and revert this image to its uploaded state.', 'tempaloo-webp' ),
+            esc_html__( 'Restore', 'tempaloo-webp' ),
+            // .tempaloo-cell-detail
+            $rows_html, // already escaped above
+            esc_html( $when_label ),
+            (int) $s['sizes'],
+            esc_html( _n( 'size', 'sizes', (int) $s['sizes'], 'tempaloo-webp' ) ),
+            // .tempaloo-cell-confirm
+            esc_attr__( 'Confirm restore', 'tempaloo-webp' ),
+            esc_html__( 'Restore this image?', 'tempaloo-webp' ),
+            esc_html__( 'This deletes the .webp / .avif siblings and clears the conversion record. Your original image stays untouched.', 'tempaloo-webp' ),
+            esc_html__( 'Cancel', 'tempaloo-webp' ),
+            $post_id, esc_attr( $restore_nonce ),
+            esc_html__( 'Yes, restore', 'tempaloo-webp' )
         );
+    }
+
+    /**
+     * Adds our two entries to the wp-admin/upload.php "Bulk actions"
+     * dropdown above the list view. Inserted alongside (not replacing)
+     * the default Trash / Permanently delete actions.
+     */
+    public function register_bulk_actions( $actions ) {
+        if ( ! is_array( $actions ) ) $actions = [];
+        $actions['tempaloo_optimize'] = __( 'Optimize with Tempaloo', 'tempaloo-webp' );
+        $actions['tempaloo_restore']  = __( 'Restore originals (Tempaloo)', 'tempaloo-webp' );
+        return $actions;
+    }
+
+    /**
+     * Handles the form submit when a user picks one of our bulk
+     * actions and clicks Apply on wp-admin/upload.php.
+     *
+     * Native WP contract: receives the action slug, the array of
+     * selected post IDs, and the current redirect-to URL. We process
+     * the IDs synchronously, then return a URL with our own query
+     * params so render_bulk_notice() can show a summary banner on
+     * the redirect-back.
+     *
+     * Capability gate: WP core already requires `upload_files` for
+     * the surrounding screen, but we double-check here so a
+     * forwarded URL with malicious post_ids can't execute without
+     * the right user.
+     */
+    public function handle_bulk_actions( $redirect, $action, $post_ids ) {
+        if ( ! is_array( $post_ids ) || empty( $post_ids ) ) return $redirect;
+        if ( 'tempaloo_optimize' !== $action && 'tempaloo_restore' !== $action ) {
+            return $redirect;
+        }
+        if ( ! current_user_can( 'upload_files' ) ) return $redirect;
+
+        // Cap to a sane upper bound so a thousand-image bulk submit
+        // doesn't blow the PHP timeout on shared hosting. The bulk
+        // page (with its retry queue + progress bar) is the better
+        // path for libraries that big — this is for "select 30,
+        // click apply, done in 30s".
+        $post_ids = array_slice( array_map( 'absint', $post_ids ), 0, 100 );
+
+        $settings = Tempaloo_WebP_Plugin::get_settings();
+
+        if ( 'tempaloo_optimize' === $action ) {
+            $converted = 0; $failed = 0; $skipped = 0;
+            // Stop pre-emptively if no license — every iteration
+            // would just hit the same gate inside convert_all_sizes.
+            if ( empty( $settings['license_valid'] ) ) {
+                return add_query_arg( [
+                    'tempaloo_bulk'   => 'optimize',
+                    'tempaloo_failed' => count( $post_ids ),
+                    'tempaloo_reason' => 'no_license',
+                ], $redirect );
+            }
+            foreach ( $post_ids as $aid ) {
+                if ( ! Tempaloo_WebP_Converter::is_supported_attachment( $aid ) ) {
+                    $skipped++;
+                    continue;
+                }
+                // Idempotency: if it's already converted, don't burn
+                // a credit running the same conversion again. The
+                // user can use Restore + Optimize to force a redo.
+                if ( ! empty( Tempaloo_WebP_Plugin::get_conversion_meta( $aid ) ) ) {
+                    $skipped++;
+                    continue;
+                }
+                $meta = wp_get_attachment_metadata( $aid );
+                if ( ! is_array( $meta ) ) $meta = [];
+                $r = Tempaloo_WebP_Converter::convert_for_upload( $aid, $meta, $settings, 'auto' );
+                if ( $r['converted'] > 0 ) {
+                    wp_update_attachment_metadata( $aid, $r['metadata'] );
+                    $converted++;
+                } else {
+                    $failed++;
+                }
+            }
+            return add_query_arg( [
+                'tempaloo_bulk'      => 'optimize',
+                'tempaloo_converted' => $converted,
+                'tempaloo_failed'    => $failed,
+                'tempaloo_skipped'   => $skipped,
+            ], $redirect );
+        }
+
+        // Restore path — uses the same per-attachment helper as the
+        // /restore-one REST endpoint and the Media Library row button,
+        // so behavior stays in lockstep across all callers.
+        $restored = 0; $files_removed = 0; $delete_failures = 0;
+        foreach ( $post_ids as $aid ) {
+            $r = Tempaloo_WebP_REST::restore_single_attachment( $aid );
+            $restored        += $r['restored'];
+            $files_removed   += $r['files_removed'];
+            $delete_failures += $r['delete_failures'];
+        }
+        if ( $restored > 0 || $files_removed > 0 ) {
+            if ( method_exists( 'Tempaloo_WebP_Plugin', 'purge_page_caches' ) ) {
+                Tempaloo_WebP_Plugin::purge_page_caches();
+            }
+            Tempaloo_WebP_Activity::log(
+                'restore',
+                $delete_failures > 0 ? 'error' : 'warn',
+                sprintf(
+                    /* translators: 1: attachments restored, 2: files removed, 3: delete failures */
+                    __( 'Bulk restore · %1$d attachments · %2$d files removed · %3$d failure(s)', 'tempaloo-webp' ),
+                    $restored, $files_removed, $delete_failures
+                ),
+                [
+                    'restored'        => $restored,
+                    'files_removed'   => $files_removed,
+                    'delete_failures' => $delete_failures,
+                    'source'          => 'media_library_bulk_action',
+                ]
+            );
+        }
+        return add_query_arg( [
+            'tempaloo_bulk'      => 'restore',
+            'tempaloo_restored'  => $restored,
+            'tempaloo_removed'   => $files_removed,
+            'tempaloo_failures'  => $delete_failures,
+        ], $redirect );
+    }
+
+    /**
+     * Renders a single dismissible admin notice on wp-admin/upload.php
+     * after a bulk action redirects back. Reads our query params,
+     * formats a human summary, then bails — so the notice doesn't
+     * leak onto every page load. Native WP look (notice-success /
+     * notice-warning) so it blends with the surrounding UI.
+     */
+    public function render_bulk_notice() {
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        if ( empty( $_GET['tempaloo_bulk'] ) ) return;
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        $kind = sanitize_key( wp_unslash( $_GET['tempaloo_bulk'] ) );
+        $screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+        if ( $screen && 'upload' !== $screen->base ) return;
+
+        if ( 'optimize' === $kind ) {
+            $reason   = isset( $_GET['tempaloo_reason'] )    ? sanitize_key( wp_unslash( $_GET['tempaloo_reason'] ) ) : '';
+            $converted = isset( $_GET['tempaloo_converted'] ) ? (int) $_GET['tempaloo_converted'] : 0;
+            $failed    = isset( $_GET['tempaloo_failed'] )    ? (int) $_GET['tempaloo_failed']    : 0;
+            $skipped   = isset( $_GET['tempaloo_skipped'] )   ? (int) $_GET['tempaloo_skipped']   : 0;
+
+            if ( 'no_license' === $reason ) {
+                printf(
+                    '<div class="notice notice-warning is-dismissible"><p>%s</p></div>',
+                    esc_html__( 'Tempaloo: activate a license to optimize images.', 'tempaloo-webp' )
+                );
+                return;
+            }
+
+            $class = $failed > 0 ? 'notice-warning' : 'notice-success';
+            printf(
+                '<div class="notice %s is-dismissible"><p>%s</p></div>',
+                esc_attr( $class ),
+                esc_html( sprintf(
+                    /* translators: 1: converted count, 2: skipped count, 3: failed count */
+                    __( 'Tempaloo: %1$d optimized · %2$d skipped (already done or unsupported) · %3$d failed', 'tempaloo-webp' ),
+                    $converted, $skipped, $failed
+                ) )
+            );
+            return;
+        }
+
+        if ( 'restore' === $kind ) {
+            $restored = isset( $_GET['tempaloo_restored'] ) ? (int) $_GET['tempaloo_restored'] : 0;
+            $removed  = isset( $_GET['tempaloo_removed'] )  ? (int) $_GET['tempaloo_removed']  : 0;
+            $failures = isset( $_GET['tempaloo_failures'] ) ? (int) $_GET['tempaloo_failures'] : 0;
+
+            $class = $failures > 0 ? 'notice-warning' : 'notice-success';
+            printf(
+                '<div class="notice %s is-dismissible"><p>%s</p></div>',
+                esc_attr( $class ),
+                esc_html( sprintf(
+                    /* translators: 1: attachments restored, 2: files removed, 3: delete failures */
+                    __( 'Tempaloo: %1$d images restored · %2$d files removed · %3$d delete failure(s)', 'tempaloo-webp' ),
+                    $restored, $removed, $failures
+                ) )
+            );
+        }
     }
 
     public function maybe_replace_url( $url, $attachment_id ) {

@@ -15,7 +15,7 @@ const NUDGE_DISMISS_KEY = "tempaloo_upgrade_nudge_dismissed_until";
  *     30-day dismiss memory in localStorage so we don't pester users who
  *     said "no thanks".
  */
-export default function Overview({ state, onState, freeQuota, refreshing = false, onGoToUpgrade, onGoToBulk, onGoToActivity }: {
+export default function Overview({ state, onState, freeQuota, refreshing = false, lastStateAt, onRefresh, asyncPending = 0, onGoToUpgrade, onGoToBulk, onGoToActivity }: {
     state: AppState;
     onState: (s: AppState) => void;
     freeQuota: number | null;
@@ -23,6 +23,15 @@ export default function Overview({ state, onState, freeQuota, refreshing = false
      *  or polling tick). Drives skeletons over the stat cards instead
      *  of leaving stale numbers on screen. */
     refreshing?: boolean;
+    /** Wall-clock of the last successful /state response. Drives the
+     *  freshness pill in the header. */
+    lastStateAt?: number;
+    /** Forces a /state refresh — bound to the freshness pill click. */
+    onRefresh?: () => Promise<void> | void;
+    /** Number of uploads whose async loopback hasn't completed yet.
+     *  When > 0, the pill switches to a "Converting N uploads…" state
+     *  to explain why the on-screen counter is about to jump. */
+    asyncPending?: number;
     onGoToUpgrade?: () => void;
     onGoToBulk?: () => void;
     onGoToActivity?: () => void;
@@ -111,6 +120,17 @@ export default function Overview({ state, onState, freeQuota, refreshing = false
 
     return (
         <div className="grid gap-6">
+            {/* ─── Freshness pill (only when license is valid — Activate
+                 hero already takes care of "no license yet" state) ────── */}
+            {state.license.valid && lastStateAt && onRefresh && (
+                <FreshnessPill
+                    lastStateAt={lastStateAt}
+                    refreshing={refreshing}
+                    asyncPending={asyncPending}
+                    onRefresh={onRefresh}
+                />
+            )}
+
             {/* ─── Performance scorecard (hero) ──────────────────────────── */}
             {state.license.valid && (
                 refreshing && (state.savings?.converted ?? 0) === 0 ? (
@@ -765,6 +785,95 @@ function SiteLimitPanel({ onGoToUpgrade, onDismiss }: { onGoToUpgrade?: () => vo
                     </div>
                 </div>
             </div>
+        </div>
+    );
+}
+
+/**
+ * FreshnessPill — small "Updated 12s ago · ↻" indicator at the top of
+ * Overview. Solves the support question "why do I have to click Sync
+ * every time?" by showing exactly how stale the on-screen numbers are
+ * and giving a one-click way to force a refresh — without invoking
+ * the heavier license-verify roundtrip the Sync button does.
+ *
+ * Re-renders itself every second to keep the relative time honest.
+ * Subdued visual: ink-50 background, no border weight, sits inline as
+ * a chip — disappears into the page until the user wants it.
+ */
+function FreshnessPill({ lastStateAt, refreshing, asyncPending = 0, onRefresh }: {
+    lastStateAt: number;
+    refreshing?: boolean;
+    asyncPending?: number;
+    onRefresh: () => Promise<void> | void;
+}) {
+    // Tick the rendered string forward every second. Cheap (one
+    // setState per second on Overview only) and avoids a stale
+    // "12s ago" stuck on screen for minutes.
+    const [, force] = useState(0);
+    useEffect(() => {
+        const id = window.setInterval(() => force(n => n + 1), 1000);
+        return () => window.clearInterval(id);
+    }, []);
+
+    const ago = Math.max(0, Math.round((Date.now() - lastStateAt) / 1000));
+    const isPending = asyncPending > 0;
+
+    // Three priority states:
+    //   1. Active conversion in progress (asyncPending > 0) — explain
+    //      why the visible counter is about to jump.
+    //   2. Refresh in flight — show "Updating…".
+    //   3. Idle — show relative freshness time.
+    const label = isPending
+        ? `Converting ${asyncPending} upload${asyncPending > 1 ? "s" : ""}…`
+        : refreshing
+            ? "Updating…"
+            : ago < 5 ? "Just now"
+            : ago < 60 ? `Updated ${ago}s ago`
+            : ago < 3600 ? `Updated ${Math.floor(ago / 60)}m ago`
+            : `Updated ${Math.floor(ago / 3600)}h ago`;
+
+    // Visual nudge when data is starting to feel stale (>30s) —
+    // amber dot to signal "you might want to refresh".
+    const stale = !refreshing && !isPending && ago > 30;
+
+    // Color: brand-blue pulsing for pending, brand-blue for refreshing,
+    // amber for stale, emerald for fresh.
+    const dotColor = isPending
+        ? "bg-brand-500 animate-pulse"
+        : refreshing
+            ? "bg-brand-500 animate-pulse"
+            : stale
+                ? "bg-amber-500"
+                : "bg-emerald-500";
+
+    return (
+        <div className="flex items-center justify-end -mb-3">
+            <button
+                type="button"
+                onClick={() => onRefresh()}
+                disabled={refreshing}
+                className={`inline-flex items-center gap-2 text-xs font-medium transition px-2.5 py-1 rounded-full disabled:opacity-60 disabled:cursor-not-allowed ${
+                    isPending
+                        ? "bg-brand-50 text-brand-700 hover:bg-brand-100"
+                        : "bg-ink-50/60 text-ink-500 hover:text-ink-900 hover:bg-ink-100"
+                }`}
+                title={isPending
+                    ? `${asyncPending} upload${asyncPending > 1 ? "s" : ""} still converting in the background`
+                    : "Refresh quota and stats now"}
+            >
+                <span className={`h-1.5 w-1.5 rounded-full ${dotColor}`} aria-hidden />
+                <span className="tabular-nums">{label}</span>
+                <svg
+                    width="12" height="12" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                    className={refreshing || isPending ? "animate-spin" : ""}
+                    aria-hidden
+                >
+                    <polyline points="23 4 23 10 17 10" />
+                    <polyline points="1 20 1 14 7 14" />
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                </svg>
+            </button>
         </div>
     );
 }

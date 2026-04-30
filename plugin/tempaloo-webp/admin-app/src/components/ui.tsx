@@ -732,14 +732,30 @@ export function Confetti({ active }: { active: boolean }) {
  * SVG progress ring with a tweened percentage in the center.
  * Reused by the bulk live view + future onboarding flows.
  */
-export function ProgressRing({ value, size = 140, label, sub }: { value: number; size?: number; label?: string; sub?: string }) {
+export function ProgressRing({ value, size = 140, label, sub, shimmer = false }: { value: number; size?: number; label?: string; sub?: string; shimmer?: boolean }) {
     const stroke = 10;
     const radius = (size - stroke) / 2;
     const C = 2 * Math.PI * radius;
     const safe = Math.max(0, Math.min(100, value));
     return (
         <div className="relative" style={{ width: size, height: size }}>
-            <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+            {/* Rotating conic-gradient overlay behind the SVG. Signals
+                "actively working" without burning eyeballs — opacity .12,
+                3s rotation, only mounted when shimmer is on. */}
+            {shimmer && (
+                <div
+                    aria-hidden
+                    className="absolute inset-0 rounded-full pointer-events-none"
+                    style={{
+                        background: "conic-gradient(from 0deg, transparent 0deg, rgba(42,87,230,0.45) 90deg, transparent 200deg)",
+                        opacity: 0.12,
+                        animation: "tempaloo-ring-shimmer 3s linear infinite",
+                        WebkitMaskImage: `radial-gradient(circle, transparent ${radius - stroke}px, black ${radius - stroke + 1}px, black ${radius + 1}px, transparent ${radius + 2}px)`,
+                        maskImage: `radial-gradient(circle, transparent ${radius - stroke}px, black ${radius - stroke + 1}px, black ${radius + 1}px, transparent ${radius + 2}px)`,
+                    }}
+                />
+            )}
+            <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="relative">
                 <circle cx={size / 2} cy={size / 2} r={radius} stroke="rgb(229 231 235)" strokeWidth={stroke} fill="none" />
                 <circle
                     cx={size / 2} cy={size / 2} r={radius}
@@ -764,8 +780,278 @@ export function ProgressRing({ value, size = 140, label, sub }: { value: number;
                 {label && <div className="text-xs text-ink-500 mt-0.5">{label}</div>}
                 {sub && <div className="text-[10px] text-ink-400 mt-0.5 font-mono">{sub}</div>}
             </div>
+            <style>{`
+                @keyframes tempaloo-ring-shimmer { to { transform: rotate(360deg); } }
+                @media (prefers-reduced-motion: reduce) {
+                    [style*="tempaloo-ring-shimmer"] { animation: none !important; }
+                }
+            `}</style>
         </div>
     );
+}
+
+/**
+ * QuotaProgressBar — horizontal "fuel gauge" of monthly credits, ticking
+ * down image-by-image during a bulk run. Designed to feel like a budget
+ * being spent — green at full, ambering as it depletes, red below 10%.
+ * Animations are intentionally short (300ms) so per-image updates feel
+ * snappy ("ding ding ding") rather than laggy.
+ *
+ * Pass remaining/limit; component handles formatting + color thresholds.
+ * unlimited=true displays an infinity glyph and skips the bar (used for
+ * Unlimited plan).
+ */
+export function QuotaProgressBar({ used, limit, unlimited = false, label }: { used: number; limit: number; unlimited?: boolean; label?: string }) {
+    const remaining = Math.max(0, limit - used);
+    const pct = limit > 0 ? Math.max(0, Math.min(100, (remaining / limit) * 100)) : 0;
+    const animatedRemaining = useCountUp(remaining, 300);
+    const animatedPct = useCountUp(pct, 300);
+
+    // Color thresholds — green > 30%, amber 10–30%, red < 10%.
+    let barColor = "bg-emerald-500";
+    let textColor = "text-emerald-700";
+    if (pct < 10) { barColor = "bg-red-500"; textColor = "text-red-700"; }
+    else if (pct < 30) { barColor = "bg-amber-500"; textColor = "text-amber-700"; }
+
+    return (
+        <div className="w-full">
+            <div className="flex items-baseline justify-between mb-1.5">
+                <span className="text-xs font-medium uppercase tracking-wider text-ink-500">
+                    {label ?? "Credits remaining"}
+                </span>
+                <span className={`text-sm font-bold tabular-nums ${unlimited ? "text-ink-700" : textColor}`}>
+                    {unlimited ? (
+                        <>∞ <span className="text-xs font-normal text-ink-500">unlimited</span></>
+                    ) : (
+                        <>{Math.round(animatedRemaining).toLocaleString()} <span className="text-xs font-normal text-ink-500">/ {limit.toLocaleString()}</span></>
+                    )}
+                </span>
+            </div>
+            {!unlimited && (
+                <div className="relative h-2 rounded-full bg-ink-100 overflow-hidden">
+                    <div
+                        className={`absolute inset-y-0 left-0 ${barColor} transition-colors duration-300`}
+                        style={{
+                            width: `${animatedPct}%`,
+                            transition: "width .3s cubic-bezier(.4,0,.2,1), background-color .3s ease",
+                        }}
+                    />
+                    {/* Subtle shimmer sweep across the filled portion to
+                        signal "actively counting" during a run. */}
+                    <div
+                        aria-hidden
+                        className="absolute inset-y-0 left-0 pointer-events-none"
+                        style={{
+                            width: `${animatedPct}%`,
+                            background: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.4) 50%, transparent 100%)",
+                            backgroundSize: "200% 100%",
+                            animation: "tempaloo-bar-shimmer 2s linear infinite",
+                        }}
+                    />
+                </div>
+            )}
+            <style>{`
+                @keyframes tempaloo-bar-shimmer {
+                    0%   { background-position: -200% 0; }
+                    100% { background-position: 200% 0; }
+                }
+                @media (prefers-reduced-motion: reduce) {
+                    [style*="tempaloo-bar-shimmer"] { animation: none !important; }
+                }
+            `}</style>
+        </div>
+    );
+}
+
+/**
+ * SavingsCounter — animates a "X MB freed" total during a bulk run.
+ * Pass cumulative bytesIn / bytesOut from the bulk tick; component
+ * computes savings + percentage, formats the numbers human-readable,
+ * and tweens transitions so each batch update feels tactile.
+ *
+ * Visual: large savings number on the left, percentage badge + bytesIn
+ * vs. bytesOut breakdown on the right. Designed to fit a half-width
+ * card alongside CurrentlyProcessing during a run.
+ */
+export function SavingsCounter({ bytesIn, bytesOut, compact = false }: { bytesIn: number; bytesOut: number; compact?: boolean }) {
+    const saved = Math.max(0, bytesIn - bytesOut);
+    const pct = bytesIn > 0 ? (saved / bytesIn) * 100 : 0;
+    const animatedSaved = useCountUp(saved, 600);
+    const animatedPct = useCountUp(pct, 600);
+
+    if (saved === 0) {
+        return (
+            <div className="rounded-lg bg-ink-50/50 border border-ink-200 px-4 py-3">
+                <div className="text-xs uppercase tracking-wider text-ink-500 font-medium mb-1">
+                    Space freed
+                </div>
+                <div className="text-2xl font-bold text-ink-300 tabular-nums">—</div>
+                <div className="text-[11px] text-ink-400 mt-1">Computing as images convert…</div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="rounded-lg bg-gradient-to-br from-emerald-50 to-emerald-50/40 border border-emerald-200 px-4 py-3 relative overflow-hidden">
+            {/* Subtle radial glow that pulses when bytes increase. Pure
+                CSS, no JS — :nth-of-type avoids re-mount churn. */}
+            <div
+                aria-hidden
+                className="absolute -top-8 -right-8 w-24 h-24 rounded-full pointer-events-none"
+                style={{
+                    background: "radial-gradient(circle, rgba(16,185,129,0.15) 0%, transparent 70%)",
+                    animation: "tempaloo-savings-pulse 3s ease-in-out infinite",
+                }}
+            />
+            <div className="relative">
+                <div className="flex items-baseline justify-between mb-1">
+                    <span className="text-xs uppercase tracking-wider text-emerald-700 font-medium">
+                        Space freed
+                    </span>
+                    <span className="text-[11px] font-bold text-emerald-700 tabular-nums bg-emerald-100 rounded px-1.5 py-0.5">
+                        {animatedPct.toFixed(0)}% smaller
+                    </span>
+                </div>
+                <div className="text-3xl font-bold text-emerald-700 tabular-nums leading-none">
+                    {fmtBytes(animatedSaved)}
+                </div>
+                {!compact && (
+                    <div className="text-[11px] text-ink-500 mt-2 tabular-nums">
+                        {fmtBytes(bytesIn)} → <span className="text-emerald-700 font-medium">{fmtBytes(bytesOut)}</span>
+                    </div>
+                )}
+            </div>
+            <style>{`
+                @keyframes tempaloo-savings-pulse {
+                    0%, 100% { transform: scale(1); opacity: 0.7; }
+                    50%      { transform: scale(1.15); opacity: 1; }
+                }
+                @media (prefers-reduced-motion: reduce) {
+                    [style*="tempaloo-savings-pulse"] { animation: none !important; }
+                }
+            `}</style>
+        </div>
+    );
+}
+
+/** Human-readable byte formatter — KB/MB/GB with one decimal where
+ *  helpful. Public so other components can render savings consistently. */
+export function fmtBytes(n: number): string {
+    if (!Number.isFinite(n) || n <= 0) return "0 B";
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let i = 0;
+    let v = n;
+    while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+    return `${i === 0 ? v.toFixed(0) : v.toFixed(v < 10 ? 2 : 1)} ${units[i]}`;
+}
+
+/**
+ * CurrentlyProcessing — feedback card showing the most recently
+ * converted attachment (filename + format + per-image savings). Slides
+ * in with a subtle translate-Y on each new lastItem, so the user sees
+ * tangible progress per image instead of an abstract "running…" state.
+ *
+ * Pass null when there's no last item yet; component renders an
+ * empty-state pulse instead.
+ */
+export function CurrentlyProcessing({ item }: { item: { id: number; name: string; format: string; bytesIn: number; bytesOut: number; at: number } | null | undefined }) {
+    if (!item) {
+        return (
+            <div className="rounded-lg bg-white border border-ink-200 px-4 py-3 flex items-center gap-3">
+                <div className="h-8 w-8 rounded bg-ink-100 animate-pulse shrink-0" />
+                <div className="flex-1 min-w-0">
+                    <div className="h-3 w-32 rounded bg-ink-100 animate-pulse mb-1.5" />
+                    <div className="h-2.5 w-20 rounded bg-ink-100/60 animate-pulse" />
+                </div>
+            </div>
+        );
+    }
+
+    const saved = Math.max(0, item.bytesIn - item.bytesOut);
+    const pct = item.bytesIn > 0 ? (saved / item.bytesIn) * 100 : 0;
+    const formatBadge = item.format.toUpperCase();
+    const formatColor = item.format === "avif"
+        ? "bg-violet-100 text-violet-700"
+        : item.format === "both"
+        ? "bg-gradient-to-r from-emerald-100 to-violet-100 text-ink-700"
+        : "bg-emerald-100 text-emerald-700";
+
+    return (
+        <div
+            // Key by item.id+at so a new conversion remounts the card
+            // and replays the slide-in animation. Without this the card
+            // updates in place and the transition fires only once.
+            key={`${item.id}-${item.at}`}
+            className="rounded-lg bg-white border border-ink-200 px-4 py-3 flex items-center gap-3"
+            style={{ animation: "tempaloo-cp-slide 240ms cubic-bezier(.16,1,.3,1) forwards" }}
+        >
+            <div className="h-9 w-9 rounded bg-gradient-to-br from-brand-100 to-emerald-100 flex items-center justify-center shrink-0">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-brand-600">
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <path d="m21 15-5-5L5 21" />
+                </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-sm font-medium text-ink-900 truncate">
+                        {item.name}
+                    </span>
+                    <span className={`text-[10px] font-bold uppercase tracking-wider rounded px-1.5 py-0.5 shrink-0 ${formatColor}`}>
+                        {formatBadge}
+                    </span>
+                </div>
+                <div className="text-[11px] text-ink-500 mt-0.5 tabular-nums">
+                    {fmtBytes(item.bytesIn)} → <span className="text-emerald-700 font-medium">{fmtBytes(item.bytesOut)}</span>
+                    {pct >= 1 && <span className="text-emerald-600 ml-1.5">−{pct.toFixed(0)}%</span>}
+                </div>
+            </div>
+            <style>{`
+                @keyframes tempaloo-cp-slide {
+                    from { opacity: 0; transform: translateY(-4px); }
+                    to   { opacity: 1; transform: translateY(0); }
+                }
+                @media (prefers-reduced-motion: reduce) {
+                    [style*="tempaloo-cp-slide"] { animation: none !important; }
+                }
+            `}</style>
+        </div>
+    );
+}
+
+/**
+ * useCountUp — tweens a number toward a target over `duration` ms using
+ * an ease-out curve. Returns the current value to render. Resets cleanly
+ * when the target changes mid-tween (no double-counting). Used in the
+ * bulk running view so `succeeded` and `remaining` numbers tick up
+ * smoothly per batch instead of jumping in 3-image steps.
+ */
+export function useCountUp(target: number, duration = 400) {
+    const [v, setV] = useState(target);
+    const startRef = useRef(target);
+    const startTsRef = useRef<number | null>(null);
+    const rafRef = useRef<number | null>(null);
+
+    useEffect(() => {
+        startRef.current = v;
+        startTsRef.current = null;
+        if (rafRef.current) cancelAnimationFrame(rafRef.current);
+        const tick = (ts: number) => {
+            if (startTsRef.current === null) startTsRef.current = ts;
+            const elapsed = ts - startTsRef.current;
+            const t = Math.min(1, elapsed / duration);
+            // ease-out cubic
+            const eased = 1 - Math.pow(1 - t, 3);
+            const next = startRef.current + (target - startRef.current) * eased;
+            setV(next);
+            if (t < 1) rafRef.current = requestAnimationFrame(tick);
+        };
+        rafRef.current = requestAnimationFrame(tick);
+        return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [target, duration]);
+
+    return v;
 }
 
 /**

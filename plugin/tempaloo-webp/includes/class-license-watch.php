@@ -27,6 +27,14 @@ defined( 'ABSPATH' ) || exit;
 final class Tempaloo_WebP_License_Watch {
 
     const CRON_HOOK         = 'tempaloo_webp_daily_verify';
+    /**
+     * Stale-mirror window after which state_response() opportunistically
+     * re-verifies. 15 min beats the daily cron's worst-case 24h delay
+     * for paid customers waiting on AVIF unlock after upgrade — without
+     * hammering the API on every page load (each refresh sets
+     * last_verified_at = time()).
+     */
+    const STALE_AFTER_SECONDS = 900;
     const DISMISS_OPTION    = 'tempaloo_webp_license_alert_dismissed_until';
     const DISMISS_NONCE     = 'tempaloo_webp_dismiss_license_alert';
     const SNOOZE_DAYS       = 7;
@@ -44,11 +52,13 @@ final class Tempaloo_WebP_License_Watch {
 
     public static function on_activate() {
         if ( ! wp_next_scheduled( self::CRON_HOOK ) ) {
-            // Run daily at a random hour to spread load on the API across
-            // all sites that install the plugin.
+            // Hourly: catches plan upgrades / cancellations within the hour
+            // so paid customers don't wait up to 24h to use AVIF after a
+            // Freemius webhook fires. Spread launch across the hour so
+            // every site doesn't hit the API at the same minute.
             wp_schedule_event(
                 time() + wp_rand( 60, 600 ),
-                'daily',
+                'hourly',
                 self::CRON_HOOK
             );
         }

@@ -76,12 +76,17 @@ class Tempaloo_WebP_Retry_Queue {
         $entry['next_at']     = time() + self::backoff_for( (int) $entry['attempts'] - 1 );
 
         if ( $entry['attempts'] > self::MAX_ATTEMPTS ) {
-            // Give up — drop from queue. Logged via PHP error_log so admins on
-            // a real WP install can grep the debug.log if they care.
-            error_log( sprintf(
-                '[tempaloo-webp] Retry queue: giving up on attachment %d after %d attempts (last: %s)',
-                $attachment_id, $entry['attempts'], $error_code
-            ) );
+            // Give up — drop from queue. Surface it via Activity log so
+            // admins see the give-up event in the Diagnostic tab, and
+            // mirror to debug.log only when WP_DEBUG is on so we never
+            // pollute the host's PHP error log on production sites.
+            if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+                // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+                error_log( sprintf(
+                    '[tempaloo-webp] Retry queue: giving up on attachment %d after %d attempts (last: %s)',
+                    $attachment_id, $entry['attempts'], $error_code
+                ) );
+            }
             unset( $queue[ $attachment_id ] );
             self::save_queue( $queue );
             return;

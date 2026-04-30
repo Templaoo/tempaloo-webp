@@ -3,57 +3,54 @@ defined( 'ABSPATH' ) || exit;
 
 class Tempaloo_WebP_Converter {
 
+    /**
+     * Conversion-on-upload registration. **Intentionally a no-op since
+     * v1.9.0** — the upload hook is now owned exclusively by
+     * Tempaloo_WebP_Async_Upload, which decides between the async
+     * (loopback) path and the sync fallback (CLI / cron / XML-RPC) and
+     * calls convert_for_upload() in both cases. Keeping the method so
+     * the boot sequence in class-plugin.php stays unchanged.
+     */
     public function register() {
-        add_filter( 'wp_generate_attachment_metadata', [ $this, 'on_generate_metadata' ], 10, 2 );
+        // No-op. See Tempaloo_WebP_Async_Upload::register().
     }
 
     /**
-     * Fires after WP generates metadata (resizes) for a new upload.
-     * Converts the original + every generated size to WebP/AVIF.
+     * Pre-flight gate for the upload path. Centralises the three
+     * conditions that must hold before we even consider converting an
+     * attachment on upload: an active license, the auto-convert toggle
+     * on, and a mime type we can actually transcode. Returns
+     * [ true, '' ] on green light, [ false, $reason ] otherwise — the
+     * caller decides whether to log or stay silent based on the reason.
      */
-    public function on_generate_metadata( $metadata, $attachment_id ) {
-        $attachment_id = (int) $attachment_id;
-        $s = Tempaloo_WebP_Plugin::get_settings();
-
-        // Every branch below logs to Activity so the user can audit
-        // exactly what happened to a freshly-uploaded image. Without
-        // this log, an early-return (no license, mime not supported,
-        // auto_convert toggled off) was completely silent — the
-        // Optimized column just showed "—" and the user had no way
-        // to know WHY no conversion fired.
-
-        if ( empty( $s['license_valid'] ) ) {
-            Tempaloo_WebP_Activity::log(
-                'auto_convert', 'warn',
-                sprintf(
-                    /* translators: %d: attachment ID */
-                    __( 'Auto-convert skipped for #%d — license is not active', 'tempaloo-webp' ),
-                    $attachment_id
-                ),
-                [ 'attachment_id' => $attachment_id, 'reason' => 'no_license' ]
-            );
-            return $metadata;
+    public static function should_run_for_upload( $attachment_id, array $settings ) {
+        if ( empty( $settings['license_valid'] ) ) {
+            return [ false, 'no_license' ];
         }
-        if ( empty( $s['auto_convert'] ) ) {
-            // User deliberately turned this off — don't pollute the log
-            // every upload. The Diagnostic tab surfaces the toggle state.
-            return $metadata;
+        if ( empty( $settings['auto_convert'] ) ) {
+            return [ false, 'auto_convert_off' ];
         }
         if ( ! self::is_supported_attachment( $attachment_id ) ) {
-            $mime = (string) get_post_mime_type( $attachment_id );
-            Tempaloo_WebP_Activity::log(
-                'auto_convert', 'info',
-                sprintf(
-                    /* translators: 1: attachment ID, 2: mime type */
-                    __( 'Auto-convert skipped for #%1$d — mime %2$s is not convertible (only JPEG/PNG/GIF)', 'tempaloo-webp' ),
-                    $attachment_id, $mime
-                ),
-                [ 'attachment_id' => $attachment_id, 'reason' => 'unsupported_mime', 'mime' => $mime ]
-            );
-            return $metadata;
+            return [ false, 'unsupported_mime' ];
         }
+        return [ true, '' ];
+    }
 
-        $result = self::convert_all_sizes( $attachment_id, $metadata, $s );
+    /**
+     * Run conversion + activity log + retry-queue enqueue for an
+     * attachment uploaded into the Media Library. Extracted from the
+     * old on_generate_metadata so both the sync fallback and the
+     * async loopback handler can reuse the exact same code path.
+     *
+     * Returns convert_all_sizes()'s shape with one extra guarantee:
+     * activity has been logged (success / error) and retry-queue has
+     * been notified for retryable infra errors. The caller still
+     * decides what to do with $result['metadata'] (return it from a
+     * filter, or persist it via wp_update_attachment_metadata).
+     */
+    public static function convert_for_upload( $attachment_id, $metadata, array $settings, $mode = 'auto' ) {
+        $attachment_id = (int) $attachment_id;
+        $result = self::convert_all_sizes( $attachment_id, $metadata, $settings, $mode );
 
         if ( $result['converted'] > 0 ) {
             Tempaloo_WebP_Activity::log(
@@ -67,6 +64,7 @@ class Tempaloo_WebP_Converter {
                     'attachment_id' => $attachment_id,
                     'converted'     => (int) $result['converted'],
                     'failed'        => (int) ( $result['failed'] ?? 0 ),
+                    'mode'          => $mode,
                 ]
             );
         } else {
@@ -84,6 +82,7 @@ class Tempaloo_WebP_Converter {
                     'attachment_id' => $attachment_id,
                     'error_code'    => $code,
                     'failed'        => (int) ( $result['failed'] ?? 0 ),
+                    'mode'          => $mode,
                 ]
             );
         }
@@ -94,10 +93,10 @@ class Tempaloo_WebP_Converter {
             Tempaloo_WebP_Retry_Queue::enqueue( $attachment_id, $result['error_code'] );
         }
 
-        return $result['metadata'];
+        return $result;
     }
 
-    private static function is_retryable( $code ) {
+    public static function is_retryable( $code ) {
         if ( '' === $code ) return false;
         $non_retryable = [ 'quota_exceeded', 'unauthorized', 'forbidden', 'site_limit_reached', 'missing_file', 'unprocessable_image' ];
         return ! in_array( $code, $non_retryable, true );
@@ -351,6 +350,14 @@ class Tempaloo_WebP_Converter {
             'quality'   => $quality,
             'sizes'     => $generated,
         ] );
+
+        // Invalidate the Overview "Space saved" cache so the next
+        // poll reflects the new bytes immediately. The 60s transient
+        // would otherwise hold a stale value briefly after every
+        // conversion — visible to the user, fixable here for free.
+        if ( $converted > 0 ) {
+            delete_transient( 'tempaloo_webp_savings_cache' );
+        }
 
         return [ 'metadata' => $metadata, 'converted' => $converted, 'failed' => $failed, 'error_code' => '' ];
     }

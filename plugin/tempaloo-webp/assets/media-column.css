@@ -1,0 +1,335 @@
+/* Tempaloo WebP — Media Library "Optimized" column.
+ *
+ * Pro design system for the per-row converted-state cell:
+ *   - Format badge (emerald / violet / gradient by output format).
+ *   - Savings line with bytes breakdown.
+ *   - Restore button (subtle ghost, hovers into a destructive red).
+ *   - Detail accordion (per-size table + meta footer).
+ *   - Inline confirm panel (replaces the native confirm() dialog).
+ *
+ * All scoped under .tempaloo-media-cell so we can't accidentally
+ * style anything else in wp-admin. Loaded only on upload.php via
+ * enqueue_admin_badge() in class-url-filter.php.
+ */
+
+.tempaloo-media-cell {
+    min-width: 200px;
+    font-size: 12px;
+    line-height: 1.4;
+    color: #1f2937;
+}
+
+.tempaloo-cell-na {
+    color: #9a6700;
+    font-size: 12px;
+}
+
+/* ── Summary row ──────────────────────────────────────────────── */
+.tempaloo-cell-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.tempaloo-cell-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+}
+
+.tempaloo-badge {
+    display: inline-flex;
+    align-items: center;
+    height: 19px;
+    padding: 0 7px;
+    border-radius: 4px;
+    font-weight: 700;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    line-height: 1;
+}
+
+.tempaloo-badge-webp {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.tempaloo-badge-avif {
+    background: #ede9fe;
+    color: #6d28d9;
+}
+
+.tempaloo-badge-both {
+    background: linear-gradient(90deg, #dcfce7 0%, #ede9fe 100%);
+    color: #1f2937;
+}
+
+.tempaloo-saved {
+    color: #15803d;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    font-size: 13px;
+}
+
+.tempaloo-cell-bytes {
+    color: #6b7280;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+}
+
+.tempaloo-cell-bytes strong {
+    color: #15803d;
+    font-weight: 600;
+}
+
+/* ── Detail toggle button ─────────────────────────────────────── */
+.tempaloo-detail-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin-left: auto;
+    background: none;
+    border: 0;
+    padding: 2px 4px;
+    color: #6b7280;
+    font-size: 11px;
+    line-height: 1;
+    cursor: pointer;
+    border-radius: 3px;
+    transition: color 120ms ease, background-color 120ms ease;
+}
+
+.tempaloo-detail-toggle:hover {
+    color: #1f2937;
+    background: #f3f4f6;
+}
+
+.tempaloo-detail-toggle .tempaloo-chevron {
+    transition: transform 180ms cubic-bezier(.4, 0, .2, 1);
+}
+
+.tempaloo-detail-toggle[aria-expanded="true"] .tempaloo-chevron {
+    transform: rotate(-180deg);
+}
+
+/* ── Action row ──────────────────────────────────────────────── */
+.tempaloo-cell-actions {
+    display: flex;
+    gap: 5px;
+    margin-top: 2px;
+}
+
+.tempaloo-restore-now,
+.tempaloo-confirm-cancel,
+.tempaloo-confirm-yes {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 24px;
+    padding: 0 9px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1;
+    cursor: pointer;
+    transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+    background: #fff;
+    border: 1px solid #d1d5db;
+    color: #4b5563;
+    font-family: inherit;
+}
+
+.tempaloo-restore-now:hover {
+    border-color: #fca5a5;
+    color: #b91c1c;
+    background: #fef2f2;
+}
+
+.tempaloo-restore-now:disabled,
+.tempaloo-confirm-yes:disabled,
+.tempaloo-confirm-cancel:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* ── Detail accordion ────────────────────────────────────────── */
+.tempaloo-cell-detail {
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 5px;
+    font-size: 11px;
+    animation: tempaloo-cell-slide-in 180ms cubic-bezier(.4, 0, .2, 1);
+}
+
+@keyframes tempaloo-cell-slide-in {
+    from { opacity: 0; transform: translateY(-3px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.tempaloo-detail-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 6px 10px;
+    align-items: baseline;
+    padding: 3px 0;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+.tempaloo-detail-row:last-of-type {
+    border-bottom: 0;
+}
+
+.tempaloo-detail-name {
+    color: #4b5563;
+    font-weight: 500;
+    font-size: 11px;
+}
+
+.tempaloo-detail-bytes {
+    color: #6b7280;
+    font-variant-numeric: tabular-nums;
+    font-size: 10.5px;
+}
+
+.tempaloo-detail-bytes strong {
+    color: #15803d;
+    font-weight: 600;
+}
+
+.tempaloo-detail-pct {
+    color: #15803d;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    font-size: 10.5px;
+    min-width: 38px;
+    text-align: right;
+}
+
+.tempaloo-detail-meta {
+    margin-top: 8px;
+    padding-top: 6px;
+    border-top: 1px solid #e5e7eb;
+    color: #9ca3af;
+    font-size: 10.5px;
+    font-style: italic;
+}
+
+/* ── Confirm panel ───────────────────────────────────────────── */
+/* The HTML `hidden` attribute MUST win over our `display: flex` so
+ * the dialog stays closed until the user clicks Restore. Without
+ * the dedicated [hidden] rule, the .tempaloo-cell-confirm class
+ * selector has equal specificity to the user-agent [hidden] rule
+ * but comes later in the cascade, so author CSS wins and the
+ * dialog renders open on every page load. */
+.tempaloo-cell-confirm[hidden],
+.tempaloo-cell-detail[hidden] {
+    display: none !important;
+}
+
+.tempaloo-cell-confirm {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+    padding: 9px 10px;
+    background: #fef3c7;
+    border: 1px solid #fcd34d;
+    border-radius: 5px;
+    animation: tempaloo-cell-slide-in 180ms cubic-bezier(.4, 0, .2, 1);
+}
+
+.tempaloo-confirm-icon {
+    flex-shrink: 0;
+    color: #b45309;
+    margin-top: 1px;
+}
+
+.tempaloo-confirm-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.tempaloo-confirm-title {
+    font-weight: 600;
+    color: #78350f;
+    font-size: 11.5px;
+    margin-bottom: 2px;
+}
+
+.tempaloo-confirm-text {
+    color: #78350f;
+    font-size: 10.5px;
+    line-height: 1.45;
+    margin-bottom: 7px;
+}
+
+.tempaloo-confirm-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.tempaloo-confirm-cancel {
+    background: #fff;
+    border-color: #d1d5db;
+    color: #4b5563;
+    height: 22px;
+    padding: 0 8px;
+    font-size: 10.5px;
+}
+
+.tempaloo-confirm-cancel:hover {
+    border-color: #9ca3af;
+}
+
+.tempaloo-confirm-yes {
+    background: #b91c1c;
+    border-color: #b91c1c;
+    color: #fff;
+    height: 22px;
+    padding: 0 9px;
+    font-size: 10.5px;
+    font-weight: 600;
+}
+
+.tempaloo-confirm-yes:hover {
+    background: #991b1b;
+    border-color: #991b1b;
+}
+
+/* ── Inline flash messages (post-action feedback) ────────────── */
+.tempaloo-flash {
+    margin-top: 5px;
+    padding: 4px 8px;
+    background: #d1fae5;
+    border: 1px solid #6ee7b7;
+    border-radius: 3px;
+    color: #065f46;
+    font-size: 10.5px;
+    line-height: 1.4;
+    animation: tempaloo-cell-slide-in 180ms cubic-bezier(.4, 0, .2, 1);
+}
+
+.tempaloo-convert-error {
+    margin-top: 5px;
+    padding: 4px 8px;
+    background: #fee2e2;
+    border: 1px solid #fca5a5;
+    border-radius: 3px;
+    color: #991b1b;
+    font-size: 10.5px;
+    line-height: 1.4;
+}
+
+/* ── Reduced motion fallback ─────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+    .tempaloo-cell-detail,
+    .tempaloo-cell-confirm,
+    .tempaloo-flash {
+        animation: none;
+    }
+    .tempaloo-detail-toggle .tempaloo-chevron {
+        transition: none;
+    }
+}

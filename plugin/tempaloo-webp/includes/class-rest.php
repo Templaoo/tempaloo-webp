@@ -7,12 +7,123 @@ class Tempaloo_WebP_REST {
 
     public function register() {
         add_action( 'rest_api_init', [ $this, 'routes' ] );
+
+        // Belt: register our REST URI as cache-excluded with LiteSpeed
+        // upfront, BEFORE any /state request happens. Some LSCache
+        // configurations decide cacheability before rest_pre_dispatch
+        // fires (e.g., when a request is matched at the .htaccess
+        // level), so the runtime opt-out below isn't sufficient on
+        // its own. This filter prepends our path to the user's
+        // cache-exclude list at runtime; survives plugin upgrades.
+        add_filter( 'litespeed_cache_excludes_uri', [ $this, 'litespeed_exclude_uri' ] );
+        add_filter( 'rocket_cache_reject_uri', [ $this, 'litespeed_exclude_uri' ] );
+        add_filter( 'w3tc_minify_pgcache_reject_uri', [ $this, 'litespeed_exclude_uri' ] );
+
+        // Page-cache busting for our REST namespace.
+        //
+        // Why this matters: LiteSpeed Cache on Hostinger (and WP Rocket
+        // / W3TC / Cloudflare Page Rules with similar configs) caches
+        // the /wp-json/tempaloo-webp/v1/state response by URL even
+        // though it's an authenticated, per-user payload. Symptom: the
+        // "this month" counter freezes after a Media Library upload
+        // and only updates after a manual cache purge.
+        //
+        // The fix is layered so it survives any one knob being
+        // off-spec on a given host:
+        //   1. rest_pre_dispatch filter: send no-cache headers + the
+        //      DONOTCACHEPAGE / DONOTCACHEOBJECT / DONOTCACHEDB
+        //      constants the major page-cache plugins respect, before
+        //      WP even routes the request — so the cache layer sees
+        //      the directive on the very first byte.
+        //   2. litespeed_control_set_nocache action: explicit signal
+        //      to LiteSpeed Cache that this request is non-cacheable.
+        //      No-op on sites without LSCache.
+        //   3. Frontend cache-buster query param + Cache-Control:
+        //      no-cache on every fetch — second line of defence in
+        //      case the host-level cache (Cloudflare, Varnish) ignored
+        //      the response headers.
+        add_filter( 'rest_pre_dispatch', [ $this, 'send_nocache_headers' ], 10, 3 );
+    }
+
+    /**
+     * Tells every page-cache plugin we know about that this REST
+     * request must NOT be cached. Fires once per request, before
+     * the route handler runs. Returning $result unchanged lets WP
+     * proceed with normal dispatch.
+     *
+     * @param mixed           $result  Existing pre-dispatch result.
+     * @param WP_REST_Server  $server  REST server instance.
+     * @param WP_REST_Request $request Current request.
+     * @return mixed
+     */
+    public function send_nocache_headers( $result, $server, $request ) {
+        $route = (string) $request->get_route();
+        if ( 0 !== strpos( $route, '/' . self::NS ) ) {
+            return $result; // not our namespace — leave other plugins alone
+        }
+
+        // WP-native: sends Expires/Cache-Control/Pragma headers that
+        // every standards-compliant proxy honors.
+        nocache_headers();
+
+        // Defence-in-depth: every common page-cache plugin checks
+        // these constants in its should-cache decision. Defining them
+        // here is a no-op when the constants don't exist; on hosts
+        // that DO check them (LiteSpeed, WP Rocket, W3TC, WP Super
+        // Cache, Hummingbird, Hostinger LSCache stack), they
+        // immediately bail out of caching this request.
+        if ( ! defined( 'DONOTCACHEPAGE' ) )    define( 'DONOTCACHEPAGE',    true );
+        if ( ! defined( 'DONOTCACHEOBJECT' ) )  define( 'DONOTCACHEOBJECT',  true );
+        if ( ! defined( 'DONOTCACHEDB' ) )      define( 'DONOTCACHEDB',      true );
+
+        // Explicit LiteSpeed Cache opt-out — fires on every request,
+        // LiteSpeed is hooked on this action and will skip the response.
+        // No-op on sites without LSCache.
+        do_action( 'litespeed_control_set_nocache', 'tempaloo-webp REST endpoint — per-user data' );
+
+        return $result;
+    }
+
+    /**
+     * Filter callback that prepends our REST namespace to the page-
+     * cache plugin's URI exclude list. Used by LiteSpeed Cache, WP
+     * Rocket, and W3 Total Cache filters above. The filters expect
+     * either an array of URIs or a newline-separated string — we
+     * detect and merge in the right shape for each.
+     */
+    public function litespeed_exclude_uri( $existing ) {
+        $ours = '/wp-json/' . self::NS;
+        if ( is_array( $existing ) ) {
+            $existing[] = $ours;
+            return array_values( array_unique( $existing ) );
+        }
+        if ( is_string( $existing ) ) {
+            // Newline-separated list — append if not already present.
+            if ( false === strpos( $existing, $ours ) ) {
+                $existing = trim( $existing );
+                $existing .= ( '' === $existing ) ? $ours : "\n" . $ours;
+            }
+            return $existing;
+        }
+        // Unknown shape — return our URI as a single-item array; the
+        // plugin's filter consumer will normalize it.
+        return [ $ours ];
     }
 
     public function routes() {
         register_rest_route( self::NS, '/state', [
             'methods'             => 'GET',
             'callback'            => [ $this, 'get_state' ],
+            'permission_callback' => [ $this, 'perm_manage' ],
+        ] );
+        // Mutating sibling of /state: runs the opportunistic license
+        // re-verify + drains stalled async uploads, then returns the
+        // resulting state. Split out from GET /state so that endpoint
+        // stays a pure read — wp.org reviewers flag GET endpoints
+        // that mutate state, even harmlessly.
+        register_rest_route( self::NS, '/sync', [
+            'methods'             => 'POST',
+            'callback'            => [ $this, 'post_sync' ],
             'permission_callback' => [ $this, 'perm_manage' ],
         ] );
         register_rest_route( self::NS, '/activate', [
@@ -39,6 +150,19 @@ class Tempaloo_WebP_REST {
                 // Empty / omitted → restore all converted attachments. An
                 // explicit list lets a future per-row UI restore one at a time.
                 'ids' => [ 'required' => false, 'type' => 'array' ],
+            ],
+        ] );
+        // Per-image restore — bound to the Media Library row button in
+        // v1.13. Same per-attachment behavior as /restore with an
+        // explicit single id, but returns a richer per-attachment
+        // result shape so the row UI can render a precise
+        // "3 files removed" toast instead of the bulk summary.
+        register_rest_route( self::NS, '/restore-one', [
+            'methods'             => 'POST',
+            'callback'            => [ $this, 'post_restore_one' ],
+            'permission_callback' => [ $this, 'perm_manage' ],
+            'args'                => [
+                'id' => [ 'required' => true, 'type' => 'integer' ],
             ],
         ] );
 
@@ -191,59 +315,20 @@ class Tempaloo_WebP_REST {
         $failure_samples = [];
 
         foreach ( $ids as $id ) {
-            $meta = wp_get_attachment_metadata( $id );
-            $tw   = Tempaloo_WebP_Plugin::get_conversion_meta( $id );
-            if ( empty( $tw ) ) continue;
-
-            $original = get_attached_file( $id );
-            if ( $original ) {
-                $dir = trailingslashit( dirname( $original ) );
-                $names = [ basename( $original ) ];
-                if ( ! empty( $meta['sizes'] ) && is_array( $meta['sizes'] ) ) {
-                    foreach ( $meta['sizes'] as $size ) {
-                        if ( ! empty( $size['file'] ) ) $names[] = $size['file'];
-                    }
-                }
-                foreach ( $names as $name ) {
-                    foreach ( [ '.webp', '.avif' ] as $ext ) {
-                        $sibling = $dir . $name . $ext;
-                        if ( ! file_exists( $sibling ) ) continue;
-
-                        // wp_delete_file returns void — it can silently
-                        // swallow permission errors, file-in-use locks
-                        // (LiteSpeed object cache holding a handle, etc.)
-                        // and we'd report a phantom success. Verify by
-                        // checking existence AFTER, then fall back to a
-                        // raw @unlink so a permission glitch in the WP
-                        // wrapper doesn't strand the file forever.
-                        wp_delete_file( $sibling );
-                        clearstatcache( true, $sibling );
-                        if ( file_exists( $sibling ) ) {
-                            // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink
-                            @unlink( $sibling );
-                            clearstatcache( true, $sibling );
-                        }
-                        if ( file_exists( $sibling ) ) {
-                            $delete_failures++;
-                            if ( count( $failure_samples ) < 5 ) {
-                                $failure_samples[] = str_replace(
-                                    trailingslashit( ABSPATH ),
-                                    '/',
-                                    $sibling
-                                );
-                            }
-                            continue; // don't count as removed
-                        }
-                        $files_removed++;
-                    }
+            $r = self::restore_single_attachment( (int) $id );
+            $restored        += $r['restored'];
+            $files_removed   += $r['files_removed'];
+            $delete_failures += $r['delete_failures'];
+            // Cap the cumulative sample list at 5 — same global cap
+            // the original loop enforced before this refactor. Don't
+            // overflow it just because each per-attachment helper
+            // collected its own up to 5.
+            if ( ! empty( $r['failure_samples'] ) ) {
+                foreach ( $r['failure_samples'] as $sample ) {
+                    if ( count( $failure_samples ) >= 5 ) break;
+                    $failure_samples[] = $sample;
                 }
             }
-
-            // Helper handles BOTH _tempaloo_webp post_meta AND legacy
-            // in-metadata key, plus dual cache invalidation. Single
-            // source of truth for "drop our marks from this attachment".
-            Tempaloo_WebP_Plugin::delete_conversion_meta( $id );
-            $restored++;
         }
 
         // Page-cache purge — Cache Enabler / LiteSpeed / Rocket can hold
@@ -290,6 +375,165 @@ class Tempaloo_WebP_REST {
         ] );
     }
 
+    /**
+     * Per-attachment restore helper. Single source of truth for "delete
+     * webp/avif siblings + clear conversion meta for one ID". Used by
+     * both the bulk /restore endpoint and the per-image /restore-one
+     * endpoint so the two paths stay in lockstep.
+     *
+     * Behavior is intentionally identical to the inline loop body that
+     * lived in post_restore() before v1.13.0:
+     *  · Returns early with zeros when there's no conversion meta
+     *    (idempotent — restoring an already-restored ID is a no-op).
+     *  · Tries wp_delete_file first, falls back to @unlink to defeat
+     *    LSCache file handles, counts a delete_failure if the file
+     *    still exists after both attempts.
+     *  · Captures up to 5 failure samples (relative paths) for the
+     *    UI's "couldn't delete" warning.
+     *  · Clears both _tempaloo_webp post_meta and the legacy
+     *    in-metadata mirror via the helper.
+     *
+     * @return array{restored:int, files_removed:int, delete_failures:int, failure_samples:array<int,string>}
+     */
+    public static function restore_single_attachment( $id ) {
+        $id = (int) $id;
+        $out = [
+            'restored'        => 0,
+            'files_removed'   => 0,
+            'delete_failures' => 0,
+            'failure_samples' => [],
+        ];
+
+        $tw = Tempaloo_WebP_Plugin::get_conversion_meta( $id );
+        if ( empty( $tw ) ) {
+            return $out;
+        }
+
+        $meta     = wp_get_attachment_metadata( $id );
+        $original = get_attached_file( $id );
+        if ( $original ) {
+            $dir = trailingslashit( dirname( $original ) );
+            $names = [ basename( $original ) ];
+            if ( is_array( $meta ) && ! empty( $meta['sizes'] ) && is_array( $meta['sizes'] ) ) {
+                foreach ( $meta['sizes'] as $size ) {
+                    if ( ! empty( $size['file'] ) ) $names[] = $size['file'];
+                }
+            }
+            foreach ( $names as $name ) {
+                foreach ( [ '.webp', '.avif' ] as $ext ) {
+                    $sibling = $dir . $name . $ext;
+                    if ( ! file_exists( $sibling ) ) continue;
+
+                    // wp_delete_file returns void — it can silently
+                    // swallow permission errors, file-in-use locks
+                    // (LiteSpeed object cache holding a handle, etc.)
+                    // and we'd report a phantom success. Verify by
+                    // checking existence AFTER, then fall back to a
+                    // raw @unlink so a permission glitch in the WP
+                    // wrapper doesn't strand the file forever.
+                    wp_delete_file( $sibling );
+                    clearstatcache( true, $sibling );
+                    if ( file_exists( $sibling ) ) {
+                        // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink
+                        @unlink( $sibling );
+                        clearstatcache( true, $sibling );
+                    }
+                    if ( file_exists( $sibling ) ) {
+                        $out['delete_failures']++;
+                        if ( count( $out['failure_samples'] ) < 5 ) {
+                            $out['failure_samples'][] = str_replace(
+                                trailingslashit( ABSPATH ),
+                                '/',
+                                $sibling
+                            );
+                        }
+                        continue; // don't count as removed
+                    }
+                    $out['files_removed']++;
+                }
+            }
+        }
+
+        // Helper handles BOTH _tempaloo_webp post_meta AND legacy
+        // in-metadata key, plus dual cache invalidation. Single
+        // source of truth for "drop our marks from this attachment".
+        Tempaloo_WebP_Plugin::delete_conversion_meta( $id );
+        // Invalidate the savings cache so the Overview "Space saved"
+        // card reflects the post-restore truth on the very next poll
+        // instead of waiting up to 60s for the transient to expire.
+        delete_transient( self::SAVINGS_TRANSIENT );
+        $out['restored'] = 1;
+        return $out;
+    }
+
+    /**
+     * Per-image restore endpoint. Mirrors /restore but takes a single
+     * `id` param and returns the per-attachment metrics directly,
+     * without the bulk-summary shape. Wired up to the Media Library
+     * row "Restore" button in v1.13.
+     */
+    public function post_restore_one( WP_REST_Request $req ) {
+        $id = (int) $req->get_param( 'id' );
+        if ( $id <= 0 ) {
+            return new WP_Error( 'bad_id', __( 'Missing or invalid attachment id', 'tempaloo-webp' ), [ 'status' => 400 ] );
+        }
+        $post = get_post( $id );
+        if ( ! $post || 'attachment' !== $post->post_type ) {
+            return new WP_Error( 'not_attachment', sprintf(
+                /* translators: %d: attachment id */
+                __( 'ID %d is not an attachment', 'tempaloo-webp' ),
+                $id
+            ), [ 'status' => 404 ] );
+        }
+
+        $r = self::restore_single_attachment( $id );
+
+        // Same page-cache bust + Activity log as the bulk path, scoped
+        // to the single attachment so the user sees an audit row in
+        // Diagnostic per-image restore. Skip the purge when nothing
+        // was actually removed — saves a redundant cache flush on the
+        // common "restore an already-restored image" no-op.
+        if ( $r['restored'] > 0 || $r['files_removed'] > 0 ) {
+            if ( method_exists( 'Tempaloo_WebP_Plugin', 'purge_page_caches' ) ) {
+                Tempaloo_WebP_Plugin::purge_page_caches();
+            }
+            Tempaloo_WebP_Activity::log(
+                'restore',
+                $r['delete_failures'] > 0 ? 'error' : 'warn',
+                $r['delete_failures'] > 0
+                    ? sprintf(
+                        /* translators: 1: attachment id, 2: files removed, 3: delete failures */
+                        __( 'Restored #%1$d · %2$d files removed · %3$d delete failure(s)', 'tempaloo-webp' ),
+                        $id, $r['files_removed'], $r['delete_failures']
+                    )
+                    : sprintf(
+                        /* translators: 1: attachment id, 2: files removed */
+                        __( 'Restored #%1$d · %2$d files removed', 'tempaloo-webp' ),
+                        $id, $r['files_removed']
+                    ),
+                [
+                    'attachment_id'   => $id,
+                    'files_removed'   => $r['files_removed'],
+                    'delete_failures' => $r['delete_failures'],
+                    'failure_samples' => $r['failure_samples'],
+                ]
+            );
+        }
+
+        return rest_ensure_response( [
+            'state'          => $this->state_response()->get_data(),
+            'attachmentId'   => $id,
+            'restored'       => $r['restored'],
+            'filesRemoved'   => $r['files_removed'],
+            'deleteFailures' => $r['delete_failures'],
+            'failureSamples' => $r['failure_samples'],
+            // Empty=true when the attachment had no conversion meta to
+            // begin with — UI can render "already restored" instead
+            // of "restored 0 files" which feels broken.
+            'wasNoOp'        => $r['restored'] === 0,
+        ] );
+    }
+
     public function post_retry() {
         $r = Tempaloo_WebP_Retry_Queue::process_all();
         return rest_ensure_response( array_merge( [ 'state' => $this->state_response()->get_data() ], $r ) );
@@ -300,6 +544,18 @@ class Tempaloo_WebP_REST {
     }
 
     public function get_state() {
+        return $this->state_response();
+    }
+
+    /**
+     * POST /sync — runs the periodic side-effects (license verify if
+     * stale, async-pending drain) and returns the resulting state.
+     * The React app's polling pill calls this instead of GET /state
+     * so that any outbound license/upload work is gated to an
+     * explicit user-or-poll trigger, never to a passive read.
+     */
+    public function post_sync() {
+        $this->do_periodic_sync();
         return $this->state_response();
     }
 
@@ -466,6 +722,38 @@ class Tempaloo_WebP_REST {
     /**
      * Builds the camelCase state blob consumed by the React app.
      */
+    /**
+     * Periodic-sync side effects. Extracted from state_response so
+     * GET /state stays a pure read — wp.org reviewers flag GET
+     * endpoints that mutate state. Called only from the explicit
+     * POST /sync endpoint (and indirectly from anything that needs
+     * to force a fresh license/quota fetch).
+     */
+    public function do_periodic_sync() {
+        $s = Tempaloo_WebP_Plugin::get_settings();
+
+        // Opportunistic re-verify when the local mirror is stale.
+        // Closes the worst-case 24h drift window for paid customers
+        // waiting on AVIF unlock after a Freemius upgrade webhook.
+        if ( ! empty( $s['license_key'] ) ) {
+            $last_verified = (int) ( $s['last_verified_at'] ?? 0 );
+            if ( $last_verified === 0 || ( time() - $last_verified ) > Tempaloo_WebP_License_Watch::STALE_AFTER_SECONDS ) {
+                Tempaloo_WebP_License_Watch::run_daily_verify();
+                $s = Tempaloo_WebP_Plugin::get_settings();
+            }
+        }
+
+        // Drain async-pending uploads inline when items have sat in
+        // the queue too long. Hosts that block loopback HTTP leave
+        // the queue growing until the 5-min retry-cron tick, so the
+        // counter would stay wrong for minutes without this nudge.
+        // Bounded to 3 attachments per call so one /sync call never
+        // turns into a multi-minute request.
+        if ( ! empty( $s['license_valid'] ) ) {
+            Tempaloo_WebP_Async_Upload::drain_stalled_inline( 3, 5 );
+        }
+    }
+
     public function state_response() {
         $s = Tempaloo_WebP_Plugin::get_settings();
 
@@ -547,14 +835,54 @@ class Tempaloo_WebP_REST {
                 'cptQuality'     => is_array( $s['cpt_quality'] ?? null ) ? $s['cpt_quality'] : (object) [],
             ],
             'savings'  => $this->compute_savings(),
+            // Async loopback queue surface — drives the "X uploads
+            // converting…" indicator and the faster polling cadence
+            // in the React app while there's outstanding work. Without
+            // this the user sees a stale counter for up to 20s
+            // (one polling tick) after each upload.
+            'asyncPending' => $this->async_pending_summary(),
         ] );
     }
 
     /**
-     * Sums original vs converted size across every attachment with optimization meta.
-     * Cheap for MVP libraries (<10k attachments). For larger sites, cache this.
+     * Snapshot of the async-upload queue. Surfaces both the count
+     * and the oldest pending timestamp so the React app can decide
+     * how aggressively to poll while there's pending work, and warn
+     * if items have been stuck for an unreasonable amount of time
+     * (= loopback HTTP almost certainly blocked by the host).
      */
+    private function async_pending_summary() {
+        $pending = Tempaloo_WebP_Async_Upload::get_pending();
+        if ( empty( $pending ) ) {
+            return [ 'count' => 0, 'oldestAt' => 0 ];
+        }
+        $values = array_map( 'intval', array_values( $pending ) );
+        $oldest = $values ? min( $values ) : 0;
+        return [
+            'count'    => count( $pending ),
+            'oldestAt' => $oldest,
+        ];
+    }
+
+    /**
+     * Sums original vs converted size across every attachment with
+     * optimization meta. Walks up to 5000 attachments + scans the
+     * filesystem for each, so this is the heaviest call in /state.
+     *
+     * Cached in a 60-second transient — every Overview poll within
+     * the same minute reuses the cached value instead of re-walking
+     * thousands of attachments. Ample for the "this month" stat
+     * card; the cache is invalidated explicitly on convert + restore
+     * so a fresh action shows up within 60s in the worst case.
+     */
+    const SAVINGS_TRANSIENT     = 'tempaloo_webp_savings_cache';
+    const SAVINGS_TRANSIENT_TTL = 60;
+
     private function compute_savings() {
+        $cached = get_transient( self::SAVINGS_TRANSIENT );
+        if ( is_array( $cached ) && isset( $cached['bytesIn'] ) ) {
+            return $cached;
+        }
         $ids = get_posts( [
             'post_type'      => 'attachment',
             'post_status'    => 'inherit',
@@ -564,21 +892,29 @@ class Tempaloo_WebP_REST {
         ] );
         $in = 0; $out = 0; $converted = 0;
         foreach ( $ids as $id ) {
-            $meta = wp_get_attachment_metadata( $id );
-            if ( empty( $meta['tempaloo_webp']['sizes'] ) ) continue;
+            // Read via the helper so we hit the authoritative
+            // _tempaloo_webp post_meta first and only fall back to the
+            // legacy in-metadata mirror. Critical: image-optimizer
+            // plugins (LiteSpeed, Smush, Imagify) routinely strip
+            // unknown sub-keys from $metadata, so reading the standard
+            // attachment meta directly under-reports savings whenever
+            // one of those plugins is active.
+            $tempaloo = Tempaloo_WebP_Plugin::get_conversion_meta( $id );
+            if ( empty( $tempaloo['sizes'] ) ) continue;
             $converted++;
             $original = get_attached_file( $id );
             if ( ! $original ) continue;
             $dir = dirname( $original );
+            $meta = wp_get_attachment_metadata( $id );
             $sources = [ $original ];
-            if ( ! empty( $meta['sizes'] ) ) {
+            if ( is_array( $meta ) && ! empty( $meta['sizes'] ) ) {
                 foreach ( $meta['sizes'] as $size ) {
                     if ( ! empty( $size['file'] ) ) {
                         $sources[] = trailingslashit( $dir ) . $size['file'];
                     }
                 }
             }
-            $fmt = isset( $meta['tempaloo_webp']['format'] ) ? $meta['tempaloo_webp']['format'] : 'webp';
+            $fmt = isset( $tempaloo['format'] ) ? $tempaloo['format'] : 'webp';
             foreach ( $sources as $src ) {
                 $alt = $src . '.' . $fmt;
                 if ( file_exists( $src ) && file_exists( $alt ) ) {
@@ -587,11 +923,13 @@ class Tempaloo_WebP_REST {
                 }
             }
         }
-        return [
+        $result = [
             'bytesIn'   => $in,
             'bytesOut'  => $out,
             'converted' => $converted,
         ];
+        set_transient( self::SAVINGS_TRANSIENT, $result, self::SAVINGS_TRANSIENT_TTL );
+        return $result;
     }
 
     // ─── State audit + reconciliation ───────────────────────────────────
@@ -1067,10 +1405,12 @@ class Tempaloo_WebP_REST {
             // so we match every size variant + their siblings.
             $stem = preg_replace( '/-(scaled|\d+x\d+)$/', '', $base_no_ext );
             $needle = strtolower( $stem );
-            // Walk the directory once.
-            $entries = @scandir( $dir );
-            if ( is_array( $entries ) ) {
-                foreach ( $entries as $name ) {
+            // Walk the directory once. Use a distinct variable name —
+            // $entries above already holds the per-size debug array
+            // returned to the client; reusing the name would clobber it.
+            $dir_entries = @scandir( $dir );
+            if ( is_array( $dir_entries ) ) {
+                foreach ( $dir_entries as $name ) {
                     if ( '.' === $name || '..' === $name ) continue;
                     if ( false === stripos( $name, $needle ) ) continue;
                     $full = trailingslashit( $dir ) . $name;
@@ -1187,6 +1527,13 @@ class Tempaloo_WebP_REST {
         // returns 404 / image/jpeg / WAF block, the URL filter +
         // <picture> will appear correct but the browser receives nothing.
         if ( $report['existsAfterWrite'] ) {
+            // sslverify=false intentional here: this is a self-test that
+            // hits the SAME WordPress site that received the request
+            // (loopback). Local-dev environments routinely use self-
+            // signed certs (Local by Flywheel, MAMP, valet); turning
+            // verification on would make the test fail on every dev
+            // machine. The request payload is just a HEAD asking
+            // "does this URL serve image/webp?", no secrets in flight.
             $resp = wp_remote_head(
                 $url,
                 [ 'timeout' => 8, 'redirection' => 2, 'sslverify' => false ]

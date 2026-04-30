@@ -247,6 +247,12 @@ export default function App() {
     // see why their numbers tick up after a conversion without thinking
     // the page is broken.
     const [refreshing, setRefreshing] = useState(false);
+    // Wall-clock of the last successful /state response. Drives the
+    // "Updated Xs ago · ↻" pill on the Overview header so users have
+    // a transparent signal when numbers might be stale and a one-click
+    // way to force a refresh — without having to find the heavier
+    // "Sync license" button (which also re-verifies the license).
+    const [lastStateAt, setLastStateAt] = useState<number>(Date.now());
     // Manual-action lock for the polling.
     //
     // Bug it fixes: user pastes license key → activate succeeds → local
@@ -304,22 +310,44 @@ export default function App() {
      * Numbers stay fresh because every realistic "I just did something
      * that changed the data" path triggers a refresh.
      */
+    /**
+     * Single source of truth for "go fetch /state now". Called by the
+     * three triggers below (visibility, tab change, periodic polling)
+     * and by the on-screen "↻ Refresh" pill. Always updates
+     * lastStateAt so the "Updated Xs ago" indicator stays honest even
+     * when the response is silently dropped by the manual-update lock.
+     *
+     * Returns a promise so callers can chain UI feedback (toast,
+     * disabled state) on completion.
+     */
+    const refreshNow = async () => {
+        setRefreshing(true);
+        try {
+            const next = await api.refreshState();
+            // Manual-update lock — a recent click (within 10s) takes
+            // precedence over a polled refresh. We still record the
+            // refresh attempt timestamp so the indicator updates;
+            // dropping the setState only blocks the data clobber, not
+            // the freshness signal.
+            const sinceManual = Date.now() - lastManualUpdateRef.current;
+            if (sinceManual >= 10_000) setState(next);
+            setLastStateAt(Date.now());
+        } catch {
+            // Silent — next trigger will retry. We don't update
+            // lastStateAt on failure so the user sees stale-time grow.
+        } finally {
+            setRefreshing(false);
+        }
+    };
+
     useEffect(() => {
         const onVis = () => {
             if (document.hidden) return;
-            setRefreshing(true);
-            api.refreshState()
-                .then((next) => {
-                    // Manual-update lock still applies — a recent click
-                    // (within 10s) can't be clobbered by a focus refresh.
-                    const sinceManual = Date.now() - lastManualUpdateRef.current;
-                    if (sinceManual >= 10_000) setState(next);
-                })
-                .catch(() => { /* silent — next event will retry */ })
-                .finally(() => setRefreshing(false));
+            refreshNow();
         };
         document.addEventListener("visibilitychange", onVis);
         return () => document.removeEventListener("visibilitychange", onVis);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Refresh on tab switch.
@@ -330,18 +358,35 @@ export default function App() {
     // fetch on every tab change gives ~200ms-fresh numbers everywhere
     // they actually look.
     useEffect(() => {
-        let alive = true;
-        setRefreshing(true);
-        api.refreshState()
-            .then((next) => {
-                if (!alive) return;
-                const sinceManual = Date.now() - lastManualUpdateRef.current;
-                if (sinceManual >= 10_000) setState(next);
-            })
-            .catch(() => { /* silent */ })
-            .finally(() => { if (alive) setRefreshing(false); });
-        return () => { alive = false; };
+        refreshNow();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [tab]);
+
+    /**
+     * Polling — Overview tab only, only while the page is actually
+     * visible. Adaptive cadence:
+     *   · Default 20s (no pending work).
+     *   · Drops to 3s while async-pending count > 0, so the user sees
+     *     the "this month" counter and savings catch up within seconds
+     *     of an upload finishing — without hammering the API for a
+     *     user who just keeps Overview open and walks away.
+     *
+     * Bulk has its own 350ms tick during a run; Settings / Activity /
+     * Sites / Diagnostic / Upgrade are inherently short-lived views
+     * users don't watch passively. Pauses on tab hide
+     * (visibilitychange) and on tab navigate (effect cleanup).
+     */
+    const asyncPendingCount = state.asyncPending?.count ?? 0;
+    useEffect(() => {
+        if (tab !== "overview") return;
+        const cadence = asyncPendingCount > 0 ? 3_000 : 20_000;
+        const id = window.setInterval(() => {
+            if (document.hidden) return;
+            refreshNow();
+        }, cadence);
+        return () => window.clearInterval(id);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [tab, asyncPendingCount]);
 
     const freeQuota = plans?.find(p => p.code === "free")?.imagesPerMonth ?? null;
 
@@ -470,6 +515,9 @@ export default function App() {
                         onState={setStateLockingPolling}
                         freeQuota={freeQuota}
                         refreshing={refreshing}
+                        lastStateAt={lastStateAt}
+                        onRefresh={refreshNow}
+                        asyncPending={state.asyncPending?.count ?? 0}
                         onGoToUpgrade={() => setTab("upgrade")}
                         onGoToBulk={() => setTab("bulk")}
                         onGoToActivity={() => setTab("activity")}

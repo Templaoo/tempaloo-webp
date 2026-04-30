@@ -82,6 +82,14 @@ export interface AppState {
         bytesOut: number;
         converted: number;
     };
+    /** Async upload queue summary — items uploaded into the Media
+     *  Library whose conversion loopback hasn't fired yet. count > 0
+     *  is a strong signal that the displayed quota / savings are
+     *  about to change, so the App polls more aggressively. */
+    asyncPending?: {
+        count: number;
+        oldestAt: number;
+    };
 }
 
 export interface BulkStatus {
@@ -91,6 +99,33 @@ export interface BulkStatus {
     succeeded: number;
     failed: number;
     errors: { id: number; code: string; message: string }[];
+    /** Live quota snapshot from the API's last X-Quota-* response headers.
+     *  Populated on every successful /convert during a run, lets the UI
+     *  tick the credits counter down image-by-image without polling
+     *  /state on every bulk tick. Absent on the first tick of a run. */
+    quota?: {
+        used: number;
+        limit: number;
+        remaining: number;
+        at: number;
+    };
+    /** Cumulative bytes saved across this run. Drives the live
+     *  "X MB freed" counter. Always present after at least one
+     *  successful conversion; bytesIn/bytesOut both 0 before that. */
+    savings?: {
+        bytesIn: number;
+        bytesOut: number;
+    };
+    /** Most recently converted attachment, for the "Currently processing"
+     *  feedback card. Null until the first successful conversion. */
+    lastItem?: {
+        id: number;
+        name: string;
+        format: string;
+        bytesIn: number;
+        bytesOut: number;
+        at: number;
+    } | null;
 }
 
 declare global {
@@ -166,12 +201,25 @@ export class ApiError extends Error {
 }
 
 async function restFetch<T>(path: string, init?: RequestInit): Promise<T> {
-    const res = await fetch(boot.rest.root + "tempaloo-webp/v1" + path, {
+    // Cache-buster — every request gets a unique query param so any
+    // page-cache layer (LiteSpeed Cache, WP Rocket, W3 Total Cache,
+    // Cloudflare Page Rules, the user's browser disk cache) treats
+    // each call as a fresh URL. Without this, LiteSpeed Cache on
+    // Hostinger was serving cached /state responses to logged-in
+    // admins, freezing the "this month" counter until manual purge.
+    // The plugin also sends nocache_headers() on the PHP side; this
+    // is the belt-and-braces second line of defence.
+    const sep = path.includes("?") ? "&" : "?";
+    const url = boot.rest.root + "tempaloo-webp/v1" + path + sep + "_=" + Date.now();
+    const res = await fetch(url, {
         credentials: "same-origin",
+        cache: "no-store",
         ...init,
         headers: {
             "Content-Type": "application/json",
             "X-WP-Nonce": boot.rest.nonce,
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
             ...(init?.headers ?? {}),
         },
     });
@@ -187,7 +235,12 @@ async function restFetch<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-    refreshState: () => restFetch<AppState>("/state"),
+    /** Forces a fresh server-side sync (license re-verify if stale,
+     *  async-upload drain) and returns the resulting state.
+     *  Hits POST /sync rather than GET /state so the GET endpoint
+     *  stays a pure read — the React polling pill, the focus-event
+     *  refresh and the manual "↻" button all funnel through here. */
+    refreshState: () => restFetch<AppState>("/sync", { method: "POST", body: "{}" }),
     activate: (licenseKey: string) =>
         restFetch<AppState>("/activate", { method: "POST", body: JSON.stringify({ license_key: licenseKey }) }),
     refreshLicense: () =>

@@ -214,6 +214,9 @@ final class Tempaloo_WebP_Plugin {
         ( new Tempaloo_WebP_Retry_Queue() )->register();
         Tempaloo_WebP_Activity::register();
         Tempaloo_WebP_License_Watch::register();
+        // Async upload pipeline. Owns the wp_generate_attachment_metadata
+        // filter exclusively since v1.9.0 — see class-async-upload.php.
+        Tempaloo_WebP_Async_Upload::register();
 
         // Resize-on-upload: pipe the user's setting into WP core's built-in
         // big-image threshold (since WP 5.3). Returning 0 disables the

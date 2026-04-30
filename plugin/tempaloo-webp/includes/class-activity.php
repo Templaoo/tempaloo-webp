@@ -71,7 +71,7 @@ class Tempaloo_WebP_Activity {
      * automatically without each call site having to remember.
      */
     public static function register() {
-        add_action( 'tempaloo_after_convert', [ __CLASS__, 'on_convert' ], 10, 2 );
+        add_action( 'tempaloo_webp_after_convert', [ __CLASS__, 'on_convert' ], 10, 2 );
     }
 
     public static function on_convert( $attachment_id, $info ) {

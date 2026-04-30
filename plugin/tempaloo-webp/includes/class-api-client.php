@@ -3,7 +3,14 @@ defined( 'ABSPATH' ) || exit;
 
 class Tempaloo_WebP_API_Client {
 
-    const HEALTH_OPTION = 'tempaloo_webp_api_health';
+    const HEALTH_OPTION     = 'tempaloo_webp_api_health';
+    /**
+     * Live quota cache populated from X-Quota-* response headers on
+     * every successful /convert call. Lets the bulk UI tick the quota
+     * counter down per-image without a separate /quota round-trip on
+     * each tick. Stale-acceptable: a few seconds at most during a run.
+     */
+    const QUOTA_LIVE_OPTION = 'tempaloo_webp_quota_live';
 
     private $base;
     private $license_key;
@@ -257,6 +264,21 @@ class Tempaloo_WebP_API_Client {
             ];
         }
         self::record_health( true );
+
+        // Cache the live quota snapshot the API just returned in headers.
+        // Bulk's public_state reads this so the React quota counter can
+        // tick down image-by-image during a long run, instead of waiting
+        // for the next /state poll (which only fires on tab focus).
+        $used      = (int) wp_remote_retrieve_header( $resp, 'x-quota-used' );
+        $limit     = (int) wp_remote_retrieve_header( $resp, 'x-quota-limit' );
+        $remaining = (int) wp_remote_retrieve_header( $resp, 'x-quota-remaining' );
+        update_option( self::QUOTA_LIVE_OPTION, [
+            'used'      => $used,
+            'limit'     => $limit,
+            'remaining' => $remaining,
+            'at'        => time(),
+        ], false );
+
         return [
             'ok'    => true,
             'files'   => isset( $data['files'] ) ? $data['files'] : [],
@@ -265,8 +287,9 @@ class Tempaloo_WebP_API_Client {
             // converter persists this on the attachment meta so the
             // next bulk scan stops re-flagging known-skip pairs.
             'skipped' => isset( $data['skipped'] ) ? $data['skipped'] : [],
-            'used'  => (int) wp_remote_retrieve_header( $resp, 'x-quota-used' ),
-            'limit' => (int) wp_remote_retrieve_header( $resp, 'x-quota-limit' ),
+            'used'      => $used,
+            'limit'     => $limit,
+            'remaining' => $remaining,
         ];
     }
 

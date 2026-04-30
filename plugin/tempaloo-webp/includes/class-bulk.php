@@ -77,12 +77,40 @@ class Tempaloo_WebP_Bulk {
         $batch_size = ( 'avif' === $fmt_for_batch || 'both' === $fmt_for_batch )
             ? self::BATCH_SIZE_AVIF
             : self::BATCH_SIZE;
+        // Initialize live-feedback fields if the run was started before
+        // 1.10.0 (existing state options carry the old shape).
+        if ( ! isset( $state['savings'] ) || ! is_array( $state['savings'] ) ) {
+            $state['savings'] = [ 'bytes_in' => 0, 'bytes_out' => 0 ];
+        }
+        if ( ! isset( $state['last_item'] ) ) {
+            $state['last_item'] = null;
+        }
+
         $batch = array_splice( $state['remaining'], 0, $batch_size );
         foreach ( $batch as $attachment_id ) {
             $res = $this->convert_attachment( (int) $attachment_id, $s );
             $state['processed']++;
             if ( $res['ok'] ) {
                 $state['succeeded']++;
+                // Accumulate cumulative savings for the run + remember
+                // the last-converted filename/format so the React UI
+                // can render a "Currently processing" card with the
+                // most recent context. Not surfaced when the conversion
+                // was an all-skipped (oversized AVIF) — those don't
+                // contribute bytes saved and showing them as the
+                // "current item" would mislead.
+                if ( 'ok' === ( $res['code'] ?? '' ) ) {
+                    $state['savings']['bytes_in']  += (int) ( $res['bytes_in']  ?? 0 );
+                    $state['savings']['bytes_out'] += (int) ( $res['bytes_out'] ?? 0 );
+                    $state['last_item'] = [
+                        'id'        => (int) $attachment_id,
+                        'name'      => isset( $res['name'] ) ? (string) $res['name'] : '',
+                        'format'    => isset( $res['format'] ) ? (string) $res['format'] : 'webp',
+                        'bytes_in'  => (int) ( $res['bytes_in']  ?? 0 ),
+                        'bytes_out' => (int) ( $res['bytes_out'] ?? 0 ),
+                        'at'        => time(),
+                    ];
+                }
             } else {
                 $state['failed']++;
                 if ( count( $state['errors'] ) < 20 ) {
@@ -179,14 +207,53 @@ class Tempaloo_WebP_Bulk {
     }
 
     private function public_state( array $state ) {
-        return [
+        $savings = is_array( $state['savings'] ?? null ) ? $state['savings'] : [ 'bytes_in' => 0, 'bytes_out' => 0 ];
+        $last_item = is_array( $state['last_item'] ?? null ) ? $state['last_item'] : null;
+
+        $out = [
             'status'    => $state['status'] ?? 'idle',
             'total'     => (int) ( $state['total'] ?? 0 ),
             'processed' => (int) ( $state['processed'] ?? 0 ),
             'succeeded' => (int) ( $state['succeeded'] ?? 0 ),
             'failed'    => (int) ( $state['failed'] ?? 0 ),
             'errors'    => array_values( $state['errors'] ?? [] ),
+            // Cumulative bytes saved across this run — drives the live
+            // "X MB freed" counter in the React running view.
+            'savings'   => [
+                'bytesIn'  => (int) ( $savings['bytes_in']  ?? 0 ),
+                'bytesOut' => (int) ( $savings['bytes_out'] ?? 0 ),
+            ],
+            // Last successfully-converted attachment in this run.
+            // Powers the "Currently processing" card. Null until at
+            // least one image succeeds. Tail item only — keeping a
+            // ring buffer would bloat the option without a clear UI win.
+            'lastItem'  => $last_item ? [
+                'id'       => (int) ( $last_item['id']       ?? 0 ),
+                'name'     => (string) ( $last_item['name']  ?? '' ),
+                'format'   => (string) ( $last_item['format'] ?? 'webp' ),
+                'bytesIn'  => (int) ( $last_item['bytes_in']  ?? 0 ),
+                'bytesOut' => (int) ( $last_item['bytes_out'] ?? 0 ),
+                'at'       => (int) ( $last_item['at']        ?? 0 ),
+            ] : null,
         ];
+
+        // Live quota snapshot — populated from X-Quota-* headers on
+        // every /convert response. Lets the React UI animate the
+        // remaining-credits counter down image-by-image during a bulk
+        // run without polling /state separately. Only included when
+        // we actually have a fresh value to report (skipped on the
+        // first tick of a fresh run before any conversion happened).
+        $live = get_option( Tempaloo_WebP_API_Client::QUOTA_LIVE_OPTION );
+        if ( is_array( $live ) && isset( $live['remaining'] ) ) {
+            $out['quota'] = [
+                'used'      => (int) ( $live['used']      ?? 0 ),
+                'limit'     => (int) ( $live['limit']     ?? 0 ),
+                'remaining' => (int) ( $live['remaining'] ?? 0 ),
+                'at'        => (int) ( $live['at']        ?? 0 ),
+            ];
+        }
+
+        return $out;
     }
 
     private function check_caps() {
@@ -405,7 +472,37 @@ class Tempaloo_WebP_Bulk {
 
         if ( $result['converted'] > 0 ) {
             wp_update_attachment_metadata( $attachment_id, $result['metadata'] );
-            return [ 'ok' => true, 'code' => 'ok', 'message' => sprintf( '%d sizes converted', $result['converted'] ) ];
+
+            // Compute per-attachment savings delta — bytes saved across
+            // every (size × format) sibling we just wrote. Cheap: we
+            // already have the meta in memory, just sum filesizes the
+            // converter recorded vs. their original counterparts. The
+            // tick handler accumulates this into state['savings'] so
+            // the React UI can animate "X MB freed" live during a run.
+            $bytes_in = 0; $bytes_out = 0;
+            $original_dir = dirname( (string) get_attached_file( $attachment_id ) );
+            $tempaloo = Tempaloo_WebP_Plugin::get_conversion_meta( $attachment_id );
+            if ( ! empty( $tempaloo['sizes'] ) && is_array( $tempaloo['sizes'] ) ) {
+                foreach ( $tempaloo['sizes'] as $key => $size ) {
+                    if ( empty( $size['name'] ) || empty( $size['file'] ) ) continue;
+                    $orig = trailingslashit( $original_dir ) . $size['name'];
+                    $alt  = trailingslashit( $original_dir ) . $size['file'];
+                    if ( file_exists( $orig ) && file_exists( $alt ) ) {
+                        $bytes_in  += filesize( $orig );
+                        $bytes_out += filesize( $alt );
+                    }
+                }
+            }
+
+            return [
+                'ok'        => true,
+                'code'      => 'ok',
+                'message'   => sprintf( '%d sizes converted', $result['converted'] ),
+                'name'      => basename( (string) get_attached_file( $attachment_id ) ),
+                'format'    => isset( $tempaloo['format'] ) ? (string) $tempaloo['format'] : 'webp',
+                'bytes_in'  => $bytes_in,
+                'bytes_out' => $bytes_out,
+            ];
         }
 
         // ALL inputs were server-side-skipped (typical: every size of an
