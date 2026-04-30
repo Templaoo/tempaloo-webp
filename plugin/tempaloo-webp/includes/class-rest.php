@@ -1053,6 +1053,38 @@ class Tempaloo_WebP_REST {
         // self-contained dump.
         $s = Tempaloo_WebP_Plugin::get_settings();
 
+        // Directory listing — every file in the attachment's parent
+        // folder whose name starts with the original basename (without
+        // extension). Surfaces siblings that exist with unexpected names
+        // (LiteSpeed Image Opt sometimes appends a suffix), or
+        // orphans/temp leftovers that didn't get cleaned up. Trims to
+        // 50 entries to keep the response sane on huge folders.
+        $dir_files = [];
+        if ( is_string( $attached ) && file_exists( $attached ) ) {
+            $dir = dirname( $attached );
+            $base_no_ext = pathinfo( $attached, PATHINFO_FILENAME );
+            // Strip the WordPress size suffix (e.g. "image-1024x1024" → "image")
+            // so we match every size variant + their siblings.
+            $stem = preg_replace( '/-(scaled|\d+x\d+)$/', '', $base_no_ext );
+            $needle = strtolower( $stem );
+            // Walk the directory once.
+            $entries = @scandir( $dir );
+            if ( is_array( $entries ) ) {
+                foreach ( $entries as $name ) {
+                    if ( '.' === $name || '..' === $name ) continue;
+                    if ( false === stripos( $name, $needle ) ) continue;
+                    $full = trailingslashit( $dir ) . $name;
+                    if ( ! is_file( $full ) ) continue;
+                    $dir_files[] = [
+                        'name'  => $name,
+                        'bytes' => (int) @filesize( $full ),
+                        'mtime' => (int) @filemtime( $full ),
+                    ];
+                    if ( count( $dir_files ) >= 50 ) break;
+                }
+            }
+        }
+
         return rest_ensure_response( [
             'attachmentId'      => $id,
             'title'             => get_the_title( $id ),
@@ -1064,6 +1096,7 @@ class Tempaloo_WebP_REST {
             'metaInsideMetadata' => $meta_via_metadata,
             'metaEffective'     => $meta_effective,
             'sizes'             => $entries,
+            'directoryFiles'    => $dir_files,
             'settings'          => [
                 'licenseValid'  => ! empty( $s['license_valid'] ),
                 'autoConvert'   => ! empty( $s['auto_convert'] ),

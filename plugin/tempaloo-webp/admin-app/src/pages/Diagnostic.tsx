@@ -444,6 +444,28 @@ function AttachmentInspector() {
                             ))}
                         </div>
                     </div>
+
+                    {report.directoryFiles && report.directoryFiles.length > 0 && (
+                        <div className="rounded-lg border border-ink-200 p-4">
+                            <div className="text-sm font-semibold text-ink-900 mb-1">
+                                Directory listing — actual files in the same folder ({report.directoryFiles.length})
+                            </div>
+                            <div className="text-xs text-ink-500 mb-2 leading-relaxed">
+                                Ground truth: every file matching this attachment&apos;s name pattern. If you see <code className="bg-ink-100 px-1 rounded">.tmp</code> leftovers, .webp with unexpected suffixes (<code className="bg-ink-100 px-1 rounded">-litespeed</code>, <code className="bg-ink-100 px-1 rounded">.imagify</code>),
+                                or names that don&apos;t match the size table above, you have evidence of another image-optimizer touching the same files.
+                            </div>
+                            <div className="text-[11px] font-mono text-ink-700 space-y-0.5 max-h-64 overflow-auto">
+                                {report.directoryFiles.map((f) => (
+                                    <div key={f.name} className="flex justify-between gap-2">
+                                        <span className={f.name.endsWith(".webp") ? "text-emerald-700" : f.name.endsWith(".tmp") ? "text-amber-700" : ""}>
+                                            {f.name}
+                                        </span>
+                                        <span className="text-ink-500 shrink-0">{f.bytes.toLocaleString()} B</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
         </Card>

@@ -259,6 +259,10 @@ export interface AttachmentDebugReport {
         webp: { path: string; exists: boolean; bytes: number } | null;
         avif: { path: string; exists: boolean; bytes: number } | null;
     }>;
+    /** Every file in the attachment's parent directory whose name matches
+     *  the original basename — surfaces unexpected siblings (LiteSpeed
+     *  appended suffix, leftover .tmp, etc.) without extra clicks. */
+    directoryFiles: Array<{ name: string; bytes: number; mtime: number }>;
     settings: Record<string, unknown>;
 }
 

@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.8.2
+Stable tag: 1.8.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -145,6 +145,10 @@ Example — skip conversion for any attachment in the `private/` upload subfolde
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 1.8.3 =
+* Improved: **Atomic temp+rename writes** for `.webp` / `.avif` siblings. Inspired by WP Smush's `put_image_using_temp_file` pattern. Instead of writing directly to `target.webp` (which a security scanner can catch mid-write and quarantine), we now write to `target.webp.tmp` and rename atomically once the bytes are flushed. Side-benefits: no half-written .webp can ever exist on disk, scanner heuristics that ignore `.tmp` files don't see anything until the rename produces a fully-formed valid WebP. Falls back to copy+unlink if rename fails across filesystem boundaries.
+* New: **Directory listing in Inspect**. Below the per-size table, a 50-entry listing of every file in the attachment's parent folder whose name matches its basename. Highlights `.tmp` leftovers (failed rename), `.webp` with unexpected suffixes from competing optimizers, or any other surprises. Ground truth that matches what FTP / hPanel File Manager would show.
 
 = 1.8.2 =
 * New: **Filesystem self-test** in the Diagnostic tab. Writes a real (tiny, 26-byte) WebP into `/uploads/`, immediately re-checks existence, sleeps 5 seconds, re-checks again, then fetches the file via HTTP and inspects the Content-Type. Returns one verdict line that names the failure mode: `WRITE_FAILED` (permissions), `POST_WRITE_VANISH` (host security caught the write), `PERSISTENCE_FAILURE` (something deleted it within 5s — LiteSpeed Image Optimization, Wordfence, host WAF), `WRONG_MIME` (file persists but served as image/jpeg → browser can't decode), or `OK`. Surfaces in one button click why the user's converter writes WebPs the disk doesn't keep.

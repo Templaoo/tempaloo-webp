@@ -209,33 +209,58 @@ class Tempaloo_WebP_Converter {
                 : ( 'both' === $format ? 'webp' : $format );
             $target   = $src_path . '.' . $entry_fmt;
             $binary   = base64_decode( $f['data'], true );
-            // Writing a WebP/AVIF sibling next to the original on the same
-            // disk — WP_Filesystem is for remote/credentialed writes and
-            // doesn't apply here. The @ silences a benign E_WARNING on
-            // read-only hosts; we already return a failed++ below if the
-            // write fails.
-            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
-            $bytes_written = ( false === $binary ) ? false : @file_put_contents( $target, $binary );
+            // Atomic write via temp file + rename. Inspired by WP Smush
+            // (core/smush/class-smusher.php put_image_using_temp_file).
+            //
+            // Why not direct file_put_contents to $target:
+            //  · A direct write goes through several states the scanner
+            //    can catch — file open, partial write, close. Wordfence /
+            //    iThemes Security / mod_security image scanners that
+            //    fire on inotify events can see a 0-byte or half-written
+            //    .webp and quarantine it. Temp+rename means the final
+            //    .webp materialises atomically at its finished size; no
+            //    half-state ever exists at the .webp path.
+            //  · The .tmp suffix is ignored by most security heuristics
+            //    (it's "transient"). By the time the rename completes,
+            //    the file is fully formed and matches all WebP magic
+            //    byte signatures, so even an immediate scan post-rename
+            //    sees a valid .webp.
+            $temp = $target . '.tmp';
+            $bytes_written = ( false === $binary ) ? false : @file_put_contents( $temp, $binary );
             if ( false === $bytes_written || $bytes_written === 0 ) {
+                @unlink( $temp ); // best-effort cleanup if we wrote 0 bytes
                 $failed++;
                 continue;
             }
-            // Post-write verification. Some hosts (we've seen it on
-            // Hostinger LiteSpeed environments) accept the write into
-            // a per-request scratch area but the file disappears the
-            // moment another plugin or open_basedir / mod_security
-            // trigger fires. file_exists() right after surfaces this
-            // so we don't silently report "converted=7" while the disk
-            // has zero siblings. Log the failure to Activity for
-            // post-mortem; treat as failed for the count.
+            // Atomic rename. Falls back to copy+unlink if rename across
+            // filesystem boundaries fails (e.g., uploads on a separate
+            // mount on some hosts).
+            $renamed = @rename( $temp, $target );
+            if ( ! $renamed ) {
+                $copied = @copy( $temp, $target );
+                @unlink( $temp );
+                if ( ! $copied ) {
+                    $failed++;
+                    continue;
+                }
+            }
+
+            // Post-write verification. clearstatcache forces a fresh
+            // read — without it PHP's stat cache might still remember
+            // the temp path and lie about $target. If $target is
+            // missing despite the rename succeeding, something on the
+            // host is actively removing .webp siblings (LiteSpeed
+            // image-opt, security scanner, host WAF). Log + count as
+            // failed so the user sees the real outcome instead of
+            // converted=N with nothing on disk.
             clearstatcache( true, $target );
             if ( ! file_exists( $target ) ) {
                 $failed++;
                 Tempaloo_WebP_Activity::log(
                     'auto_convert', 'error',
                     sprintf(
-                        /* translators: 1: attachment ID, 2: target file path */
-                        __( 'Wrote %1$d bytes for #%2$d but file vanished after write — host or another plugin removed it', 'tempaloo-webp' ),
+                        /* translators: 1: bytes written, 2: attachment ID */
+                        __( 'Wrote %1$d bytes for #%2$d but file vanished after rename — host or another plugin removed it', 'tempaloo-webp' ),
                         (int) $bytes_written,
                         (int) $attachment_id
                     ),
