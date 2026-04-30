@@ -28,6 +28,7 @@ sharp.simd(true); // SIMD is fine — it's CPU vectorization, not extra memory
 import accountRoutes from "./routes/account.js";
 import adminAuthRoutes from "./routes/admin/auth.js";
 import adminDataRoutes from "./routes/admin/data.js";
+import contactRoute from "./routes/contact.js";
 import convertRoute from "./routes/convert.js";
 import licenseRoutes from "./routes/license.js";
 import notifyRoute from "./routes/notify.js";
@@ -90,6 +91,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
 
     await app.register(
         async (api) => {
+            await api.register(contactRoute);
             await api.register(convertRoute);
             await api.register(quotaRoute);
             await api.register(licenseRoutes);
