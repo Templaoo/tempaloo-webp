@@ -257,7 +257,8 @@ function Nav({ theme, scrolled, onToggleTheme }: { theme: Theme; scrolled: boole
                         <a href="#pricing">Pricing</a>
                         <a href="#faq">FAQ</a>
                         <Link href="/docs">Docs</Link>
-                        <a href="#" title="Coming soon">Changelog</a>
+                        <Link href="/changelog">Changelog</Link>
+                        <Link href="/contact">Contact</Link>
                     </div>
                     <div className="pr2-nav-right">
                         <button onClick={onToggleTheme} className="pr2-btn pr2-btn-ghost pr2-icon-btn" aria-label="Toggle theme">
@@ -307,7 +308,8 @@ function Nav({ theme, scrolled, onToggleTheme }: { theme: Theme; scrolled: boole
                         <a href="#pricing" onClick={close}>Pricing</a>
                         <a href="#faq" onClick={close}>FAQ</a>
                         <Link href="/docs" onClick={close}>Docs</Link>
-                        <a href="#" onClick={close} title="Coming soon">Changelog <span className="pr2-mobile-soon">soon</span></a>
+                        <Link href="/changelog" onClick={close}>Changelog</Link>
+                        <Link href="/contact" onClick={close}>Contact</Link>
                     </nav>
                     <div className="pr2-mobile-ctas">
                         <Link href="/webp/activate" className="pr2-btn pr2-btn-ghost" onClick={close}>Sign in</Link>
@@ -1127,7 +1129,7 @@ function Footer() {
                             <a href="#pricing">Pricing</a>
                             <a href="#faq">FAQ</a>
                             <Link href="/docs">Docs</Link>
-                            <a href="#" title="Coming soon">Changelog</a>
+                            <Link href="/changelog">Changelog</Link>
                         </div>
                     </div>
                     <div>
@@ -1147,7 +1149,8 @@ function Footer() {
                             <a href="#" className="pr2-footer-inline pr2-footer-inline-muted">
                                 Templates <span className="pr2-footer-tag pr2-font-mono">· SOON</span>
                             </a>
-                            <a href="#" title="Coming soon">Blog</a>
+                            <Link href="/about">About</Link>
+                            <Link href="/contact">Contact</Link>
                         </div>
                     </div>
                     <div>
@@ -1155,7 +1158,7 @@ function Footer() {
                         <div className="pr2-footer-col">
                             <Link href="/privacy">Privacy</Link>
                             <Link href="/terms">Terms</Link>
-                            <Link href="/terms">Refunds</Link>
+                            <Link href="/terms#4-trial-and-refunds">Refunds</Link>
                         </div>
                     </div>
                 </div>

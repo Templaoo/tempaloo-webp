@@ -36,6 +36,8 @@ export function LegalPage({
                         <LogoMark size={32} />
                     </Link>
                     <nav className="lp-nav-right">
+                        <Link href="/docs" className="lp-nav-link">Docs</Link>
+                        <Link href="/contact" className="lp-nav-link">Contact</Link>
                         <Link href="/privacy" className="lp-nav-link">Privacy</Link>
                         <Link href="/terms" className="lp-nav-link">Terms</Link>
                         <Link href="/webp" className="lp-nav-back">← Back to site</Link>
@@ -54,12 +56,13 @@ export function LegalPage({
 
             <footer className="lp-footer">
                 <div className="app-container lp-footer-inner">
-                    <span>© {new Date().getFullYear()} Tempaloo. All rights reserved.</span>
+                    <span>© {new Date().getFullYear()} Tempaloo SAS · 12 rue de la Paix, 75002 Paris</span>
                     <div className="lp-footer-links">
                         <Link href="/webp">Home</Link>
+                        <Link href="/docs">Docs</Link>
+                        <Link href="/contact">Contact</Link>
                         <Link href="/privacy">Privacy</Link>
                         <Link href="/terms">Terms</Link>
-                        <a href="mailto:support@tempaloo.com">Contact</a>
                     </div>
                 </div>
             </footer>

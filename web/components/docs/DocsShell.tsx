@@ -139,7 +139,7 @@ export function DocsShell({ children }: { children: ReactNode }) {
                     {children}
                     <div className="docs-foot">
                         <span>Need help?</span>
-                        <a href="mailto:support@tempaloo.com">support@tempaloo.com</a>
+                        <Link href="/contact">Get in touch →</Link>
                     </div>
                 </main>
             </div>
