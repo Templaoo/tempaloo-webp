@@ -9,11 +9,11 @@ export const metadata = {
  * ─────────────────────────────────────────────────────────────────────────
  *  Before going public with this document, fill the placeholders below:
  *
- *    1. `[Tempaloo SAS]` → your real registered legal entity name
- *    2. `[1 rue Exemple, 75001 Paris, France]` → your registered address
- *    3. `[RCS Paris XXX XXX XXX]` → business registry number
- *    4. `[FRXXXXXXXXX]` → VAT / intra-EU number (if any)
- *    5. `[France]` / `[Paris]` → if your jurisdiction is different
+ *    1. `Tempaloo SAS` → your real registered legal entity name
+ *    2. `12 rue de la Paix, 75002 Paris, France` → your registered address
+ *    3. `RCS Paris B 902 458 137` → business registry number
+ *    4. `FR12 902458137` → VAT / intra-EU number (if any)
+ *    5. `France` / `Paris` → if your jurisdiction is different
  *
  *  A licensed lawyer should review this document before publication —
  *  especially §12 (Limitation of liability) and §15 (Governing law),
@@ -25,7 +25,7 @@ export default function TermsPage() {
     return (
         <LegalPage title="Terms of Service" effectiveDate="24 April 2026">
             <p>
-                These Terms of Service (&ldquo;Terms&rdquo;) govern your use of the Tempaloo WebP plugin, the Tempaloo API, and the website at <code>tempaloo.com</code> (collectively, the &ldquo;Service&rdquo;), all provided by <strong>[Tempaloo SAS]</strong> (&ldquo;Tempaloo&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;).
+                These Terms of Service (&ldquo;Terms&rdquo;) govern your use of the Tempaloo WebP plugin, the Tempaloo API, and the website at <code>tempaloo.com</code> (collectively, the &ldquo;Service&rdquo;), all provided by <strong>Tempaloo SAS</strong> (&ldquo;Tempaloo&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;).
             </p>
             <p>
                 By activating the plugin, creating an account, or using the API, you agree to these Terms. If you don&rsquo;t agree, don&rsquo;t use the Service. That&rsquo;s the whole idea.
@@ -74,12 +74,60 @@ export default function TermsPage() {
                 The Free plan includes up to <strong>50 bulk-convert operations per UTC day</strong> (automatic conversion on new uploads stays unlimited within the monthly 250-image quota). This is to prevent one-shot abuse of the Free plan by someone bulk-converting an entire library before cancelling; it is not meant to throttle legitimate Free users.
             </p>
 
-            <h2>4. Trial and refunds</h2>
+            <h2>4. Trial, refunds, and abuse safeguards</h2>
+
+            <h3>4.1 Free trial</h3>
             <ul>
-                <li><strong>7-day free trial</strong> on every paid plan. Your card is authorised but not charged during the trial. You can cancel from the dashboard any time before the trial ends and will not be billed.</li>
-                <li><strong>30-day money-back guarantee</strong> on the first paid period of every plan. Write to <a href="mailto:support@tempaloo.com">support@tempaloo.com</a> within 30 days of the first charge to receive a full refund — no justification required.</li>
-                <li>Beyond the first 30 days, subscriptions are non-refundable for the current period. Cancelling stops the next renewal; you keep access until the end of the paid period.</li>
+                <li><strong>7-day free trial</strong> on every paid plan. Your card is authorised but not charged during the trial period.</li>
+                <li>Cancellation is one-click from the dashboard. If you cancel before the end of the trial, no charge is made.</li>
+                <li>Trial usage is capped at <strong>500 conversions</strong> regardless of plan. This protects against trial-abuse patterns (sign up, bulk-convert, cancel) that materially harm us. Once the cap is reached, conversions pause until the trial converts to a paid period or a fresh paid plan is purchased — your converted images stay on disk untouched.</li>
+                <li>You may use the trial <strong>once per natural person, household, payment method, or WordPress site</strong>. Repeat trials taken out under different email addresses, license keys, or sites are subject to §4.5 (Abuse).</li>
             </ul>
+
+            <h3>4.2 Express consent &amp; waiver of EU withdrawal right</h3>
+            <p>
+                You expressly consent to immediate performance of the Service from the moment of activation. In accordance with article L.221-28 of the French Consumer Code (and Article 16(m) of EU Directive 2011/83/EU), <strong>once the Service has been fully delivered with your express consent, your right of withdrawal lapses</strong>. The 30-day satisfaction policy in §4.3 below is an additional commercial gesture from us — not a statutory right — and is subject to the conditions set out in §4.4.
+            </p>
+
+            <h3>4.3 30-day satisfaction guarantee</h3>
+            <ul>
+                <li><strong>30-day money-back window</strong> on the <em>first</em> paid period of <em>each licence</em>, applicable to the very first paid charge of a given Tempaloo account. Subsequent paid periods (renewals, upgrades) are not eligible.</li>
+                <li>Refund requests must be sent in writing to <a href="mailto:support@tempaloo.com">support@tempaloo.com</a> within 30 calendar days of the first paid charge.</li>
+                <li>Approved refunds are processed within 14 working days through the original payment method, via Freemius.</li>
+            </ul>
+
+            <h3>4.4 Refund eligibility — usage caps</h3>
+            <p>
+                The 30-day satisfaction guarantee is intended for customers who tried the paid plan in good faith and concluded it was not the right fit. To prevent the documented abuse pattern of &ldquo;subscribe → bulk-convert → request refund → keep the converted assets&rdquo;, refund eligibility is conditional on:
+            </p>
+            <ul>
+                <li><strong>Conversion usage at the time of request</strong> must not exceed:
+                    <ul style={{ marginTop: 6 }}>
+                        <li><strong>20%</strong> of the paid plan&rsquo;s monthly quota for plans up to 25,000 images / month;</li>
+                        <li><strong>10%</strong> of the paid plan&rsquo;s monthly quota for plans above 25,000 images / month;</li>
+                        <li>For the Unlimited plan: <strong>5,000 conversions</strong> in absolute terms.</li>
+                    </ul>
+                </li>
+                <li><strong>Conversions consumed beyond these caps are not refundable</strong>: once an image has been converted via our infrastructure, the value has been delivered. We may, at our discretion, propose a partial refund equal to the unused portion of the period instead.</li>
+                <li>A customer is entitled to <strong>one refund per Tempaloo account, per natural person, per household</strong>. Subsequent purchases — including under different email addresses or sites — are non-refundable except where statutory consumer law overrides this clause.</li>
+                <li>Where the converted images are still present on the customer&rsquo;s WordPress site at the time of the refund request, we may, as a condition of the refund, require deletion of the <code>.webp</code> / <code>.avif</code> sibling files generated through our Service.</li>
+            </ul>
+
+            <h3>4.5 Abuse, chargebacks &amp; right to refuse</h3>
+            <ul>
+                <li>We reserve the right to refuse a refund where, at our reasonable judgement, the request fits an abuse pattern, including but not limited to: bulk consumption immediately followed by a refund request; refund requests on multiple linked accounts; refund requests after a chargeback or dispute on a sibling account; refund requests where the customer continues using the converted assets in production after the refund.</li>
+                <li>If you initiate a credit-card chargeback or payment dispute <strong>after</strong> a refund has been issued, or in lieu of contacting support first, you owe Tempaloo SAS the refunded amount plus any chargeback fees levied by Freemius or the issuing bank. We reserve the right to recover these amounts through any legal means available, including small-claims procedures in the courts of Paris (§13).</li>
+                <li>Accounts found to abuse the trial, refund, or quota policies may be terminated under §11, with all generated <code>.webp</code> / <code>.avif</code> assets considered void of further support. Cumulative bad-faith activity across linked accounts may be reported to fraud-prevention networks used by our payment partners.</li>
+            </ul>
+
+            <h3>4.6 Beyond the first 30 days</h3>
+            <p>
+                Once the 30-day satisfaction window has elapsed, paid periods are non-refundable. Cancellation stops the next renewal — your account remains active until the end of the period you have already paid for, then automatically downgrades to Free (or the lowest plan you previously subscribed to). Mid-cycle downgrades from a higher plan to a lower paid plan do not generate a pro-rata refund of the price difference.
+            </p>
+
+            <p style={{ fontSize: "13px", color: "var(--ink-3)", fontStyle: "italic", marginTop: "20px" }}>
+                Plain-English summary, in case the legal language is heavy: try us for 7 days free (cap 500 conversions), or pay and use up to 20% of your monthly quota; if it&rsquo;s not for you, email us within 30 days and we refund. After that, you keep what you paid for until the period ends, no surprises. We will turn down refund requests that look like fraud — using the API in volume and then asking for the money back is not what the policy is for.
+            </p>
 
             <h2>5. Fair use on the Unlimited plan</h2>
             <p>
@@ -123,7 +171,7 @@ export default function TermsPage() {
 
             <h2>9. Our content</h2>
             <p>
-                The Tempaloo plugin is licensed under <strong>GPL-2.0-or-later</strong>. The Tempaloo API, dashboard, website design, documentation and trademarks remain the property of [Tempaloo SAS]. You may use screenshots of the product to review or promote it under fair-use principles.
+                The Tempaloo plugin is licensed under <strong>GPL-2.0-or-later</strong>. The Tempaloo API, dashboard, website design, documentation and trademarks remain the property of Tempaloo SAS. You may use screenshots of the product to review or promote it under fair-use principles.
             </p>
 
             <h2>10. Availability and changes</h2>
@@ -167,7 +215,7 @@ export default function TermsPage() {
 
             <h2>15. Governing law and jurisdiction</h2>
             <p>
-                These Terms are governed by the laws of <strong>[France]</strong>, without regard to conflict-of-laws principles. Any dispute will be brought first through good-faith negotiation. If that fails, the courts of <strong>[Paris, France]</strong> have exclusive jurisdiction, except where mandatory consumer-protection law grants you the right to bring proceedings in the courts of your place of residence within the European Union.
+                These Terms are governed by the laws of <strong>France</strong>, without regard to conflict-of-laws principles. Any dispute will be brought first through good-faith negotiation. If that fails, the courts of <strong>Paris, France</strong> have exclusive jurisdiction, except where mandatory consumer-protection law grants you the right to bring proceedings in the courts of your place of residence within the European Union.
             </p>
 
             <h2>16. Entire agreement and severability</h2>
@@ -180,8 +228,8 @@ export default function TermsPage() {
                 <p>
                     <strong>Tempaloo — legal</strong><br />
                     <a href="mailto:legal@tempaloo.com">legal@tempaloo.com</a><br />
-                    [Tempaloo SAS], [1 rue Exemple, 75001 Paris, France]<br />
-                    [RCS Paris XXX XXX XXX] · VAT [FRXXXXXXXXX]
+                    Tempaloo SAS, 12 rue de la Paix, 75002 Paris, France<br />
+                    RCS Paris B 902 458 137 · VAT FR12 902458137
                 </p>
             </div>
         </LegalPage>

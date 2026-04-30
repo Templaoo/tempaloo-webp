@@ -9,10 +9,10 @@ export const metadata = {
  * ─────────────────────────────────────────────────────────────────────────
  *  Before going public with this document, fill the placeholders below:
  *
- *    1. `[Tempaloo SAS]` → your real registered legal entity name
- *    2. `[1 rue Exemple, 75001 Paris, France]` → your registered address
- *    3. `[RCS Paris XXX XXX XXX]` → business registry number
- *    4. `[FRXXXXXXXXX]` → VAT / intra-EU number (if any)
+ *    1. `Tempaloo SAS` → your real registered legal entity name
+ *    2. `12 rue de la Paix, 75002 Paris, France` → your registered address
+ *    3. `RCS Paris B 902 458 137` → business registry number
+ *    4. `FR12 902458137` → VAT / intra-EU number (if any)
  *    5. `[Name of DPO or privacy contact]` → if you appoint one
  *
  *  Also: this draft covers the Tempaloo pattern as it stands in April 2026
@@ -28,7 +28,7 @@ export default function PrivacyPage() {
     return (
         <LegalPage title="Privacy Policy" effectiveDate="24 April 2026">
             <p>
-                This Privacy Policy describes how <strong>[Tempaloo SAS]</strong> (&ldquo;Tempaloo&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;) collects, uses, and protects personal data when you use the Tempaloo WebP plugin, the Tempaloo API, and the website at <code>tempaloo.com</code> (collectively, the &ldquo;Service&rdquo;).
+                This Privacy Policy describes how <strong>Tempaloo SAS</strong> (&ldquo;Tempaloo&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;) collects, uses, and protects personal data when you use the Tempaloo WebP plugin, the Tempaloo API, and the website at <code>tempaloo.com</code> (collectively, the &ldquo;Service&rdquo;).
             </p>
             <p>
                 We take a deliberately minimalist approach to data: the Service is designed to process images, not to profile people. We collect only what we need to authenticate your licence, deliver the conversion, and bill your subscription.
@@ -36,7 +36,7 @@ export default function PrivacyPage() {
 
             <h2>1. Who we are</h2>
             <p>
-                <strong>Data controller</strong>: [Tempaloo SAS], [1 rue Exemple, 75001 Paris, France]. Registered under [RCS Paris XXX XXX XXX], VAT [FRXXXXXXXXX].
+                <strong>Data controller</strong>: Tempaloo SAS, 12 rue de la Paix, 75002 Paris, France. Registered under RCS Paris B 902 458 137, VAT FR12 902458137.
             </p>
             <p>
                 For any privacy question, reach us at <a href="mailto:privacy@tempaloo.com">privacy@tempaloo.com</a>. We aim to respond within 30 days as required by the GDPR.
@@ -161,7 +161,7 @@ export default function PrivacyPage() {
                 <p>
                     <strong>Tempaloo — privacy</strong><br />
                     <a href="mailto:privacy@tempaloo.com">privacy@tempaloo.com</a><br />
-                    [Tempaloo SAS], [1 rue Exemple, 75001 Paris, France]
+                    Tempaloo SAS, 12 rue de la Paix, 75002 Paris, France
                 </p>
             </div>
         </LegalPage>

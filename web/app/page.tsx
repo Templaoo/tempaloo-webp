@@ -91,11 +91,14 @@ export default function Home() {
 
             <footer style={{ borderTop: "1px solid var(--line)", padding: "40px 0", marginTop: "auto" }}>
                 <div className="app-container" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16, fontSize: 12.5, color: "var(--ink-3)" }}>
-                    <span>© {new Date().getFullYear()} Tempaloo. Made for WordPress creators.</span>
-                    <div style={{ display: "flex", gap: 20 }}>
-                        <a href="#" title="Coming soon">Privacy</a>
-                        <a href="#" title="Coming soon">Terms</a>
-                        <a href="mailto:support@tempaloo.com">Contact</a>
+                    <span>© {new Date().getFullYear()} Tempaloo SAS · 12 rue de la Paix, 75002 Paris</span>
+                    <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+                        <Link href="/about">About</Link>
+                        <Link href="/docs">Docs</Link>
+                        <Link href="/changelog">Changelog</Link>
+                        <Link href="/contact">Contact</Link>
+                        <Link href="/privacy">Privacy</Link>
+                        <Link href="/terms">Terms</Link>
                     </div>
                 </div>
             </footer>

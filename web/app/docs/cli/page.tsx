@@ -3,6 +3,14 @@ import { DocPage, Section, P, H3, Pre, Callout, Mockup } from "@/components/docs
 export const metadata = {
     title: "WP-CLI commands — Tempaloo WebP Docs",
     description: "Six commands to manage license, bulk conversion, restore and settings from the terminal — built for agencies running many sites.",
+    openGraph: {
+        title: "Tempaloo WebP — WP-CLI",
+        description: "Six commands to script license, bulk, restore and settings across many WordPress sites.",
+        url: "https://tempaloo.com/docs/cli",
+        type: "article",
+    },
+    twitter: { card: "summary_large_image" },
+    alternates: { canonical: "https://tempaloo.com/docs/cli" },
 };
 
 export default function CliPage() {

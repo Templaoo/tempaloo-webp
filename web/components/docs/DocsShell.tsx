@@ -46,10 +46,30 @@ const NAV: NavSection[] = [
     {
         title: "DEVELOPER HOOKS",
         items: [
-            { label: "Overview",                  href: "/docs/hooks" },
-            { label: "tempaloo_skip_attachment",  href: "/docs/hooks#skip" },
-            { label: "tempaloo_quality_for",      href: "/docs/hooks#quality" },
-            { label: "tempaloo_after_convert",    href: "/docs/hooks#after" },
+            { label: "Overview",                       href: "/docs/hooks" },
+            { label: "tempaloo_webp_skip_attachment",  href: "/docs/hooks#skip" },
+            { label: "tempaloo_webp_quality_for",      href: "/docs/hooks#quality" },
+            { label: "tempaloo_webp_after_convert",    href: "/docs/hooks#after" },
+        ],
+    },
+    {
+        title: "GUIDES",
+        items: [
+            { label: "Media Library actions", href: "/docs/features#media-library" },
+            { label: "Async upload pipeline", href: "/docs/features#async" },
+            { label: "Diagnostic & repair",   href: "/docs/features#diagnostic" },
+            { label: "Cache compatibility",   href: "/docs/features#cache" },
+            { label: "Troubleshooting",       href: "/docs/features#troubleshooting" },
+        ],
+    },
+    {
+        title: "RESOURCES",
+        items: [
+            { label: "About",       href: "/about" },
+            { label: "Changelog",   href: "/changelog" },
+            { label: "Contact",     href: "/contact" },
+            { label: "Privacy",     href: "/privacy" },
+            { label: "Terms",       href: "/terms" },
         ],
     },
 ];

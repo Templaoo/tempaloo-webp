@@ -1,16 +1,24 @@
 import { DocPage, Section, P, H3, Pre, Callout, Mockup, AdminUploadRow } from "@/components/docs/Doc";
 
 export const metadata = {
-    title: "New features — Tempaloo WebP Docs",
-    description: "Compression stats, restore originals, resize on upload, quality presets — what shipped in v0.4.0+.",
+    title: "Features — Tempaloo WebP Docs",
+    description: "Compression stats, per-image restore, async upload pipeline, Diagnostic tab, cache compatibility — every Tempaloo WebP feature explained.",
+    openGraph: {
+        title: "Tempaloo WebP — Features",
+        description: "Per-image restore, async upload, Diagnostic tab, cache compatibility. Every feature explained with examples.",
+        url: "https://tempaloo.com/docs/features",
+        type: "article",
+    },
+    twitter: { card: "summary_large_image" },
+    alternates: { canonical: "https://tempaloo.com/docs/features" },
 };
 
 export default function FeaturesPage() {
     return (
         <DocPage
             eyebrow="DOCUMENTATION · FEATURES"
-            title="New features"
-            lead="Four features shipped in v0.4.x that close the parity gap with Imagify and ShortPixel and add a few touches that go beyond. All visible in your WP admin, no extra setup."
+            title="Features"
+            lead="Everything Tempaloo WebP does, in one place. From per-upload conversion stats to the Diagnostic tab that surfaces drift between WordPress meta and disk state — every feature is visible in your WP admin without extra setup."
         >
             {/* ─── Stats ─────────────────────────────────────────── */}
             <Section id="stats" title="Compression stats — every uploaded image">
@@ -167,8 +175,210 @@ export default function FeaturesPage() {
 
                 <Callout kind="info" title="Per-attachment override">
                     Need a different quality for one specific image? Use the
-                    <code>tempaloo_quality_for</code> filter — see <a href="/docs/hooks#quality">Developer hooks</a>.
+                    <code>tempaloo_webp_quality_for</code> filter — see <a href="/docs/hooks#quality">Developer hooks</a>.
                 </Callout>
+            </Section>
+
+            {/* ─── Media Library actions ─────────────────────────── */}
+            <Section id="media-library" title="Media Library actions — per-image control">
+                <P>
+                    The <strong>Optimized</strong> column on <code>/wp-admin/upload.php</code> is more than a status
+                    indicator. Every row carries a complete control surface: the conversion badge, savings
+                    breakdown, an expandable detail panel, and a one-click restore.
+                </P>
+
+                <Mockup chrome="browser" url="wp-admin / upload.php">
+                    <div style={{ padding: "16px 18px", background: "var(--bg)" }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 5, fontSize: 12, color: "var(--ink)" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <span style={{ display: "inline-flex", alignItems: "center", height: 19, padding: "0 7px", borderRadius: 4, background: "#dcfce7", color: "#15803d", fontWeight: 700, fontSize: 10, letterSpacing: "0.05em" }}>WEBP</span>
+                                <span style={{ color: "#15803d", fontWeight: 700, fontSize: 13 }}>−96%</span>
+                                <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--ink-3)" }}>Detail ▾</span>
+                            </div>
+                            <div style={{ color: "var(--ink-3)", fontSize: 11 }}>
+                                2.0 MB → <strong style={{ color: "#15803d" }}>67 KB</strong>
+                            </div>
+                            <div style={{ marginTop: 4 }}>
+                                <button style={{ padding: "4px 10px", borderRadius: 4, border: "1px solid #d1d5db", background: "#fff", color: "#4b5563", fontSize: 11, cursor: "pointer" }}>
+                                    ↻ Restore
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </Mockup>
+
+                <H3>Per-row capabilities</H3>
+                <ul>
+                    <li><strong>Format badge</strong> — color-coded by output: emerald (WebP), violet (AVIF), gradient (Both).</li>
+                    <li><strong>Detail accordion</strong> — expand to see per-size breakdown (original, thumbnail, medium, large…) with bytes-in / bytes-out / saved-percent for each.</li>
+                    <li><strong>Convert now</strong> — for unconverted images, a one-click button that runs the full conversion (1 credit, every WP-generated size).</li>
+                    <li><strong>Restore original</strong> — opens an inline confirm panel (no native browser dialog), wipes the <code>.webp</code> / <code>.avif</code> siblings, leaves your original JPEG/PNG/GIF on disk untouched.</li>
+                </ul>
+
+                <H3>Bulk row-actions</H3>
+                <P>
+                    The standard WordPress bulk-actions dropdown above the list view also carries our two operations:
+                </P>
+                <ul>
+                    <li><strong>Optimize with Tempaloo</strong> — convert every selected image. Already-converted ones are skipped (no credit burn).</li>
+                    <li><strong>Restore originals (Tempaloo)</strong> — restore every selected image at once.</li>
+                </ul>
+                <P>
+                    Capped at 100 attachments per submit — beyond that, use the dedicated Bulk page with its
+                    pause / resume / retry queue.
+                </P>
+            </Section>
+
+            {/* ─── Async upload pipeline ─────────────────────────── */}
+            <Section id="async" title="Async upload pipeline — uploads never wait on conversion">
+                <P>
+                    Conversion-on-upload doesn't run synchronously inside the WordPress filter chain, where it
+                    would have to share the request with LiteSpeed Image Optimization, Wordfence, host security
+                    scanners, and any other plugin hooked on the same filter. Instead, Tempaloo WebP captures
+                    the attachment ID at upload time and dispatches a non-blocking loopback request.
+                </P>
+
+                <H3>How it works</H3>
+                <ol>
+                    <li>You upload an image. WordPress finishes its standard upload flow (DB insert, thumbnail generation).</li>
+                    <li>The plugin enqueues the attachment ID and returns immediately. <strong>The user's upload finishes within milliseconds.</strong></li>
+                    <li>On <code>shutdown</code>, a fire-and-forget <code>wp_remote_post</code> hits <code>admin-post.php</code>.</li>
+                    <li>The loopback lands in a fresh PHP process and runs the conversion in isolation. No competing filter, no race condition.</li>
+                    <li>Result: the converter writes <code>.webp</code> / <code>.avif</code> siblings, updates the attachment meta. The Overview "this month" counter reflects the new conversion within seconds.</li>
+                </ol>
+
+                <Callout kind="tip" title="Fallback for hosts that block loopback HTTP">
+                    Some hosts (Hostinger behind aggressive WAFs, certain shared providers) block server-to-self
+                    HTTP calls. Tempaloo's <strong>Diagnostic poll</strong> notices stalled pending uploads and
+                    drains them inline on the next admin refresh. Worst-case, the retry-queue cron picks them
+                    up within 5 minutes. You never see a missed conversion.
+                </Callout>
+
+                <H3>Emergency rollback</H3>
+                <P>
+                    If you need to disable the async pipeline (testing, debugging, host quirks), drop a constant
+                    in <code>wp-config.php</code>:
+                </P>
+                <Pre lang="php" code={`define( 'TEMPALOO_WEBP_DISABLE_ASYNC', true );`} />
+                <P>
+                    The plugin reverts to synchronous conversion-on-upload — same behavior as v1.8.x and earlier.
+                    Remove the line to switch back.
+                </P>
+            </Section>
+
+            {/* ─── Diagnostic ────────────────────────────────────── */}
+            <Section id="diagnostic" title="Diagnostic tab — state audit & repair">
+                <P>
+                    The <strong>Diagnostic</strong> tab in your WP admin is a forensics surface for "what's
+                    actually going on with my images". Three tools, one place.
+                </P>
+
+                <H3>State audit</H3>
+                <P>
+                    Walks four sources of truth in parallel and surfaces drift between them:
+                </P>
+                <ul>
+                    <li><strong>Filesystem</strong> — what <code>.webp</code> / <code>.avif</code> files actually exist in <code>/wp-content/uploads/</code>.</li>
+                    <li><strong>Attachment meta</strong> — what the <code>_tempaloo_webp</code> post_meta key says was converted.</li>
+                    <li><strong>Bulk state</strong> — the running / paused / done state of the last bulk job.</li>
+                    <li><strong>Retry queue</strong> — attachments whose first conversion failed and are scheduled for cron retry.</li>
+                </ul>
+                <P>
+                    The audit detects orphans (files on disk with no meta record), ghosts (meta records pointing
+                    at missing files), stuck running jobs, and overage retries. <strong>Reconcile</strong> fixes
+                    them in one click.
+                </P>
+
+                <H3>Inspect attachment by ID</H3>
+                <P>
+                    Type any attachment ID, get a forensic dump: meta in both storage locations side-by-side
+                    (<code>_tempaloo_webp</code> vs legacy in-metadata), the original file existence + bytes,
+                    per-size disk state for <code>.webp</code> and <code>.avif</code>, plus a directory listing
+                    of every file matching the attachment's filename pattern. Surfaces immediately whether
+                    another optimizer touched the same files.
+                </P>
+
+                <H3>Filesystem self-test</H3>
+                <P>
+                    Writes a real (tiny, 26-byte) <code>.webp</code> into your uploads directory, immediately
+                    re-checks existence, sleeps 5 seconds, re-checks, then fetches the file via HTTP and
+                    inspects the Content-Type. Returns one verdict line that names the failure mode:
+                </P>
+                <ul>
+                    <li><code>WRITE_FAILED</code> — permissions issue.</li>
+                    <li><code>POST_WRITE_VANISH</code> — host security caught the write.</li>
+                    <li><code>PERSISTENCE_FAILURE</code> — something deleted it within 5 seconds (LiteSpeed Image Opt, Wordfence, host WAF).</li>
+                    <li><code>WRONG_MIME</code> — file persists but served as <code>image/jpeg</code> → browser can't decode.</li>
+                    <li><code>OK</code> — write, persistence, and serve all healthy.</li>
+                </ul>
+            </Section>
+
+            {/* ─── Cache compatibility ───────────────────────────── */}
+            <Section id="cache" title="Cache compatibility — survives every page-cache plugin">
+                <P>
+                    LiteSpeed Cache, WP Rocket, W3 Total Cache, Cache Enabler, and Hummingbird all sometimes
+                    cache authenticated REST responses by URL — even when those responses carry per-user data.
+                    Without active opt-out, the Overview "this month" counter would freeze after every upload
+                    until a manual cache purge.
+                </P>
+
+                <H3>Four-layer cache opt-out</H3>
+                <ol>
+                    <li>Every REST callback sends <code>nocache_headers()</code> + defines <code>DONOTCACHEPAGE</code> / <code>DONOTCACHEOBJECT</code> / <code>DONOTCACHEDB</code> — the constants every major page-cache plugin checks.</li>
+                    <li>Explicit <code>litespeed_control_set_nocache</code> action on every request — no-op without LSCache, immediate opt-out where it's installed.</li>
+                    <li>The plugin self-registers its REST namespace with <code>litespeed_cache_excludes_uri</code>, <code>rocket_cache_reject_uri</code>, and <code>w3tc_minify_pgcache_reject_uri</code> filters, so cache layers skip us at config-resolution time, not just runtime.</li>
+                    <li>Frontend appends a <code>?_=Date.now()</code> cache-buster on every fetch and sends <code>Cache-Control: no-cache</code> + <code>Pragma: no-cache</code> headers — last line of defence against Cloudflare APO and Varnish without ESI.</li>
+                </ol>
+
+                <Callout kind="info" title="No setup required">
+                    All four layers fire automatically. You don't need to add cache exclusion rules to your
+                    LSCache / Rocket / W3TC settings. The plugin's REST namespace
+                    (<code>/wp-json/tempaloo-webp/v1</code>) is already excluded.
+                </Callout>
+            </Section>
+
+            {/* ─── Troubleshooting ───────────────────────────────── */}
+            <Section id="troubleshooting" title="Troubleshooting — common issues">
+                <H3>"This month" counter doesn't update after an upload</H3>
+                <P>
+                    Almost always a page-cache layer holding a stale <code>/state</code> response. Open the
+                    Diagnostic tab and click the <strong>Reconcile</strong> button — it forces a fresh audit
+                    and bypasses cached data. If the issue persists, your cache plugin needs to be told to
+                    skip <code>/wp-json/tempaloo-webp/v1</code> manually (Tempaloo registers itself
+                    automatically with LSCache / Rocket / W3TC; if you're on a different cache, add the rule).
+                </P>
+
+                <H3>Conversion logs success but .webp files vanish</H3>
+                <P>
+                    A host-level scanner (Wordfence, iThemes Security, Hostinger LSCache stack) is
+                    quarantining the freshly-written sibling. Run the <strong>Filesystem self-test</strong> in
+                    Diagnostic — if it returns <code>PERSISTENCE_FAILURE</code> or
+                    <code>POST_WRITE_VANISH</code>, you have evidence to escalate to your host. Tempaloo
+                    writes via the atomic <code>temp + rename</code> pattern (inspired by WP Smush) so the
+                    scanner doesn't catch a half-written file — but if it specifically targets the
+                    <code>.jpg.webp</code> pattern post-rename, only host-side allow-listing fixes it.
+                </P>
+
+                <H3>Free plan AVIF dropdown won't stay selected</H3>
+                <P>
+                    AVIF is paid-only. The Free plan's settings UI lets you click AVIF, but it's quietly
+                    re-saved as WebP on submit. Upgrade to Starter or above to unlock AVIF and the
+                    dual-format <strong>Both</strong> mode that generates both siblings in one credit.
+                </P>
+
+                <H3>Bulk page shows "Converting…" but no progress</H3>
+                <P>
+                    The Bulk loop pings <code>ajax_tick</code> every 350 ms. If you see no progress, your
+                    server's <code>admin-ajax.php</code> is probably rate-limited. Check the
+                    <strong>API health</strong> banner — if it shows a 5xx error, the worker is rebooting and
+                    Bulk will resume on its own with adaptive backoff (5s → 10s → 15s → 20s).
+                </P>
+
+                <H3>Need direct help?</H3>
+                <P>
+                    Reach out via the <a href="/contact">contact page</a> — we read every message. Include
+                    your site URL, plugin version, and a screenshot of the Diagnostic tab if relevant.
+                </P>
             </Section>
         </DocPage>
     );

@@ -1,0 +1,256 @@
+import { NextResponse, type NextRequest } from "next/server";
+
+/**
+ * POST /api/contact
+ *
+ * Receives the contact-form submission, validates it server-side
+ * (defence in depth — never trust the client form), rejects honeypot
+ * hits, applies a soft per-IP rate limit, and forwards the payload
+ * to the Tempaloo team's inbox via Brevo's transactional email API.
+ *
+ * Email destination is otmane.hammadi.1@gmail.com today (Tempaloo
+ * founder inbox); flip to a routing alias once the team grows.
+ *
+ * Required env (production):
+ *   BREVO_API_KEY         — secret key from app.brevo.com
+ *   CONTACT_TO_EMAIL      — destination inbox (defaults below)
+ *   CONTACT_FROM_EMAIL    — verified sender on Brevo (defaults below)
+ *
+ * If BREVO_API_KEY is missing (local dev), we log the payload to
+ * stdout and return success so the form flow stays testable without
+ * spamming a real inbox.
+ */
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+const TO_EMAIL   = process.env.CONTACT_TO_EMAIL   ?? "otmane.hammadi.1@gmail.com";
+const FROM_EMAIL = process.env.CONTACT_FROM_EMAIL ?? "noreply@tempaloo.com";
+const FROM_NAME  = "Tempaloo Contact Form";
+
+// In-memory rate limit. Sufficient for the load Tempaloo gets today
+// (single-instance Vercel serverless cold-starts notwithstanding —
+// each cold instance has its own limiter, so a hammered attacker
+// could theoretically dodge it across instances. Brevo's anti-abuse
+// kicks in well before that becomes a real problem).
+const HITS = new Map<string, { count: number; resetAt: number }>();
+const WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+const MAX_HITS = 5;              // 5 submissions / 5 min / IP
+
+function ipFromRequest(req: NextRequest): string {
+    const xff = req.headers.get("x-forwarded-for");
+    if (xff) return xff.split(",")[0]!.trim();
+    const real = req.headers.get("x-real-ip");
+    if (real) return real;
+    return "unknown";
+}
+
+function rateLimited(ip: string): boolean {
+    const now = Date.now();
+    const cur = HITS.get(ip);
+    if (!cur || cur.resetAt < now) {
+        HITS.set(ip, { count: 1, resetAt: now + WINDOW_MS });
+        return false;
+    }
+    cur.count += 1;
+    if (cur.count > MAX_HITS) return true;
+    return false;
+}
+
+interface Payload {
+    name: string;
+    email: string;
+    company?: string;
+    topic: string;
+    siteUrl?: string;
+    message: string;
+    consent: boolean;
+    website?: string; // honeypot
+}
+
+function isEmail(s: string): boolean {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+}
+
+function validate(body: unknown): { ok: true; data: Payload } | { ok: false; error: string } {
+    if (!body || typeof body !== "object") return { ok: false, error: "Invalid request body" };
+    const b = body as Record<string, unknown>;
+
+    const name    = typeof b.name === "string" ? b.name.trim() : "";
+    const email   = typeof b.email === "string" ? b.email.trim() : "";
+    const company = typeof b.company === "string" ? b.company.trim().slice(0, 200) : "";
+    const topic   = typeof b.topic === "string" ? b.topic.trim() : "";
+    const siteUrl = typeof b.siteUrl === "string" ? b.siteUrl.trim().slice(0, 300) : "";
+    const message = typeof b.message === "string" ? b.message.trim() : "";
+    const consent = b.consent === true;
+    const website = typeof b.website === "string" ? b.website.trim() : "";
+
+    if (!name || name.length > 200) return { ok: false, error: "Name is required (max 200 chars)" };
+    if (!email || !isEmail(email))  return { ok: false, error: "Valid email is required" };
+    if (!message || message.length < 10 || message.length > 5000) {
+        return { ok: false, error: "Message must be between 10 and 5000 characters" };
+    }
+    if (!consent) return { ok: false, error: "Consent is required" };
+    const allowedTopics = ["support", "sales", "partnership", "press", "other"];
+    if (!allowedTopics.includes(topic)) return { ok: false, error: "Unknown topic" };
+
+    return { ok: true, data: { name, email, company, topic, siteUrl, message, consent, website } };
+}
+
+function escapeHtml(s: string): string {
+    return s
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function buildEmail(p: Payload, ip: string): { subject: string; html: string; text: string } {
+    const topicLabel: Record<string, string> = {
+        support: "Support",
+        sales: "Sales",
+        partnership: "Partnership",
+        press: "Press",
+        other: "Other",
+    };
+    const subject = `[Tempaloo Contact] ${topicLabel[p.topic] ?? p.topic} — ${p.name}`;
+
+    const text = [
+        `New contact form submission`,
+        ``,
+        `Topic:   ${topicLabel[p.topic] ?? p.topic}`,
+        `Name:    ${p.name}`,
+        `Email:   ${p.email}`,
+        p.company ? `Company: ${p.company}` : null,
+        p.siteUrl ? `Site:    ${p.siteUrl}` : null,
+        `IP:      ${ip}`,
+        ``,
+        `Message:`,
+        p.message,
+    ].filter(Boolean).join("\n");
+
+    const html = `
+<!DOCTYPE html>
+<html><body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #1f2937;">
+  <div style="border-bottom: 2px solid #2a57e6; padding-bottom: 12px; margin-bottom: 24px;">
+    <h1 style="margin: 0; font-size: 18px; color: #111827;">New contact form submission</h1>
+    <div style="font-size: 12px; color: #6b7280; margin-top: 4px;">Tempaloo · ${topicLabel[p.topic] ?? p.topic}</div>
+  </div>
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 14px;">
+    <tr><td style="padding: 6px 0; color: #6b7280; width: 100px;">Name</td><td style="padding: 6px 0; color: #111827;"><strong>${escapeHtml(p.name)}</strong></td></tr>
+    <tr><td style="padding: 6px 0; color: #6b7280;">Email</td><td style="padding: 6px 0; color: #111827;"><a href="mailto:${escapeHtml(p.email)}" style="color: #2a57e6;">${escapeHtml(p.email)}</a></td></tr>
+    ${p.company ? `<tr><td style="padding: 6px 0; color: #6b7280;">Company</td><td style="padding: 6px 0;">${escapeHtml(p.company)}</td></tr>` : ""}
+    ${p.siteUrl ? `<tr><td style="padding: 6px 0; color: #6b7280;">Site</td><td style="padding: 6px 0;"><a href="${escapeHtml(p.siteUrl)}" style="color: #2a57e6;">${escapeHtml(p.siteUrl)}</a></td></tr>` : ""}
+    <tr><td style="padding: 6px 0; color: #6b7280;">IP</td><td style="padding: 6px 0; font-family: monospace; font-size: 12px; color: #6b7280;">${escapeHtml(ip)}</td></tr>
+  </table>
+  <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; margin-bottom: 6px;">Message</div>
+  <div style="background: #f9fafb; border-left: 3px solid #2a57e6; padding: 14px 16px; font-size: 14px; line-height: 1.6; white-space: pre-wrap; color: #1f2937; border-radius: 0 6px 6px 0;">${escapeHtml(p.message)}</div>
+  <div style="margin-top: 24px; padding-top: 12px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #9ca3af;">
+    Reply directly to <a href="mailto:${escapeHtml(p.email)}" style="color: #6b7280;">${escapeHtml(p.email)}</a> — they&rsquo;ll get it.
+  </div>
+</body></html>`.trim();
+
+    return { subject, html, text };
+}
+
+async function sendViaBrevo(payload: { from: { email: string; name: string }; to: { email: string }[]; replyTo: { email: string; name: string }; subject: string; htmlContent: string; textContent: string }): Promise<{ ok: boolean; status: number; body?: string }> {
+    const apiKey = process.env.BREVO_API_KEY;
+    if (!apiKey) {
+        // Dev fallback: log the payload, pretend success.
+        // eslint-disable-next-line no-console
+        console.log("[contact] BREVO_API_KEY not set — would send:", JSON.stringify(payload, null, 2));
+        return { ok: true, status: 200 };
+    }
+
+    const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+        method: "POST",
+        headers: {
+            "api-key": apiKey,
+            "content-type": "application/json",
+            accept: "application/json",
+        },
+        body: JSON.stringify({
+            sender: payload.from,
+            to: payload.to,
+            replyTo: payload.replyTo,
+            subject: payload.subject,
+            htmlContent: payload.htmlContent,
+            textContent: payload.textContent,
+        }),
+    });
+
+    if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        return { ok: false, status: res.status, body };
+    }
+    return { ok: true, status: res.status };
+}
+
+export async function POST(req: NextRequest) {
+    const ip = ipFromRequest(req);
+
+    // Origin check — reject cross-origin POSTs from anywhere outside
+    // tempaloo.com (and dev origins). Cheap CSRF guard.
+    const origin = req.headers.get("origin") ?? "";
+    if (origin) {
+        const allowed = [
+            "https://tempaloo.com",
+            "https://www.tempaloo.com",
+            "https://staging.tempaloo.com",
+            "http://localhost:3001",
+            "http://localhost:3000",
+        ];
+        const ok = allowed.some((o) => origin === o) || /\.vercel\.app$/.test(new URL(origin).hostname);
+        if (!ok) {
+            return NextResponse.json({ error: "Origin not allowed" }, { status: 403 });
+        }
+    }
+
+    if (rateLimited(ip)) {
+        return NextResponse.json(
+            { error: "Too many submissions. Try again in a few minutes." },
+            { status: 429 },
+        );
+    }
+
+    let body: unknown;
+    try {
+        body = await req.json();
+    } catch {
+        return NextResponse.json({ error: "Malformed JSON" }, { status: 400 });
+    }
+
+    const v = validate(body);
+    if (!v.ok) return NextResponse.json({ error: v.error }, { status: 400 });
+
+    // Honeypot — bots fill every text field. Real users never see this
+    // one (CSS-hidden + tabindex=-1). If it's non-empty, silently
+    // pretend success so bots don't retune.
+    if (v.data.website && v.data.website.trim() !== "") {
+        return NextResponse.json({ ok: true });
+    }
+
+    const { subject, html, text } = buildEmail(v.data, ip);
+
+    const result = await sendViaBrevo({
+        from:    { email: FROM_EMAIL, name: FROM_NAME },
+        to:      [{ email: TO_EMAIL }],
+        replyTo: { email: v.data.email, name: v.data.name },
+        subject,
+        htmlContent: html,
+        textContent: text,
+    });
+
+    if (!result.ok) {
+        // eslint-disable-next-line no-console
+        console.error("[contact] Brevo send failed", result);
+        return NextResponse.json(
+            { error: "We couldn't send your message. Try again or email us directly." },
+            { status: 502 },
+        );
+    }
+
+    return NextResponse.json({ ok: true });
+}
+
+// 405 for everything else.
+export async function GET() {
+    return NextResponse.json({ error: "Method not allowed" }, { status: 405 });
+}
