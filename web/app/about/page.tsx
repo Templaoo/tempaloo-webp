@@ -93,7 +93,7 @@ export default function AboutPage() {
             <section className="ab-section">
                 <h2>The team</h2>
                 <p>
-                    Tempaloo is operated by Tempaloo SAS, a French company registered in
+                    Tempaloo is operated by Tempaloo, a French company registered in
                     Paris. The team is small enough that you&apos;ll usually hear back
                     directly from a person who can fix what you&apos;re reporting — no
                     triage layer, no bot replies. Reach us via{" "}
@@ -101,16 +101,11 @@ export default function AboutPage() {
                 </p>
 
                 <address className="ab-address">
-                    <strong>Tempaloo SAS</strong>
+                    <strong>Tempaloo</strong>
                     <br />
                     12 rue de la Paix
                     <br />
                     75002 Paris, France
-                    <br />
-                    <span className="ab-address-fine">
-                        SIREN 902 458 137 · RCS Paris B&nbsp;902&nbsp;458&nbsp;137 · TVA
-                        FR12&nbsp;902458137
-                    </span>
                 </address>
             </section>
 
@@ -130,7 +125,7 @@ export default function AboutPage() {
 
             <footer className="ab-footer">
                 <div className="ab-footer-inner">
-                    <span>© {new Date().getFullYear()} Tempaloo SAS. All rights reserved.</span>
+                    <span>© {new Date().getFullYear()} Tempaloo. All rights reserved.</span>
                     <div className="ab-footer-links">
                         <Link href="/webp">Plugin</Link>
                         <Link href="/docs">Docs</Link>

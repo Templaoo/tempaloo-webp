@@ -203,7 +203,7 @@ function buildClientAck(p: Payload): { subject: string; html: string; text: stri
     Need to add something? Just reply to this email — it goes straight to the team.
   </p>
   <div style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 11.5px; color: #9ca3af;">
-    Tempaloo SAS · 12 rue de la Paix, 75002 Paris, France<br>
+    Tempaloo · 12 rue de la Paix, 75002 Paris, France<br>
     <a href="https://tempaloo.com" style="color: #6b7280;">tempaloo.com</a> · <a href="https://tempaloo.com/privacy" style="color: #6b7280;">Privacy</a> · <a href="https://tempaloo.com/terms" style="color: #6b7280;">Terms</a>
   </div>
 </body></html>`.trim();
@@ -214,16 +214,24 @@ function buildClientAck(p: Payload): { subject: string; html: string; text: stri
 async function sendViaBrevo(payload: { from: { email: string; name: string }; to: { email: string; name?: string }[]; replyTo: { email: string; name: string }; subject: string; htmlContent: string; textContent: string }): Promise<{ ok: boolean; status: number; body?: string }> {
     const apiKey = process.env.BREVO_API_KEY;
     if (!apiKey) {
-        // Dev fallback: log the payload, pretend success. In production
-        // the absence of BREVO_API_KEY is a real bug (silent submission
-        // loss), so the warning is loud-enough to catch in Vercel logs.
+        // Production: surface the missing key as a real failure so it
+        // never silently swallows submissions. The form gets a 502 and
+        // the user sees an actual error message instead of a fake
+        // "thanks, we got it" while their message vanishes into thin air.
+        // Local dev (no NODE_ENV=production): return success + log so
+        // the form flow stays testable without spamming a real inbox.
+        const isProd = process.env.NODE_ENV === "production";
         // eslint-disable-next-line no-console
-        console.warn(
-            "[contact] BREVO_API_KEY is not set — submission accepted but NOT sent. From=%s To=%s Subject=%s",
+        console.error(
+            "[contact] BREVO_API_KEY is missing — env var not set on this deployment. From=%s To=%s Subject=%s isProd=%s",
             payload.from.email,
             payload.to[0]?.email,
             payload.subject,
+            isProd,
         );
+        if (isProd) {
+            return { ok: false, status: 503, body: "BREVO_API_KEY not configured on this deployment" };
+        }
         return { ok: true, status: 200 };
     }
 
@@ -362,7 +370,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
 }
 
-// 405 for everything else.
+/**
+ * GET /api/contact — lightweight diagnostic. Returns whether Brevo is
+ * configured for this deployment and which sender / recipient
+ * addresses are wired. Does NOT expose the API key value (just a
+ * yes/no), and only meaningful when hit by the site owner from a
+ * browser session — anyone curious can read this, but it carries
+ * zero secrets.
+ *
+ * Use this to quickly verify env-var setup on Vercel without trawling
+ * production logs. If `brevoConfigured: false` in production, the
+ * form will reject submissions with a 503 (rather than silently
+ * accepting them like the dev fallback does).
+ */
 export async function GET() {
-    return NextResponse.json({ error: "Method not allowed" }, { status: 405 });
+    return NextResponse.json({
+        brevoConfigured: !!process.env.BREVO_API_KEY,
+        fromEmail: FROM_EMAIL,
+        fromName: FROM_NAME,
+        toEmail: TO_EMAIL,
+        nodeEnv: process.env.NODE_ENV ?? "unknown",
+        // Hint sent only when the key is missing — gives the operator a
+        // one-glance answer to "why are submissions silently failing?".
+        hint: process.env.BREVO_API_KEY
+            ? "Configured. Form submissions will be sent via Brevo."
+            : "BREVO_API_KEY env var is not set on this deployment. Add it on Vercel → Project → Settings → Environment Variables, then redeploy.",
+    });
 }

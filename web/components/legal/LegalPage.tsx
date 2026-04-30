@@ -56,7 +56,7 @@ export function LegalPage({
 
             <footer className="lp-footer">
                 <div className="app-container lp-footer-inner">
-                    <span>© {new Date().getFullYear()} Tempaloo SAS · 12 rue de la Paix, 75002 Paris</span>
+                    <span>© {new Date().getFullYear()} Tempaloo · 12 rue de la Paix, 75002 Paris</span>
                     <div className="lp-footer-links">
                         <Link href="/webp">Home</Link>
                         <Link href="/docs">Docs</Link>

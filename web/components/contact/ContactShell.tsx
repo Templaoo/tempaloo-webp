@@ -55,15 +55,12 @@ export function ContactShell({ children }: { children: ReactNode }) {
                         <div className="contact-card">
                             <div className="contact-card-h">Office</div>
                             <address className="contact-address">
-                                Tempaloo SAS
+                                Tempaloo
                                 <br />
                                 12 rue de la Paix
                                 <br />
                                 75002 Paris, France
                             </address>
-                            <p className="contact-fineprint">
-                                SIREN 902 458 137 · RCS Paris B&nbsp;902&nbsp;458&nbsp;137 · TVA FR12&nbsp;902458137
-                            </p>
                         </div>
 
                         <div className="contact-card">
@@ -94,7 +91,7 @@ export function ContactShell({ children }: { children: ReactNode }) {
 
             <footer className="contact-footer">
                 <div className="contact-footer-inner">
-                    <span>© {new Date().getFullYear()} Tempaloo SAS. All rights reserved.</span>
+                    <span>© {new Date().getFullYear()} Tempaloo. All rights reserved.</span>
                     <div className="contact-footer-links">
                         <Link href="/webp">Plugin</Link>
                         <Link href="/docs">Docs</Link>

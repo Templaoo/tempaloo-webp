@@ -10,7 +10,7 @@ export default function TermsPage() {
     return (
         <LegalPage title="Terms of Service" effectiveDate="24 April 2026">
             <p>
-                These Terms of Service (&ldquo;Terms&rdquo;) govern your use of the Tempaloo WebP plugin, the Tempaloo API, and the website at <code>tempaloo.com</code> (collectively, the &ldquo;Service&rdquo;), all provided by <strong>Tempaloo SAS</strong> (&ldquo;Tempaloo&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;).
+                These Terms of Service (&ldquo;Terms&rdquo;) govern your use of the Tempaloo WebP plugin, the Tempaloo API, and the website at <code>tempaloo.com</code> (collectively, the &ldquo;Service&rdquo;), all provided by <strong>Tempaloo</strong> (&ldquo;Tempaloo&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;).
             </p>
             <p>
                 By activating the plugin, creating an account, or using the API, you agree to these Terms. If you don&rsquo;t agree, don&rsquo;t use the Service. That&rsquo;s the whole idea.
@@ -101,7 +101,7 @@ export default function TermsPage() {
             <h3>4.5 Abuse, chargebacks &amp; right to refuse</h3>
             <ul>
                 <li>We reserve the right to refuse a refund where, at our reasonable judgement, the request fits an abuse pattern, including but not limited to: bulk consumption immediately followed by a refund request; refund requests on multiple linked accounts; refund requests after a chargeback or dispute on a sibling account; refund requests where the customer continues using the converted assets in production after the refund.</li>
-                <li>If you initiate a credit-card chargeback or payment dispute <strong>after</strong> a refund has been issued, or in lieu of contacting support first, you owe Tempaloo SAS the refunded amount plus any chargeback fees levied by Freemius or the issuing bank. We reserve the right to recover these amounts through any legal means available, including small-claims procedures in the courts of Paris (§13).</li>
+                <li>If you initiate a credit-card chargeback or payment dispute <strong>after</strong> a refund has been issued, or in lieu of contacting support first, you owe Tempaloo the refunded amount plus any chargeback fees levied by Freemius or the issuing bank. We reserve the right to recover these amounts through any legal means available, including small-claims procedures in the courts of Paris (§13).</li>
                 <li>Accounts found to abuse the trial, refund, or quota policies may be terminated under §11, with all generated <code>.webp</code> / <code>.avif</code> assets considered void of further support. Cumulative bad-faith activity across linked accounts may be reported to fraud-prevention networks used by our payment partners.</li>
             </ul>
 
@@ -156,7 +156,7 @@ export default function TermsPage() {
 
             <h2>9. Our content</h2>
             <p>
-                The Tempaloo plugin is licensed under <strong>GPL-2.0-or-later</strong>. The Tempaloo API, dashboard, website design, documentation and trademarks remain the property of Tempaloo SAS. You may use screenshots of the product to review or promote it under fair-use principles.
+                The Tempaloo plugin is licensed under <strong>GPL-2.0-or-later</strong>. The Tempaloo API, dashboard, website design, documentation and trademarks remain the property of Tempaloo. You may use screenshots of the product to review or promote it under fair-use principles.
             </p>
 
             <h2>10. Availability and changes</h2>
@@ -213,8 +213,8 @@ export default function TermsPage() {
                 <p>
                     <strong>Tempaloo — legal</strong><br />
                     Use our <Link href="/contact">contact form</Link> for any legal or commercial query<br />
-                    Tempaloo SAS, 12 rue de la Paix, 75002 Paris, France<br />
-                    RCS Paris B 902 458 137 · VAT FR12 902458137
+                    Tempaloo, 12 rue de la Paix, 75002 Paris, France<br />
+                    
                 </p>
             </div>
         </LegalPage>

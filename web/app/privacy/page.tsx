@@ -10,7 +10,7 @@ export default function PrivacyPage() {
     return (
         <LegalPage title="Privacy Policy" effectiveDate="24 April 2026">
             <p>
-                This Privacy Policy describes how <strong>Tempaloo SAS</strong> (&ldquo;Tempaloo&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;) collects, uses, and protects personal data when you use the Tempaloo WebP plugin, the Tempaloo API, and the website at <code>tempaloo.com</code> (collectively, the &ldquo;Service&rdquo;).
+                This Privacy Policy describes how <strong>Tempaloo</strong> (&ldquo;Tempaloo&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;) collects, uses, and protects personal data when you use the Tempaloo WebP plugin, the Tempaloo API, and the website at <code>tempaloo.com</code> (collectively, the &ldquo;Service&rdquo;).
             </p>
             <p>
                 We take a deliberately minimalist approach to data: the Service is designed to process images, not to profile people. We collect only what we need to authenticate your licence, deliver the conversion, and bill your subscription.
@@ -18,7 +18,7 @@ export default function PrivacyPage() {
 
             <h2>1. Who we are</h2>
             <p>
-                <strong>Data controller</strong>: Tempaloo SAS, 12 rue de la Paix, 75002 Paris, France. Registered under RCS Paris B 902 458 137, VAT FR12 902458137.
+                <strong>Data controller</strong>: Tempaloo, 12 rue de la Paix, 75002 Paris, France.
             </p>
             <p>
                 For any privacy question, please reach us through our <Link href="/contact">contact form</Link> (pick the &ldquo;Other&rdquo; topic and mention &ldquo;privacy&rdquo; in your message). We aim to respond within 30 days as required by the GDPR.
@@ -143,7 +143,7 @@ export default function PrivacyPage() {
                 <p>
                     <strong>Tempaloo — privacy</strong><br />
                     Use our <Link href="/contact">contact form</Link> for any privacy or data-protection request<br />
-                    Tempaloo SAS, 12 rue de la Paix, 75002 Paris, France
+                    Tempaloo, 12 rue de la Paix, 75002 Paris, France
                 </p>
             </div>
         </LegalPage>

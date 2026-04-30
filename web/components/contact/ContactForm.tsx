@@ -75,11 +75,20 @@ export function ContactForm() {
             });
             const data = await res.json().catch(() => null);
             if (!res.ok) {
+                // Surface the exact server reason when available (Brevo
+                // 400 from unverified sender, 503 if env-var missing,
+                // 429 rate-limit, 400 validation). Generic fallback only
+                // when we have nothing better — the user deserves to
+                // know WHY their message didn't go through.
+                const reason = (data && (data.error as string)) ?? "";
                 setServerError(
-                    (data && data.error) ||
-                    (res.status === 429
-                        ? "Too many submissions. Try again in a minute."
-                        : "Something went wrong on our end.")
+                    reason
+                        ? reason
+                        : res.status === 429
+                            ? "Too many submissions. Try again in a minute."
+                            : res.status === 503
+                                ? "Email service is misconfigured. Please reach out via email until this is fixed."
+                                : `Server returned ${res.status}. Please try again or contact us another way.`,
                 );
                 setStatus("error");
                 return;

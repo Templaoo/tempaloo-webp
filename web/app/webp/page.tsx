@@ -45,8 +45,8 @@ function buildSoftwareApplicationLd(plans: Awaited<ReturnType<typeof loadPlans>>
         url: "https://tempaloo.com/webp",
         downloadUrl: "https://wordpress.org/plugins/tempaloo-webp/",
         softwareVersion: "1.0.0",
-        author: { "@type": "Organization", name: "Tempaloo SAS", url: "https://tempaloo.com" },
-        publisher: { "@type": "Organization", name: "Tempaloo SAS", url: "https://tempaloo.com" },
+        author: { "@type": "Organization", name: "Tempaloo", url: "https://tempaloo.com" },
+        publisher: { "@type": "Organization", name: "Tempaloo", url: "https://tempaloo.com" },
         offers: paid.length > 0
             ? {
                 "@type": "AggregateOffer",

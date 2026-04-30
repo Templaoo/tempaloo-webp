@@ -131,7 +131,7 @@ export default function ChangelogPage() {
 
             <footer className="cl-footer">
                 <div className="cl-footer-inner">
-                    <span>© {new Date().getFullYear()} Tempaloo SAS. All rights reserved.</span>
+                    <span>© {new Date().getFullYear()} Tempaloo. All rights reserved.</span>
                     <div className="cl-footer-links">
                         <Link href="/webp">Plugin</Link>
                         <Link href="/docs">Docs</Link>
