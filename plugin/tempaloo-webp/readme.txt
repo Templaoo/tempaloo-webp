@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.7.0
+Stable tag: 1.7.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -145,6 +145,10 @@ Example — skip conversion for any attachment in the `private/` upload subfolde
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 1.7.1 =
+* Fix: Diagnostic Reconcile now actually clears the meta the audit flagged. v1.7.0 used two different ghost definitions — the audit was strict ("any size missing → ghost"), reconcile was looser ("only ALL sizes missing → clear"). Result: partially-broken attachments showed up as ghosts every refresh and Reconcile reported zero cleared. The two are now aligned: any missing sibling triggers a meta clear, the next bulk re-flags the attachment as pending and re-encodes every size cleanly.
+* Fix: Reconcile now uses `update_post_meta` directly + double cache invalidation (`clean_post_cache` + `wp_cache_delete`). Some sites with persistent object cache (Redis, LiteSpeed Object Cache) and image-optimizer plugins on the `wp_update_attachment_metadata` filter could leave the meta unchanged after a successful clear. Belt-and-suspender against both.
 
 = 1.7.0 =
 * New: **Diagnostic tab** in the plugin admin. Walks the four sources of truth side by side — WordPress attachments table, `tempaloo_webp` meta on each attachment, the `.webp`/`.avif` files actually on disk, and the bulk + retry queue options — and surfaces every drift between them. Counts orphans (siblings on disk with no meta), ghosts (meta says converted but no file), stuck-running bulks (>30 min idle), retry queue entries past max-attempts, and effective settings.

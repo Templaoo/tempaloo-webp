@@ -843,7 +843,18 @@ class Tempaloo_WebP_REST {
             }
         }
 
-        // 3. Ghost meta — meta says converted but no siblings on disk
+        // 3. Ghost meta — meta says converted but at least one expected
+        //    sibling is missing on disk. Aligned with the audit's ghost
+        //    definition (was inconsistent in v1.7.0 — audit flagged
+        //    "any missing", reconcile only cleared "all missing", so
+        //    partially-broken attachments showed up as ghosts forever).
+        //    Aggressive on purpose: clearing the meta makes the next
+        //    bulk scan re-flag the whole attachment as pending and
+        //    re-converts every size cleanly, instead of trying to
+        //    reason about partial state. Bulk path is idempotent for
+        //    the sizes already converted (file_put_contents overwrites
+        //    with same bytes), so the cost is one extra credit per
+        //    affected attachment vs leaving the drift indefinitely.
         if ( in_array( 'ghost_meta', $fix, true ) ) {
             global $wpdb;
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
@@ -862,7 +873,7 @@ class Tempaloo_WebP_REST {
                 if ( ! $orig || ! file_exists( $orig ) ) continue;
                 $meta = wp_get_attachment_metadata( (int) $id );
                 if ( empty( $meta['tempaloo_webp']['converted'] ) ) continue;
-                // Build paths
+
                 $paths = [ $orig ];
                 if ( ! empty( $meta['sizes'] ) && is_array( $meta['sizes'] ) ) {
                     foreach ( $meta['sizes'] as $size ) {
@@ -871,18 +882,35 @@ class Tempaloo_WebP_REST {
                         }
                     }
                 }
-                // Ghost = NO sibling exists for ANY size
-                $any_sibling = false;
+
+                // Drift = at least one size has no sibling. Matches the
+                // audit. Catches "partial" ghosts (some sizes converted
+                // but others lost to a Restore mid-flight) which v1.7.0
+                // missed entirely.
+                $missing_any = false;
                 foreach ( $paths as $p ) {
-                    if ( file_exists( $p . '.webp' ) || file_exists( $p . '.avif' ) ) {
-                        $any_sibling = true; break;
+                    if ( ! file_exists( $p . '.webp' ) && ! file_exists( $p . '.avif' ) ) {
+                        $missing_any = true;
+                        break;
                     }
                 }
-                if ( ! $any_sibling ) {
+
+                if ( $missing_any ) {
                     if ( ! $dry_run ) {
                         unset( $meta['tempaloo_webp'] );
-                        wp_update_attachment_metadata( (int) $id, $meta );
+                        // Direct update_post_meta + dual cache flush.
+                        // wp_update_attachment_metadata can be intercepted
+                        // by other image-optimizer plugins on the
+                        // wp_update_attachment_metadata filter, which
+                        // sometimes re-writes parts of meta or short-
+                        // circuits the save. Going through update_post_meta
+                        // hits the DB directly. The two cache deletes
+                        // belt-and-suspender against persistent object
+                        // cache backends (Redis, LiteSpeed Object Cache)
+                        // that don't always honor clean_post_cache.
+                        update_post_meta( (int) $id, '_wp_attachment_metadata', $meta );
                         clean_post_cache( (int) $id );
+                        wp_cache_delete( (int) $id, 'post_meta' );
                     }
                     $cleared++;
                 }
