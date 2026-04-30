@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.7.1
+Stable tag: 1.7.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -145,6 +145,10 @@ Example — skip conversion for any attachment in the `private/` upload subfolde
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 1.7.2 =
+* New: **"Convert now" button** on every unconverted row in the Media Library list view (`wp-admin/upload.php`). One AJAX call per click triggers the same code path as Bulk (`convert_all_sizes` in auto mode → 1 credit, every WordPress thumbnail size in one batch). The cell updates in place to show the post-conversion stats — no page reload, no leaving the Media Library. Errors (quota exceeded, unauthorized, network) surface inline below the button so the user knows why and can retry.
+* New: AJAX endpoint `wp_ajax_tempaloo_convert_one` with per-attachment nonce. Capability check (`upload_files`) + license validity check before any conversion work, so a tab left open with stale state can't burn credits on rejected calls.
 
 = 1.7.1 =
 * Fix: Diagnostic Reconcile now actually clears the meta the audit flagged. v1.7.0 used two different ghost definitions — the audit was strict ("any size missing → ghost"), reconcile was looser ("only ALL sizes missing → clear"). Result: partially-broken attachments showed up as ghosts every refresh and Reconcile reported zero cleared. The two are now aligned: any missing sibling triggers a meta clear, the next bulk re-flags the attachment as pending and re-encodes every size cleanly.

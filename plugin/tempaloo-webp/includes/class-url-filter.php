@@ -73,6 +73,74 @@ class Tempaloo_WebP_URL_Filter {
 
         // admin-ajax handler that backs the post-upload stats JS.
         add_action( 'wp_ajax_tempaloo_stats',       [ $this, 'ajax_stats' ] );
+        // Per-row "Convert now" button on wp-admin/upload.php — converts
+        // a single attachment in-place without leaving the Media Library.
+        add_action( 'wp_ajax_tempaloo_convert_one', [ $this, 'ajax_convert_one' ] );
+    }
+
+    /**
+     * One-click conversion of a single attachment from the Media Library
+     * "Optimized" column. Same code path as Bulk (convert_all_sizes in
+     * 'auto' mode → 1 credit, every WP-generated size in one batch),
+     * just kicked off per-row instead of in a loop.
+     */
+    public function ajax_convert_one() {
+        $post_id = isset( $_POST['id'] ) ? absint( wp_unslash( $_POST['id'] ) ) : 0;
+        if ( $post_id <= 0 ) {
+            wp_send_json_error( [ 'message' => __( 'Missing attachment id', 'tempaloo-webp' ) ], 400 );
+        }
+        check_ajax_referer( 'tempaloo_convert_one_' . $post_id, 'nonce' );
+        if ( ! current_user_can( 'upload_files' ) ) {
+            wp_send_json_error( [ 'message' => __( 'Not allowed', 'tempaloo-webp' ) ], 403 );
+        }
+
+        $settings = Tempaloo_WebP_Plugin::get_settings();
+        if ( empty( $settings['license_valid'] ) ) {
+            wp_send_json_error( [
+                'message' => __( 'License is not active. Activate from the Tempaloo settings page.', 'tempaloo-webp' ),
+                'code'    => 'no_license',
+            ], 400 );
+        }
+        if ( ! Tempaloo_WebP_Converter::is_supported_attachment( $post_id ) ) {
+            wp_send_json_error( [
+                'message' => __( 'Attachment type not supported (only JPEG / PNG / GIF).', 'tempaloo-webp' ),
+                'code'    => 'unsupported_mime',
+            ], 400 );
+        }
+
+        $metadata = wp_get_attachment_metadata( $post_id );
+        if ( ! is_array( $metadata ) ) $metadata = [];
+
+        $result = Tempaloo_WebP_Converter::convert_all_sizes( $post_id, $metadata, $settings, 'auto' );
+
+        if ( $result['converted'] > 0 ) {
+            wp_update_attachment_metadata( $post_id, $result['metadata'] );
+            $savings = $this->compute_attachment_savings( $post_id );
+            wp_send_json_success( [
+                'converted' => (int) $result['converted'],
+                'failed'    => (int) $result['failed'],
+                'savings'   => $savings,
+            ] );
+        }
+
+        $code = $result['error_code'] !== '' ? $result['error_code'] : 'no_output';
+        // Quota / auth errors → keep the "Convert now" button so the
+        // user sees the cause and can act. Infra errors → already
+        // enqueued in the retry queue by class-converter.
+        $message = 'quota_exceeded' === $code
+            ? __( 'Monthly quota reached — upgrade plan or wait for reset', 'tempaloo-webp' )
+            : ( 'unauthorized' === $code || 'forbidden' === $code
+                ? __( 'License inactive or AVIF not in plan', 'tempaloo-webp' )
+                : sprintf(
+                    /* translators: %s: error code from the conversion API (http_error, status_502, etc.) */
+                    __( 'Conversion failed (%s). Retry will fire automatically in the background.', 'tempaloo-webp' ),
+                    $code
+                )
+            );
+        wp_send_json_error( [
+            'message' => $message,
+            'code'    => $code,
+        ], 500 );
     }
 
     /**
@@ -244,6 +312,25 @@ class Tempaloo_WebP_URL_Filter {
                 ]
             );
         }
+
+        // Per-row "Convert now" button — only on the list view of the
+        // Media Library where the Optimized column is visible.
+        if ( 'upload.php' === $hook ) {
+            wp_enqueue_script(
+                'tempaloo-webp-media-convert',
+                TEMPALOO_WEBP_URL . 'assets/media-convert-button.js',
+                [],
+                TEMPALOO_WEBP_VERSION,
+                true
+            );
+            wp_localize_script(
+                'tempaloo-webp-media-convert',
+                'TempalooConvertOneBoot',
+                [
+                    'ajaxUrl' => admin_url( 'admin-ajax.php' ),
+                ]
+            );
+        }
     }
 
     /**
@@ -287,7 +374,26 @@ class Tempaloo_WebP_URL_Filter {
         if ( 'tempaloo_webp' !== $column ) return;
         $s = $this->compute_attachment_savings( $post_id );
         if ( ! $s ) {
-            echo '<span style="color:#9a6700;">—</span>';
+            // Not yet converted — surface a one-click "Convert now"
+            // button straight in the column. Same exact code path as
+            // bulk (convert_all_sizes in 'auto' mode → 1 credit) but
+            // without the user having to leave the Media Library.
+            // Only render if the attachment is actually convertible
+            // (jpeg/png/gif) and the license is active — otherwise
+            // we'd just throw away the click.
+            $licensed   = ! empty( Tempaloo_WebP_Plugin::get_settings()['license_valid'] );
+            $supported  = Tempaloo_WebP_Converter::is_supported_attachment( (int) $post_id );
+            if ( ! $licensed || ! $supported ) {
+                echo '<span style="color:#9a6700;">—</span>';
+                return;
+            }
+            $nonce = wp_create_nonce( 'tempaloo_convert_one_' . (int) $post_id );
+            printf(
+                '<button type="button" class="button button-small tempaloo-convert-now" data-id="%d" data-nonce="%s">%s</button>',
+                (int) $post_id,
+                esc_attr( $nonce ),
+                esc_html__( 'Convert now', 'tempaloo-webp' )
+            );
             return;
         }
         printf(
