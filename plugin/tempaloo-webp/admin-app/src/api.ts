@@ -217,7 +217,31 @@ export const api = {
             method: "POST",
             body: JSON.stringify({ dry_run: input.dryRun, fix: input.fix }),
         }),
+    attachmentDebug: (id: number) =>
+        restFetch<AttachmentDebugReport>(`/attachment-debug?id=${encodeURIComponent(String(id))}`),
 };
+
+/** Full per-attachment forensic — both meta locations, disk state per size. */
+export interface AttachmentDebugReport {
+    attachmentId: number;
+    title: string;
+    mime: string;
+    attachedFile: string | null;
+    attachedExists: boolean;
+    attachedBytes: number;
+    metaPostMetaKey: Record<string, unknown> | null;
+    metaInsideMetadata: Record<string, unknown> | null;
+    metaEffective: Record<string, unknown> | null;
+    sizes: Array<{
+        size: string;
+        path: string | null;
+        exists: boolean;
+        bytes: number;
+        webp: { path: string; exists: boolean; bytes: number } | null;
+        avif: { path: string; exists: boolean; bytes: number } | null;
+    }>;
+    settings: Record<string, unknown>;
+}
 
 /**
  * Side-by-side counts across the 4 sources of truth (filesystem, attachment

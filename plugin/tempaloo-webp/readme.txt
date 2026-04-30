@@ -4,7 +4,7 @@ Tags: webp, avif, image-optimization, lazy-load, performance
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.8.0
+Stable tag: 1.8.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -145,6 +145,11 @@ Example — skip conversion for any attachment in the `private/` upload subfolde
 4. Settings — quality, output format, auto-convert toggle.
 
 == Changelog ==
+
+= 1.8.1 =
+* New: **Inspect attachment by ID** in the Diagnostic tab. Type any attachment ID, get a forensic dump: meta in both storage locations side-by-side (`_tempaloo_webp` post_meta vs legacy in-metadata), the original file existence + bytes, and per-size disk state for `.webp` and `.avif` siblings. Surfaces immediately whether the converter actually wrote files, whether they got deleted right after by another plugin, or whether the meta got stripped — instead of guessing between Activity log success and a "Convert now" button on the same row.
+* New: REST endpoint `GET /tempaloo-webp/v1/attachment-debug?id=X` returning the same forensic data.
+* Fix: Converter now verifies disk state AFTER `file_put_contents`. Some hosts (LiteSpeed configs, `mod_security`, `open_basedir` edge cases) accept the write but the file disappears moments later — we counted those as `converted=N` while the disk had zero siblings. Now the post-write `file_exists()` check runs `clearstatcache()` first, treats vanished files as failed, and writes an Activity error entry naming the file path so the user can see what went wrong.
 
 = 1.8.0 =
 * **Architectural fix**: Conversion state moved from inside `_wp_attachment_metadata.tempaloo_webp` to a dedicated `_tempaloo_webp` post_meta key. Reason: when LiteSpeed Cache (default on Hostinger), Smush, ShortPixel, Imagify or any image optimizer hooks `wp_generate_attachment_metadata` at a later priority than ours, they sometimes rebuild the standard metadata array for their own queue and strip non-WP sub-keys in the process. Result for the user: Activity logs "Auto-convert success — 6 sizes converted", but the Optimized column shows nothing, Bulk says pending, and the frontend has no `<picture>` wrap — because the meta marker we wrote got overwritten right after. The new dedicated post_meta key is invisible to those filters; nothing can strip what nothing else knows about. Same approach ShortPixel uses (`_shortpixel_status` post_meta).

@@ -97,6 +97,20 @@ class Tempaloo_WebP_REST {
             'callback'            => [ $this, 'post_state_reconcile' ],
             'permission_callback' => [ $this, 'perm_manage' ],
         ] );
+
+        // Per-attachment forensic. Returns everything we know about a
+        // single image: meta in both locations, original + every size,
+        // sibling existence per (size × format), bytes per file. The
+        // diagnostic ground truth when "Activity says converted but
+        // the column says no".
+        register_rest_route( self::NS, '/attachment-debug', [
+            'methods'             => 'GET',
+            'callback'            => [ $this, 'get_attachment_debug' ],
+            'permission_callback' => [ $this, 'perm_manage' ],
+            'args'                => [
+                'id' => [ 'required' => true, 'type' => 'integer' ],
+            ],
+        ] );
     }
 
     public function get_activity( WP_REST_Request $req ) {
@@ -968,6 +982,116 @@ class Tempaloo_WebP_REST {
         }
 
         return rest_ensure_response( $changes );
+    }
+
+    /**
+     * Per-attachment forensic. Returns the full picture: WP attachment
+     * record, both meta storage locations, every expected size + the
+     * actual disk state of every (size × format) pair. The "is this
+     * really converted?" answer surfaces immediately — no guessing
+     * between Activity log success and a Convert-now button on the
+     * same row.
+     *
+     * GET /tempaloo-webp/v1/attachment-debug?id=45
+     */
+    public function get_attachment_debug( WP_REST_Request $req ) {
+        $id = (int) $req->get_param( 'id' );
+        if ( $id <= 0 ) {
+            return new WP_Error( 'bad_id', 'Missing or invalid attachment id', [ 'status' => 400 ] );
+        }
+        $post = get_post( $id );
+        if ( ! $post || 'attachment' !== $post->post_type ) {
+            return new WP_Error( 'not_attachment', "ID {$id} is not an attachment", [ 'status' => 404 ] );
+        }
+
+        clearstatcache(); // disk state must be fresh, not cached
+        $attached = get_attached_file( $id );
+        $att_exists = $attached && file_exists( $attached );
+        $att_size   = $att_exists ? filesize( $attached ) : 0;
+
+        $meta = wp_get_attachment_metadata( $id );
+
+        // Both meta locations exposed side-by-side so the user can see
+        // when one is set and not the other (= LiteSpeed-strip footprint).
+        $meta_via_post_meta = get_post_meta( $id, Tempaloo_WebP_Plugin::META_KEY, true );
+        $meta_via_metadata  = is_array( $meta ) && ! empty( $meta['tempaloo_webp'] ) ? $meta['tempaloo_webp'] : null;
+        $meta_effective     = Tempaloo_WebP_Plugin::get_conversion_meta( $id );
+
+        // Build the per-size disk state. Each entry: original path +
+        // existence + bytes; .webp sibling existence + bytes;
+        // .avif sibling existence + bytes.
+        $entries = [];
+        $entries[] = $this->size_debug_entry( 'original', $attached, $att_exists ? $att_size : 0 );
+        if ( is_array( $meta ) && ! empty( $meta['sizes'] ) && is_array( $meta['sizes'] ) ) {
+            foreach ( $meta['sizes'] as $size_name => $size_meta ) {
+                if ( empty( $size_meta['file'] ) ) continue;
+                $size_path = trailingslashit( dirname( (string) $attached ) ) . $size_meta['file'];
+                clearstatcache( true, $size_path );
+                $size_exists = file_exists( $size_path );
+                $entries[] = $this->size_debug_entry(
+                    (string) $size_name,
+                    $size_path,
+                    $size_exists ? filesize( $size_path ) : 0
+                );
+            }
+        }
+
+        // Settings snapshot — same data the user sees in Diagnostic
+        // settings card, repeated here so support tickets carry one
+        // self-contained dump.
+        $s = Tempaloo_WebP_Plugin::get_settings();
+
+        return rest_ensure_response( [
+            'attachmentId'      => $id,
+            'title'             => get_the_title( $id ),
+            'mime'              => get_post_mime_type( $id ),
+            'attachedFile'      => is_string( $attached ) ? str_replace( ABSPATH, '/', $attached ) : null,
+            'attachedExists'    => $att_exists,
+            'attachedBytes'     => $att_size,
+            'metaPostMetaKey'   => $meta_via_post_meta ?: null,
+            'metaInsideMetadata' => $meta_via_metadata,
+            'metaEffective'     => $meta_effective,
+            'sizes'             => $entries,
+            'settings'          => [
+                'licenseValid'  => ! empty( $s['license_valid'] ),
+                'autoConvert'   => ! empty( $s['auto_convert'] ),
+                'serveWebp'     => ! empty( $s['serve_webp'] ),
+                'outputFormat'  => (string) ( $s['output_format'] ?? 'webp' ),
+                'deliveryMode'  => (string) ( $s['delivery_mode'] ?? 'url_rewrite' ),
+                'cdnPassthrough' => ! empty( $s['cdn_passthrough'] ),
+                'supportsAvif'  => ! empty( $s['supports_avif'] ),
+            ],
+        ] );
+    }
+
+    /**
+     * Builds one entry of the per-size disk-state table. Reports the
+     * original file's existence + bytes, then for each format we
+     * support (webp + avif) reports whether the .webp / .avif
+     * sibling exists and its bytes.
+     */
+    private function size_debug_entry( $label, $path, $bytes ) {
+        $entry = [
+            'size'   => $label,
+            'path'   => is_string( $path ) ? str_replace( ABSPATH, '/', (string) $path ) : null,
+            'exists' => is_string( $path ) && file_exists( $path ),
+            'bytes'  => (int) $bytes,
+            'webp'   => null,
+            'avif'   => null,
+        ];
+        if ( is_string( $path ) ) {
+            foreach ( [ 'webp', 'avif' ] as $f ) {
+                $sibling = $path . '.' . $f;
+                clearstatcache( true, $sibling );
+                $exists = file_exists( $sibling );
+                $entry[ $f ] = [
+                    'path'   => str_replace( ABSPATH, '/', $sibling ),
+                    'exists' => $exists,
+                    'bytes'  => $exists ? (int) filesize( $sibling ) : 0,
+                ];
+            }
+        }
+        return $entry;
     }
 }
 

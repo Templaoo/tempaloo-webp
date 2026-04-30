@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, type StateAuditReport, type ReconcileOp, type ReconcileResult } from "../api";
-import { Badge, Button, Card, CardHeader, Skeleton, toast } from "../components/ui";
+import { api, type StateAuditReport, type ReconcileOp, type ReconcileResult, type AttachmentDebugReport } from "../api";
+import { Badge, Button, Card, CardHeader, Input, Skeleton, toast } from "../components/ui";
 
 /**
  * Diagnostic page — surfaces drift between the 4 sources of truth so the
@@ -245,10 +245,121 @@ export default function Diagnostic() {
                 </div>
             </Card>
 
+            <AttachmentInspector />
+
             <div className="text-[10px] text-ink-400 text-right font-mono">
                 Audit took {report.durationMs}ms · last refreshed {new Date().toLocaleTimeString()}
             </div>
         </div>
+    );
+}
+
+/* ── Inspect-by-ID forensic ─────────────────────────────────────────
+ * The "Activity log says converted but Optimized column says no" case
+ * needs a per-attachment ground-truth check. Type the ID, hit
+ * Inspect, see exactly what's on disk + which meta locations are
+ * populated. No more guessing whether the converter wrote files
+ * that LiteSpeed (or anything) deleted right after.
+ */
+function AttachmentInspector() {
+    const [id, setId] = useState("");
+    const [busy, setBusy] = useState(false);
+    const [report, setReport] = useState<AttachmentDebugReport | null>(null);
+    const [error, setError] = useState<string | null>(null);
+
+    const inspect = async () => {
+        const n = Number(id);
+        if (!Number.isFinite(n) || n <= 0) {
+            toast("error", "Enter a positive attachment ID");
+            return;
+        }
+        setBusy(true);
+        setError(null);
+        try {
+            const r = await api.attachmentDebug(n);
+            setReport(r);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : "Inspect failed");
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <Card>
+            <CardHeader
+                title="Inspect attachment by ID"
+                description="Per-attachment forensic. Returns the meta in both storage locations side-by-side and the actual disk state of every size + format. Use this when Activity says converted but the Optimized column says no."
+            />
+            <div className="flex gap-2 max-w-md">
+                <Input
+                    value={id}
+                    onChange={(e) => setId(e.target.value)}
+                    placeholder="e.g. 45"
+                    onKeyDown={(e) => { if (e.key === "Enter") inspect(); }}
+                />
+                <Button onClick={inspect} loading={busy}>Inspect</Button>
+            </div>
+
+            {error && (
+                <div className="mt-3 text-sm text-red-700">Error: {error}</div>
+            )}
+
+            {report && (
+                <div className="mt-5 space-y-4">
+                    <div className="rounded-lg border border-ink-200 bg-ink-50/50 p-4 text-xs">
+                        <div className="font-semibold text-ink-900 mb-2">#{report.attachmentId} · {report.title || "(no title)"}</div>
+                        <div className="font-mono space-y-0.5 text-ink-700">
+                            <div>mime: <strong>{report.mime}</strong></div>
+                            <div>attached: <strong className={report.attachedExists ? "text-emerald-700" : "text-red-700"}>{report.attachedExists ? "exists" : "MISSING"}</strong> · {report.attachedBytes.toLocaleString()} bytes</div>
+                            <div className="text-ink-500 break-all">{report.attachedFile}</div>
+                        </div>
+                    </div>
+
+                    <div className="rounded-lg border border-ink-200 p-4">
+                        <div className="text-sm font-semibold text-ink-900 mb-2">Conversion meta — TWO storage locations</div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                            <div className={`rounded border p-3 ${report.metaPostMetaKey ? "border-emerald-300 bg-emerald-50/60" : "border-ink-200 bg-ink-50/40"}`}>
+                                <div className="font-mono font-semibold mb-1">_tempaloo_webp post_meta</div>
+                                <div className="text-[11px] text-ink-700 break-all">
+                                    {report.metaPostMetaKey ? JSON.stringify(report.metaPostMetaKey) : <em className="text-ink-400">empty</em>}
+                                </div>
+                            </div>
+                            <div className={`rounded border p-3 ${report.metaInsideMetadata ? "border-amber-300 bg-amber-50/50" : "border-ink-200 bg-ink-50/40"}`}>
+                                <div className="font-mono font-semibold mb-1">_wp_attachment_metadata.tempaloo_webp (legacy)</div>
+                                <div className="text-[11px] text-ink-700 break-all">
+                                    {report.metaInsideMetadata ? JSON.stringify(report.metaInsideMetadata) : <em className="text-ink-400">empty (LiteSpeed strip footprint if it was here moments ago)</em>}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="rounded-lg border border-ink-200 p-4">
+                        <div className="text-sm font-semibold text-ink-900 mb-2">Disk state — every size × format</div>
+                        <div className="space-y-2">
+                            {report.sizes.map((entry, i) => (
+                                <div key={i} className="text-xs font-mono border-l-4 border-ink-200 pl-3 py-1">
+                                    <div className="font-semibold text-ink-900">{entry.size}</div>
+                                    <div className={entry.exists ? "text-emerald-700" : "text-red-700"}>
+                                        {entry.exists ? "✓" : "✗"} original · {entry.bytes.toLocaleString()} B
+                                    </div>
+                                    {entry.webp && (
+                                        <div className={entry.webp.exists ? "text-emerald-700" : "text-amber-700"}>
+                                            {entry.webp.exists ? "✓" : "✗"} .webp · {entry.webp.bytes.toLocaleString()} B
+                                        </div>
+                                    )}
+                                    {entry.avif && entry.avif.exists && (
+                                        <div className="text-emerald-700">
+                                            ✓ .avif · {entry.avif.bytes.toLocaleString()} B
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+        </Card>
     );
 }
 

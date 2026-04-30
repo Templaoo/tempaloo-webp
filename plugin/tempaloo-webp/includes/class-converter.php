@@ -215,8 +215,37 @@ class Tempaloo_WebP_Converter {
             // read-only hosts; we already return a failed++ below if the
             // write fails.
             // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
-            if ( false === $binary || ! @file_put_contents( $target, $binary ) ) {
+            $bytes_written = ( false === $binary ) ? false : @file_put_contents( $target, $binary );
+            if ( false === $bytes_written || $bytes_written === 0 ) {
                 $failed++;
+                continue;
+            }
+            // Post-write verification. Some hosts (we've seen it on
+            // Hostinger LiteSpeed environments) accept the write into
+            // a per-request scratch area but the file disappears the
+            // moment another plugin or open_basedir / mod_security
+            // trigger fires. file_exists() right after surfaces this
+            // so we don't silently report "converted=7" while the disk
+            // has zero siblings. Log the failure to Activity for
+            // post-mortem; treat as failed for the count.
+            clearstatcache( true, $target );
+            if ( ! file_exists( $target ) ) {
+                $failed++;
+                Tempaloo_WebP_Activity::log(
+                    'auto_convert', 'error',
+                    sprintf(
+                        /* translators: 1: attachment ID, 2: target file path */
+                        __( 'Wrote %1$d bytes for #%2$d but file vanished after write — host or another plugin removed it', 'tempaloo-webp' ),
+                        (int) $bytes_written,
+                        (int) $attachment_id
+                    ),
+                    [
+                        'attachment_id' => (int) $attachment_id,
+                        'target'        => str_replace( ABSPATH, '/', $target ),
+                        'bytes_written' => (int) $bytes_written,
+                        'reason'        => 'post_write_disappeared',
+                    ]
+                );
                 continue;
             }
             $converted++;
