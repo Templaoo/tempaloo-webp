@@ -8,7 +8,6 @@ import type { Plan as ApiPlan } from "@/lib/plans";
 import { BeforeAfterSlider } from "@/components/webp/sections/BeforeAfterSlider";
 import { WhyMatters }        from "@/components/webp/sections/WhyMatters";
 import { WhatsNew }          from "@/components/webp/sections/WhatsNew";
-import { Testimonials }      from "@/components/webp/sections/Testimonials";
 
 type Theme = "light" | "dark";
 type Billing = "monthly" | "annual";
@@ -73,7 +72,7 @@ const FAQS = [
     { q: "Do you keep my images?",
       a: "No. Conversion happens in-memory and the converted file is streamed back to your site. Originals stay on your server, untouched. We are not a storage service." },
     { q: "Can I cancel anytime? What about refunds?",
-      a: "Cancel any day, in one click, no penalty. All paid plans include a 7-day free trial and a 30-day money-back guarantee." },
+      a: "Cancel any day, in one click, no penalty. All paid plans include a 7-day free trial. The 30-day money-back guarantee covers your first paid charge if you've used less than 20% of your plan's monthly conversions in good faith — full details in our Terms §4." },
     { q: "Do you support AVIF?",
       a: "Yes, on Starter and above. AVIF produces ~20% smaller files than WebP at equivalent quality and is supported by every major modern browser." },
 ];
@@ -196,7 +195,6 @@ export function LandingPage({ plans }: { plans: ApiPlan[] }) {
             <Reveal><Security /></Reveal>
             <Reveal><ThumbnailTrap /></Reveal>
             <Reveal><WhatsNew /></Reveal>
-            <Reveal><Testimonials /></Reveal>
             <Reveal><Pricing plans={cardPlans} billing={billing} onBillingChange={setBilling} /></Reveal>
             <Reveal><FAQ openIdx={faqOpen} onToggle={(i) => setFaqOpen(faqOpen === i ? -1 : i)} /></Reveal>
             <FinalCTA />
@@ -268,7 +266,7 @@ function Nav({ theme, scrolled, onToggleTheme }: { theme: Theme; scrolled: boole
                                 <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M13.5 10.2A5.5 5.5 0 0 1 5.8 2.5 5.5 5.5 0 1 0 13.5 10.2z" /></svg>
                             )}
                         </button>
-                        <Link href="/webp/activate" className="pr2-nav-signin">Sign in</Link>
+                        <Link href="/sign-in" className="pr2-nav-signin">Sign in</Link>
                         <Link href="/webp/activate?plan=free" className="pr2-btn pr2-btn-primary pr2-btn-sm pr2-nav-cta" onClick={() => trackCtaClick("nav", "free")}>
                             <span className="pr2-nav-cta-label">Get started</span> <ArrowIcon />
                         </Link>
@@ -312,7 +310,7 @@ function Nav({ theme, scrolled, onToggleTheme }: { theme: Theme; scrolled: boole
                         <Link href="/contact" onClick={close}>Contact</Link>
                     </nav>
                     <div className="pr2-mobile-ctas">
-                        <Link href="/webp/activate" className="pr2-btn pr2-btn-ghost" onClick={close}>Sign in</Link>
+                        <Link href="/sign-in" className="pr2-btn pr2-btn-ghost" onClick={close}>Sign in</Link>
                         <Link href="/webp/activate?plan=free" className="pr2-btn pr2-btn-primary" onClick={() => { trackCtaClick("nav_mobile", "free"); close(); }}>
                             Get started <ArrowIcon />
                         </Link>
@@ -1107,7 +1105,7 @@ function FinalCTA() {
                 </p>
                 <div className="pr2-final-ctas">
                     <Link href="/webp/activate?plan=free" className="pr2-btn pr2-btn-final-primary" onClick={() => trackCtaClick("final_cta", "free")}>Start free <ArrowIcon /></Link>
-                    <a href="https://wordpress.org/plugins/tempaloo-webp/" className="pr2-btn pr2-btn-final-ghost">Read the docs</a>
+                    <Link href="/docs" className="pr2-btn pr2-btn-final-ghost">Read the docs</Link>
                 </div>
             </div>
         </section>
