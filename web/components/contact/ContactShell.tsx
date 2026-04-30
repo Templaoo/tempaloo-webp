@@ -53,14 +53,6 @@ export function ContactShell({ children }: { children: ReactNode }) {
 
                     <aside className="contact-info">
                         <div className="contact-card">
-                            <div className="contact-card-h">Direct email</div>
-                            <p className="contact-card-p">
-                                Prefer your own email client?{" "}
-                                <a href="mailto:contact@tempaloo.com">contact@tempaloo.com</a>
-                            </p>
-                        </div>
-
-                        <div className="contact-card">
                             <div className="contact-card-h">Office</div>
                             <address className="contact-address">
                                 Tempaloo SAS

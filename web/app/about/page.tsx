@@ -62,8 +62,8 @@ export default function AboutPage() {
                         body="We never modify your uploaded JPEG / PNG / GIF files. We add .webp / .avif siblings next to them. Restore is one click, byte-perfect, no recovery needed."
                     />
                     <Belief
-                        title="No telemetry, no tracking"
-                        body="The plugin sends license verification + image conversion requests to our API. That's it. No anonymous analytics, no usage profiling, no cookies on the WP admin side."
+                        title="Honest about what we log"
+                        body="The plugin sends license verification, image bytes for conversion, and per-conversion usage records (count, byte sizes, duration) needed to bill quotas. That's it — no anonymous analytics, no behavioral tracking, no cookies on the WP admin side. Full breakdown in our Privacy policy."
                     />
                     <Belief
                         title="Documentation is product"
@@ -97,8 +97,7 @@ export default function AboutPage() {
                     Paris. The team is small enough that you&apos;ll usually hear back
                     directly from a person who can fix what you&apos;re reporting — no
                     triage layer, no bot replies. Reach us via{" "}
-                    <Link href="/contact">the contact page</Link> or directly at{" "}
-                    <a href="mailto:contact@tempaloo.com">contact@tempaloo.com</a>.
+                    <Link href="/contact">the contact page</Link>.
                 </p>
 
                 <address className="ab-address">

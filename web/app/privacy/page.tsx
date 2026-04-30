@@ -1,28 +1,10 @@
+import Link from "next/link";
 import { LegalPage } from "@/components/legal/LegalPage";
 
 export const metadata = {
     title: "Privacy Policy — Tempaloo",
     description: "How Tempaloo collects, uses and protects your data.",
 };
-
-/*
- * ─────────────────────────────────────────────────────────────────────────
- *  Before going public with this document, fill the placeholders below:
- *
- *    1. `Tempaloo SAS` → your real registered legal entity name
- *    2. `12 rue de la Paix, 75002 Paris, France` → your registered address
- *    3. `RCS Paris B 902 458 137` → business registry number
- *    4. `FR12 902458137` → VAT / intra-EU number (if any)
- *    5. `[Name of DPO or privacy contact]` → if you appoint one
- *
- *  Also: this draft covers the Tempaloo pattern as it stands in April 2026
- *  (API on Render/Frankfurt, DB on Neon/Frankfurt, payments via Freemius,
- *  analytics via Vercel). If that stack changes, update §6 "Sub-processors".
- *
- *  A licensed lawyer should review this document before publication if
- *  you plan to sell to EU businesses at any scale.
- * ─────────────────────────────────────────────────────────────────────────
- */
 
 export default function PrivacyPage() {
     return (
@@ -39,7 +21,7 @@ export default function PrivacyPage() {
                 <strong>Data controller</strong>: Tempaloo SAS, 12 rue de la Paix, 75002 Paris, France. Registered under RCS Paris B 902 458 137, VAT FR12 902458137.
             </p>
             <p>
-                For any privacy question, reach us at <a href="mailto:privacy@tempaloo.com">privacy@tempaloo.com</a>. We aim to respond within 30 days as required by the GDPR.
+                For any privacy question, please reach us through our <Link href="/contact">contact form</Link> (pick the &ldquo;Other&rdquo; topic and mention &ldquo;privacy&rdquo; in your message). We aim to respond within 30 days as required by the GDPR.
             </p>
 
             <h2>2. What we collect</h2>
@@ -124,7 +106,7 @@ export default function PrivacyPage() {
             </p>
 
             <h2>7. Your rights under the GDPR</h2>
-            <p>You can exercise the following rights at any time, by emailing <a href="mailto:privacy@tempaloo.com">privacy@tempaloo.com</a>:</p>
+            <p>You can exercise the following rights at any time through our <Link href="/contact">contact form</Link>:</p>
             <ul>
                 <li><strong>Access</strong> — receive a copy of the personal data we hold about you.</li>
                 <li><strong>Rectification</strong> — ask us to correct data that is inaccurate.</li>
@@ -148,7 +130,7 @@ export default function PrivacyPage() {
             <p>Analytics on the marketing pages are provided by <strong>Vercel Analytics</strong>, which is cookieless and does not cross-track users between sites.</p>
 
             <h2>9. Children</h2>
-            <p>The Service is not directed at children under 16. We do not knowingly collect data from children. If you believe a minor has registered, contact <a href="mailto:privacy@tempaloo.com">privacy@tempaloo.com</a> and we will delete the account.</p>
+            <p>The Service is not directed at children under 16. We do not knowingly collect data from children. If you believe a minor has registered, send us a message via our <Link href="/contact">contact form</Link> and we will delete the account.</p>
 
             <h2>10. Security</h2>
             <p>We apply common-sense technical and organisational measures: TLS 1.2+ on every endpoint, HMAC-signed webhooks, hashed licence keys, key rotation on compromise, principle of least privilege for internal access, audit logs on all database changes. Despite these, no service can guarantee absolute security; in the event of a confirmed personal-data breach we will notify the CNIL within 72 hours as required by the GDPR and affected users without undue delay.</p>
@@ -160,7 +142,7 @@ export default function PrivacyPage() {
             <div className="lp-callout">
                 <p>
                     <strong>Tempaloo — privacy</strong><br />
-                    <a href="mailto:privacy@tempaloo.com">privacy@tempaloo.com</a><br />
+                    Use our <Link href="/contact">contact form</Link> for any privacy or data-protection request<br />
                     Tempaloo SAS, 12 rue de la Paix, 75002 Paris, France
                 </p>
             </div>

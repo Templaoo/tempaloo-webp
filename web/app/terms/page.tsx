@@ -1,25 +1,10 @@
+import Link from "next/link";
 import { LegalPage } from "@/components/legal/LegalPage";
 
 export const metadata = {
     title: "Terms of Service — Tempaloo",
     description: "The rules of using Tempaloo: plans, refunds, acceptable use, and liability.",
 };
-
-/*
- * ─────────────────────────────────────────────────────────────────────────
- *  Before going public with this document, fill the placeholders below:
- *
- *    1. `Tempaloo SAS` → your real registered legal entity name
- *    2. `12 rue de la Paix, 75002 Paris, France` → your registered address
- *    3. `RCS Paris B 902 458 137` → business registry number
- *    4. `FR12 902458137` → VAT / intra-EU number (if any)
- *    5. `France` / `Paris` → if your jurisdiction is different
- *
- *  A licensed lawyer should review this document before publication —
- *  especially §12 (Limitation of liability) and §15 (Governing law),
- *  which vary significantly by jurisdiction.
- * ─────────────────────────────────────────────────────────────────────────
- */
 
 export default function TermsPage() {
     return (
@@ -40,7 +25,7 @@ export default function TermsPage() {
             <ul>
                 <li>You must be at least 16 years old and able to enter a contract in your jurisdiction.</li>
                 <li>One account per person or legal entity. You keep your licence key confidential; you are responsible for activity performed under your key.</li>
-                <li>You can close your account at any time from the dashboard or by emailing <a href="mailto:support@tempaloo.com">support@tempaloo.com</a>.</li>
+                <li>You can close your account at any time from the dashboard or through our <Link href="/contact">contact form</Link>.</li>
             </ul>
 
             <h2>3. Plans, pricing and sites-per-licence</h2>
@@ -92,7 +77,7 @@ export default function TermsPage() {
             <h3>4.3 30-day satisfaction guarantee</h3>
             <ul>
                 <li><strong>30-day money-back window</strong> on the <em>first</em> paid period of <em>each licence</em>, applicable to the very first paid charge of a given Tempaloo account. Subsequent paid periods (renewals, upgrades) are not eligible.</li>
-                <li>Refund requests must be sent in writing to <a href="mailto:support@tempaloo.com">support@tempaloo.com</a> within 30 calendar days of the first paid charge.</li>
+                <li>Refund requests must be sent in writing through our <Link href="/contact">contact form</Link> (pick the &ldquo;Sales&rdquo; topic) within 30 calendar days of the first paid charge.</li>
                 <li>Approved refunds are processed within 14 working days through the original payment method, via Freemius.</li>
             </ul>
 
@@ -176,7 +161,7 @@ export default function TermsPage() {
 
             <h2>10. Availability and changes</h2>
             <ul>
-                <li>We aim for 99.5% monthly uptime on the API but make no binding SLA commitment on the current plans. Incident status is visible at [status.tempaloo.com] (coming soon).</li>
+                <li>We aim for 99.5% monthly uptime on the API but make no binding SLA commitment on the current plans. Major incidents are surfaced through our <Link href="/contact">contact page</Link> and changelog.</li>
                 <li>Scheduled maintenance is announced at least 24 hours in advance on our status page and, for maintenance longer than 15 minutes, by email.</li>
                 <li>We may add, change or remove features. Breaking changes to the plugin↔API contract are announced at least 30 days in advance and kept backward-compatible for at least one release cycle.</li>
             </ul>
@@ -227,7 +212,7 @@ export default function TermsPage() {
             <div className="lp-callout">
                 <p>
                     <strong>Tempaloo — legal</strong><br />
-                    <a href="mailto:legal@tempaloo.com">legal@tempaloo.com</a><br />
+                    Use our <Link href="/contact">contact form</Link> for any legal or commercial query<br />
                     Tempaloo SAS, 12 rue de la Paix, 75002 Paris, France<br />
                     RCS Paris B 902 458 137 · VAT FR12 902458137
                 </p>

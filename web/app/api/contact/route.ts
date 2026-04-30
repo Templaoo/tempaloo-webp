@@ -151,14 +151,67 @@ function buildEmail(p: Payload, ip: string): { subject: string; html: string; te
   <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; margin-bottom: 6px;">Message</div>
   <div style="background: #f9fafb; border-left: 3px solid #2a57e6; padding: 14px 16px; font-size: 14px; line-height: 1.6; white-space: pre-wrap; color: #1f2937; border-radius: 0 6px 6px 0;">${escapeHtml(p.message)}</div>
   <div style="margin-top: 24px; padding-top: 12px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #9ca3af;">
-    Reply directly to <a href="mailto:${escapeHtml(p.email)}" style="color: #6b7280;">${escapeHtml(p.email)}</a> — they&rsquo;ll get it.
+    Reply directly — Brevo&rsquo;s reply-to header points back to ${escapeHtml(p.email)}.
   </div>
 </body></html>`.trim();
 
     return { subject, html, text };
 }
 
-async function sendViaBrevo(payload: { from: { email: string; name: string }; to: { email: string }[]; replyTo: { email: string; name: string }; subject: string; htmlContent: string; textContent: string }): Promise<{ ok: boolean; status: number; body?: string }> {
+/**
+ * Confirmation copy for the user who submitted the form. Lets them
+ * (a) know we got their message — no anxious "did it send?" support
+ * tickets, (b) keep a copy of what they wrote in their own inbox,
+ * (c) reply to the email to add follow-up info if they want.
+ */
+function buildClientAck(p: Payload): { subject: string; html: string; text: string } {
+    const subject = "We got your message — Tempaloo";
+    const text = [
+        `Hi ${p.name},`,
+        ``,
+        `Thanks for reaching out to Tempaloo. We received your message and`,
+        `we'll reply to ${p.email} within 24 hours, business days.`,
+        ``,
+        `For your records, here is a copy of what you sent:`,
+        ``,
+        `─────────────`,
+        p.message,
+        `─────────────`,
+        ``,
+        `If you need to add information, just reply to this email.`,
+        ``,
+        `— The Tempaloo team`,
+        `https://tempaloo.com`,
+    ].join("\n");
+
+    const html = `
+<!DOCTYPE html>
+<html><body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; color: #1f2937; line-height: 1.55;">
+  <div style="border-bottom: 1px solid #e5e7eb; padding-bottom: 16px; margin-bottom: 24px;">
+    <div style="font-weight: 600; font-size: 18px; color: #111827; letter-spacing: -0.02em;">Tempaloo</div>
+    <div style="font-size: 12px; color: #6b7280; margin-top: 2px;">Image optimization for WordPress</div>
+  </div>
+  <p style="font-size: 15px; margin: 0 0 14px;">Hi <strong>${escapeHtml(p.name)}</strong>,</p>
+  <p style="font-size: 14.5px; margin: 0 0 14px;">
+    Thanks for reaching out — we got your message and we&rsquo;ll reply within
+    <strong>24 hours</strong> on business days. We read every message ourselves;
+    no triage layer, no canned responses.
+  </p>
+  <p style="font-size: 13px; color: #6b7280; margin: 24px 0 8px; text-transform: uppercase; letter-spacing: 0.04em;">Your message, for reference</p>
+  <div style="background: #f9fafb; border-left: 3px solid #2a57e6; padding: 12px 14px; font-size: 13.5px; line-height: 1.6; white-space: pre-wrap; color: #374151; border-radius: 0 6px 6px 0;">${escapeHtml(p.message)}</div>
+  <p style="font-size: 13.5px; margin: 24px 0 0; color: #4b5563;">
+    Need to add something? Just reply to this email — it goes straight to the team.
+  </p>
+  <div style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 11.5px; color: #9ca3af;">
+    Tempaloo SAS · 12 rue de la Paix, 75002 Paris, France<br>
+    <a href="https://tempaloo.com" style="color: #6b7280;">tempaloo.com</a> · <a href="https://tempaloo.com/privacy" style="color: #6b7280;">Privacy</a> · <a href="https://tempaloo.com/terms" style="color: #6b7280;">Terms</a>
+  </div>
+</body></html>`.trim();
+
+    return { subject, html, text };
+}
+
+async function sendViaBrevo(payload: { from: { email: string; name: string }; to: { email: string; name?: string }[]; replyTo: { email: string; name: string }; subject: string; htmlContent: string; textContent: string }): Promise<{ ok: boolean; status: number; body?: string }> {
     const apiKey = process.env.BREVO_API_KEY;
     if (!apiKey) {
         // Dev fallback: log the payload, pretend success. In production
@@ -253,24 +306,57 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
     }
 
-    const { subject, html, text } = buildEmail(v.data, ip);
+    // Two parallel emails:
+    //   1. NOTIFICATION to the Tempaloo inbox so we know someone reached
+    //      out. Reply-To is the visitor's address — hitting Reply on the
+    //      mail client lands directly in their inbox.
+    //   2. CONFIRMATION to the visitor so they know we received it,
+    //      keep a copy of what they wrote, and can reply to extend the
+    //      thread if they need to.
+    //
+    // We treat the notification as the "must succeed" path. The
+    // confirmation is best-effort — a failure there shouldn't reject
+    // the form (the team email is what matters for follow-up). Both
+    // failures are logged to Vercel for diagnostics.
+    const notify = buildEmail(v.data, ip);
+    const ack    = buildClientAck(v.data);
 
-    const result = await sendViaBrevo({
-        from:    { email: FROM_EMAIL, name: FROM_NAME },
-        to:      [{ email: TO_EMAIL }],
-        replyTo: { email: v.data.email, name: v.data.name },
-        subject,
-        htmlContent: html,
-        textContent: text,
-    });
+    const [notifyResult, ackResult] = await Promise.all([
+        sendViaBrevo({
+            from:    { email: FROM_EMAIL, name: FROM_NAME },
+            to:      [{ email: TO_EMAIL }],
+            replyTo: { email: v.data.email, name: v.data.name },
+            subject: notify.subject,
+            htmlContent: notify.html,
+            textContent: notify.text,
+        }),
+        sendViaBrevo({
+            from:    { email: FROM_EMAIL, name: FROM_NAME },
+            to:      [{ email: v.data.email, name: v.data.name }],
+            // Reply-To = our inbox so when the user replies to the
+            // confirmation, the thread continues with the team rather
+            // than bouncing back to the From: address.
+            replyTo: { email: TO_EMAIL, name: "Tempaloo" },
+            subject: ack.subject,
+            htmlContent: ack.html,
+            textContent: ack.text,
+        }),
+    ]);
 
-    if (!result.ok) {
+    if (!notifyResult.ok) {
         // eslint-disable-next-line no-console
-        console.error("[contact] Brevo send failed", result);
+        console.error("[contact] Brevo NOTIFICATION send failed", notifyResult);
         return NextResponse.json(
-            { error: "We couldn't send your message. Try again or email us directly." },
+            { error: "We couldn't send your message. Try again in a moment or use a different browser." },
             { status: 502 },
         );
+    }
+    if (!ackResult.ok) {
+        // The team got it — the visitor just won't see a confirmation
+        // in their inbox. Log it but don't fail the request: the
+        // submission is successful from the support standpoint.
+        // eslint-disable-next-line no-console
+        console.warn("[contact] Brevo CONFIRMATION send failed (notification ok)", ackResult);
     }
 
     return NextResponse.json({ ok: true });

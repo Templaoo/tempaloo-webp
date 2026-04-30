@@ -173,7 +173,7 @@ function SupportCard() {
             </p>
             <div style={{ display: "flex", gap: 8 }}>
                 <Link href="/docs" className="btn btn-ghost btn-sm">Docs</Link>
-                <a href="mailto:support@tempaloo.com" className="btn btn-ghost btn-sm">Email</a>
+                <Link href="/contact" className="btn btn-ghost btn-sm">Contact</Link>
             </div>
         </div>
     );

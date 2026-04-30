@@ -115,7 +115,7 @@ export function LogoutClient() {
                         <h1 style={titleStyle}>Couldn&apos;t sign you out</h1>
                         <p style={subStyle}>
                             {errMsg ? errMsg + " · " : ""}
-                            Try clearing cookies for this site, or contact <a href="mailto:support@tempaloo.com" style={{ color: "var(--ink)" }}>support</a>.
+                            Try clearing cookies for this site, or use our <Link href="/contact" style={{ color: "var(--ink)" }}>contact form</Link>.
                         </p>
                         <div style={{ marginTop: 20, display: "flex", gap: 8, justifyContent: "center" }}>
                             <Link href="/webp" style={btnGhostStyle}>Back to home</Link>

@@ -103,8 +103,7 @@ export function ContactForm() {
                 <h2 className="cf-success-h">Message received.</h2>
                 <p className="cf-success-p">
                     We&apos;ll get back to you at <strong>{form.email}</strong> within 24
-                    hours. If it&apos;s urgent, you can also reach us directly at{" "}
-                    <a href="mailto:contact@tempaloo.com">contact@tempaloo.com</a>.
+                    hours. A confirmation copy is also on its way to your inbox.
                 </p>
                 <button
                     type="button"

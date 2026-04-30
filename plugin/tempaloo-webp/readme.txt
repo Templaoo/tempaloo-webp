@@ -61,7 +61,7 @@ This plugin connects to the Tempaloo conversion API hosted at `https://api.tempa
 
 * Image data is held in memory only during conversion, then discarded.
 * Usage logs (count of conversions, byte totals, duration) are stored for billing and analytics, associated with your license.
-* No PII is sent.
+* No personal data beyond what is needed to authenticate your license: your account email (collected at activation or via Google OAuth) and the URL of the WordPress site where the license is active. Both are necessary for license enforcement and are detailed in our privacy policy at https://tempaloo.com/privacy.
 
 **Providers**
 

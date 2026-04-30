@@ -8,6 +8,7 @@ import type { Plan as ApiPlan } from "@/lib/plans";
 import { BeforeAfterSlider } from "@/components/webp/sections/BeforeAfterSlider";
 import { WhyMatters }        from "@/components/webp/sections/WhyMatters";
 import { WhatsNew }          from "@/components/webp/sections/WhatsNew";
+import { HeroBackground }    from "@/components/HeroBackground";
 
 type Theme = "light" | "dark";
 type Billing = "monthly" | "annual";
@@ -78,6 +79,11 @@ const FAQS = [
 ];
 
 const activateHref = (plan: CardPlan["id"], billing: Billing) => `/webp/activate?plan=${plan}&billing=${billing}`;
+// Direct-checkout variant: skips the trial step and opens the Freemius
+// checkout immediately. Used by the "Buy now" button next to "Start
+// trial" on every paid plan card. The activate page reads `checkout=1`
+// and triggers the modal as soon as the user authenticates.
+const buyHref      = (plan: CardPlan["id"], billing: Billing) => `/webp/activate?plan=${plan}&billing=${billing}&checkout=1`;
 
 function usePrefersReducedMotion(): boolean {
     const [reduced, setReduced] = useState(false);
@@ -352,6 +358,7 @@ function Hero() {
     };
     return (
         <section className="pr2-hero">
+            <HeroBackground coverNavHeightPx={88} intensity="subtle" />
             <div className="pr2-container pr2-hero-inner">
                 <span className="pr2-pill">
                     <span className="pr2-pill-dot" />
@@ -372,7 +379,7 @@ function Hero() {
                     </button>
                 </div>
                 <ul className="pr2-trust-chips" aria-label="Risk reducers">
-                    <li><CheckIcon size={11} /> 30-day money back</li>
+                    <li title="First paid charge, usage under 20% of plan quota — see Terms §4."><CheckIcon size={11} /> 30-day satisfaction window</li>
                     <li><CheckIcon size={11} /> 7-day trial on paid plans</li>
                     <li><CheckIcon size={11} /> Cancel anytime</li>
                 </ul>
@@ -572,7 +579,7 @@ function StatsBar() {
                     <Stat k={`−${Math.round(pct)}%`} v="avg. page weight" />
                     <Stat k={`${Math.round(secs)}s`} v="setup time" />
                     <Stat k="6.0+" v="WP compatibility" />
-                    <Stat k={`${Math.round(days)}d`} v="money-back guarantee" />
+                    <Stat k={`${Math.round(days)}d`} v="satisfaction window" />
                 </div>
             </div>
         </section>
@@ -802,7 +809,7 @@ function StickyMobileCTA() {
             <div className="pr2-sticky-inner">
                 <div className="pr2-sticky-copy">
                     <strong>Free · 250 images/mo</strong>
-                    <span className="pr2-sticky-sub">No card · 30-day money back</span>
+                    <span className="pr2-sticky-sub">No card · Cancel anytime</span>
                 </div>
                 <Link href="/webp/activate?plan=free" className="pr2-btn pr2-btn-primary pr2-btn-sm" onClick={() => trackCtaClick("sticky_mobile", "free")}>
                     Start free <ArrowIcon />
@@ -901,6 +908,10 @@ function ThumbnailTrap() {
                     <span aria-hidden> · </span>
                     <Link href="/webp/vs-tinypng">vs TinyPNG</Link>
                 </div>
+                <p className="pr2-trap-tm" style={{ fontSize: 11, color: "var(--ink-3)", marginTop: 16, fontStyle: "italic" }}>
+                    ShortPixel, Imagify, TinyPNG and Elementor are registered trademarks of their respective owners.
+                    All comparisons are based on each provider&apos;s public pricing as of April 2026 and are reviewed quarterly.
+                </p>
             </div>
         </section>
     );
@@ -1006,13 +1017,38 @@ function PlanCard({ plan, billing }: { plan: CardPlan; billing: Billing }) {
                     </li>
                 ))}
             </ul>
-            <Link
-                href={activateHref(plan.id, billing)}
-                className={`pr2-btn ${plan.highlight ? "pr2-btn-primary" : "pr2-btn-ghost"} pr2-plan-cta`}
-                onClick={() => trackCtaClick("pricing", plan.id as TrackPlan)}
-            >
-                {plan.cta} <ArrowIcon />
-            </Link>
+            {plan.id === "free" ? (
+                /* Free plan stays single-CTA — no trial / direct-buy
+                   distinction since there's nothing to charge. */
+                <Link
+                    href={activateHref(plan.id, billing)}
+                    className="pr2-btn pr2-btn-ghost pr2-plan-cta"
+                    onClick={() => trackCtaClick("pricing", plan.id as TrackPlan)}
+                >
+                    {plan.cta} <ArrowIcon />
+                </Link>
+            ) : (
+                /* Paid plans: split CTA gives the user a clear choice
+                   between the 7-day free trial (default — most users)
+                   and skipping straight to checkout (returning customers,
+                   buyers who already know they want this plan). */
+                <div className="pr2-plan-ctas">
+                    <Link
+                        href={activateHref(plan.id, billing)}
+                        className={`pr2-btn ${plan.highlight ? "pr2-btn-primary" : "pr2-btn-ghost"} pr2-plan-cta`}
+                        onClick={() => trackCtaClick("pricing", plan.id as TrackPlan)}
+                    >
+                        Start 7-day trial
+                    </Link>
+                    <Link
+                        href={buyHref(plan.id, billing)}
+                        className="pr2-btn pr2-btn-ghost pr2-plan-cta-secondary"
+                        onClick={() => trackCtaClick("pricing", plan.id as TrackPlan)}
+                    >
+                        Buy now (skip trial)
+                    </Link>
+                </div>
+            )}
         </div>
     );
 }
@@ -1039,13 +1075,32 @@ function SmallPlanRow({ plan, billing }: { plan: CardPlan; billing: Billing }) {
             <div className="pr2-smallrow-price">
                 {isFree ? "€0" : `€${Number.isInteger(monthly) ? monthly : monthly.toFixed(2)}/mo`}
             </div>
-            <Link
-                href={activateHref(plan.id, billing)}
-                className="pr2-btn pr2-btn-ghost pr2-btn-sm"
-                onClick={() => trackCtaClick("pricing", plan.id as TrackPlan)}
-            >
-                {plan.cta} <ArrowIcon />
-            </Link>
+            {plan.id === "free" ? (
+                <Link
+                    href={activateHref(plan.id, billing)}
+                    className="pr2-btn pr2-btn-ghost pr2-btn-sm"
+                    onClick={() => trackCtaClick("pricing", plan.id as TrackPlan)}
+                >
+                    {plan.cta} <ArrowIcon />
+                </Link>
+            ) : (
+                <div className="pr2-smallrow-ctas">
+                    <Link
+                        href={activateHref(plan.id, billing)}
+                        className="pr2-btn pr2-btn-ghost pr2-btn-sm"
+                        onClick={() => trackCtaClick("pricing", plan.id as TrackPlan)}
+                    >
+                        Start trial
+                    </Link>
+                    <Link
+                        href={buyHref(plan.id, billing)}
+                        className="pr2-btn pr2-btn-ghost pr2-btn-sm pr2-smallrow-buy"
+                        onClick={() => trackCtaClick("pricing", plan.id as TrackPlan)}
+                    >
+                        Buy
+                    </Link>
+                </div>
+            )}
         </div>
     );
 }
@@ -1220,7 +1275,7 @@ const css = `
 .pr2-pill-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 3px rgba(23, 201, 100, 0.18); }
 
 .pr2-hero { padding: 80px 0 96px; position: relative; overflow: hidden; }
-.pr2-hero-inner { position: relative; text-align: center; }
+.pr2-hero-inner { position: relative; z-index: 1; text-align: center; }
 .pr2-hero-h1 { font-size: clamp(32px, 7.2vw, 88px); line-height: 1.04; letter-spacing: -0.04em; font-weight: 600; margin: 28px auto 22px; max-width: 820px; color: var(--ink); text-wrap: balance; }
 .pr2-hero-h1-accent { color: var(--ink-3); font-weight: 400; }
 .pr2-hero-lead { font-size: 18px; line-height: 1.55; color: var(--ink-2); max-width: 560px; margin: 0 auto 36px; text-wrap: balance; letter-spacing: -0.01em; }
@@ -1353,6 +1408,12 @@ const css = `
 .pr2-plan-feats li { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
 .pr2-feat-check { color: var(--ink); margin-top: 3px; flex-shrink: 0; }
 .pr2-plan-cta { width: 100%; height: 36px; }
+.pr2-plan-ctas { display: flex; flex-direction: column; gap: 6px; }
+.pr2-plan-cta-secondary { width: 100%; height: 32px; font-size: 12.5px; color: var(--ink-2); }
+.pr2-plan-cta-secondary:hover { color: var(--ink); }
+.pr2-smallrow-ctas { display: flex; gap: 6px; }
+.pr2-smallrow-buy { color: var(--ink-3); }
+.pr2-smallrow-buy:hover { color: var(--ink); }
 
 .pr2-smallrow { padding: 18px 20px; border: 1px solid var(--line); background: var(--surface); border-radius: 10px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
 .pr2-smallrow-col { flex: 1 1 180px; min-width: 160px; }

@@ -90,9 +90,7 @@ export default function ChangelogPage() {
                         with the version it shipped in.
                     </p>
                     <p className="cl-rss">
-                        Subscribe via{" "}
-                        <a href="/changelog.rss" rel="alternate">RSS</a> (coming soon) or{" "}
-                        <Link href="/contact">email</Link> — we send a digest at most monthly.
+                        Want the digest? <Link href="/contact">Drop us a line</Link> — we send a release-notes digest at most monthly, no spam.
                     </p>
                 </header>
 

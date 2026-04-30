@@ -261,7 +261,7 @@ function GaveUpPanel({ onRetry }: { onRetry: () => void }) {
                 <button onClick={onRetry} className="btn btn-primary btn-sm" style={{ display: "inline-flex" }}>
                     Try again
                 </button>
-                <a href="mailto:support@tempaloo.com?subject=Purchase%20not%20linked"
+                <a href="/contact?topic=support&subject=Purchase%20not%20linked"
                    className="btn btn-ghost btn-sm"
                    style={{ display: "inline-flex" }}>
                     Contact support

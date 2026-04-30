@@ -29,11 +29,11 @@ export default function DocsIndex() {
                     <p className="doc-card-p">Three filters / actions to skip, override quality, or react to conversions.</p>
                     <span className="doc-card-link">Read →</span>
                 </Link>
-                <a href="mailto:support@tempaloo.com" className="doc-card" style={{ textDecoration: "none", borderBottom: "1px solid var(--line)" }}>
+                <Link href="/contact" className="doc-card" style={{ textDecoration: "none", borderBottom: "1px solid var(--line)" }}>
                     <div className="doc-card-h">Support</div>
-                    <p className="doc-card-p">Stuck on something the docs don't cover? Email support — we read every message.</p>
+                    <p className="doc-card-p">Stuck on something the docs don&apos;t cover? Send us a message — we read every one.</p>
                     <span className="doc-card-link">Contact →</span>
-                </a>
+                </Link>
             </div>
 
             <Section id="install" title="Install & activate (3 minutes)">
