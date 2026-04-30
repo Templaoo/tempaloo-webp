@@ -71,8 +71,6 @@ export function ContactShell({ children }: { children: ReactNode }) {
                             </address>
                             <p className="contact-fineprint">
                                 SIREN 902 458 137 · RCS Paris B&nbsp;902&nbsp;458&nbsp;137 · TVA FR12&nbsp;902458137
-                                <br />
-                                <em>(placeholder while we update legal details)</em>
                             </p>
                         </div>
 

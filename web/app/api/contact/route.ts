@@ -13,19 +13,27 @@ import { NextResponse, type NextRequest } from "next/server";
  *
  * Required env (production):
  *   BREVO_API_KEY         — secret key from app.brevo.com
+ *   EMAIL_FROM            — verified sender on Brevo (shared with the
+ *                           Fastify API, so we don't have to verify a
+ *                           second sender). Default matches api/src/config.ts.
+ *   EMAIL_FROM_NAME       — display name for the From: header
  *   CONTACT_TO_EMAIL      — destination inbox (defaults below)
- *   CONTACT_FROM_EMAIL    — verified sender on Brevo (defaults below)
  *
  * If BREVO_API_KEY is missing (local dev), we log the payload to
  * stdout and return success so the form flow stays testable without
- * spamming a real inbox.
+ * spamming a real inbox. In production a missing key would silently
+ * accept submissions and lose them — we now log a CLEAR warning when
+ * that happens so the bug is visible in Vercel logs.
  */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const TO_EMAIL   = process.env.CONTACT_TO_EMAIL   ?? "otmane.hammadi.1@gmail.com";
-const FROM_EMAIL = process.env.CONTACT_FROM_EMAIL ?? "noreply@tempaloo.com";
-const FROM_NAME  = "Tempaloo Contact Form";
+const TO_EMAIL   = process.env.CONTACT_TO_EMAIL ?? "otmane.hammadi.1@gmail.com";
+// Use the same verified sender as the Fastify API (Brevo only sends from
+// senders explicitly verified in the dashboard — using a fresh / unverified
+// "noreply@tempaloo.com" address would silently fail on every send).
+const FROM_EMAIL = process.env.EMAIL_FROM      ?? "julia.paterson@tempaloo.com";
+const FROM_NAME  = process.env.EMAIL_FROM_NAME ?? "Tempaloo Contact";
 
 // In-memory rate limit. Sufficient for the load Tempaloo gets today
 // (single-instance Vercel serverless cold-starts notwithstanding —
@@ -153,9 +161,16 @@ function buildEmail(p: Payload, ip: string): { subject: string; html: string; te
 async function sendViaBrevo(payload: { from: { email: string; name: string }; to: { email: string }[]; replyTo: { email: string; name: string }; subject: string; htmlContent: string; textContent: string }): Promise<{ ok: boolean; status: number; body?: string }> {
     const apiKey = process.env.BREVO_API_KEY;
     if (!apiKey) {
-        // Dev fallback: log the payload, pretend success.
+        // Dev fallback: log the payload, pretend success. In production
+        // the absence of BREVO_API_KEY is a real bug (silent submission
+        // loss), so the warning is loud-enough to catch in Vercel logs.
         // eslint-disable-next-line no-console
-        console.log("[contact] BREVO_API_KEY not set — would send:", JSON.stringify(payload, null, 2));
+        console.warn(
+            "[contact] BREVO_API_KEY is not set — submission accepted but NOT sent. From=%s To=%s Subject=%s",
+            payload.from.email,
+            payload.to[0]?.email,
+            payload.subject,
+        );
         return { ok: true, status: 200 };
     }
 
@@ -178,6 +193,17 @@ async function sendViaBrevo(payload: { from: { email: string; name: string }; to
 
     if (!res.ok) {
         const body = await res.text().catch(() => "");
+        // Surface the real cause in Vercel logs. Most common: HTTP 400
+        // with `{"code":"invalid_parameter","message":"sender ... is
+        // not valid"}` when the From address isn't verified in Brevo.
+        // eslint-disable-next-line no-console
+        console.error(
+            "[contact] Brevo /smtp/email failed — status=%d From=%s To=%s body=%s",
+            res.status,
+            payload.from.email,
+            payload.to[0]?.email,
+            body,
+        );
         return { ok: false, status: res.status, body };
     }
     return { ok: true, status: res.status };
