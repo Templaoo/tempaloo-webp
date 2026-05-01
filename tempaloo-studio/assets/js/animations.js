@@ -149,6 +149,240 @@
         },
     };
 
+    /* ── Text splitter (custom, no SplitText dependency) ───── */
+
+    /**
+     * Walk text nodes inside `el` and wrap each word in a span. Preserves
+     * any inline tags (<em>, <strong>, <a>) by only touching text nodes.
+     * Idempotent via `el.__twSplit` flag — re-running returns the same
+     * spans without re-splitting.
+     */
+    function splitWords(el, overflow) {
+        var key = overflow ? 'words-overflow' : 'words';
+        if (el.__twSplit === key) {
+            return el.querySelectorAll(overflow ? '.tw-word__inner' : '.tw-word');
+        }
+        if (!el.__twOriginalHTML) el.__twOriginalHTML = el.innerHTML;
+        // Preserve readable text for screen readers — the spans are
+        // visually splitting only.
+        if (!el.getAttribute('aria-label')) el.setAttribute('aria-label', (el.textContent || '').trim());
+
+        var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+        var nodes = [], node;
+        while ((node = walker.nextNode())) nodes.push(node);
+
+        nodes.forEach(function (textNode) {
+            var text = textNode.textContent;
+            if (!text) return;
+            var frag = document.createDocumentFragment();
+            text.split(/(\s+)/).forEach(function (part) {
+                if (!part) return;
+                if (/^\s+$/.test(part)) {
+                    frag.appendChild(document.createTextNode(part));
+                    return;
+                }
+                if (overflow) {
+                    var outer = document.createElement('span');
+                    outer.className = 'tw-word';
+                    outer.style.cssText = 'display:inline-block;overflow:hidden;vertical-align:baseline';
+                    var inner = document.createElement('span');
+                    inner.className = 'tw-word__inner';
+                    inner.style.cssText = 'display:inline-block;will-change:transform';
+                    inner.textContent = part;
+                    outer.appendChild(inner);
+                    frag.appendChild(outer);
+                } else {
+                    var span = document.createElement('span');
+                    span.className = 'tw-word';
+                    span.style.cssText = 'display:inline-block;will-change:transform,opacity,filter';
+                    span.textContent = part;
+                    frag.appendChild(span);
+                }
+            });
+            textNode.parentNode.replaceChild(frag, textNode);
+        });
+        el.__twSplit = key;
+        return el.querySelectorAll(overflow ? '.tw-word__inner' : '.tw-word');
+    }
+
+    function splitChars(el) {
+        if (el.__twSplit === 'chars') return el.querySelectorAll('.tw-char');
+        if (!el.__twOriginalHTML) el.__twOriginalHTML = el.innerHTML;
+        if (!el.getAttribute('aria-label')) el.setAttribute('aria-label', (el.textContent || '').trim());
+
+        var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+        var nodes = [], node;
+        while ((node = walker.nextNode())) nodes.push(node);
+
+        nodes.forEach(function (textNode) {
+            var text = textNode.textContent;
+            if (!text) return;
+            var frag = document.createDocumentFragment();
+            for (var i = 0; i < text.length; i++) {
+                var ch = text[i];
+                if (ch === ' ' || ch === '\n' || ch === '\t') {
+                    frag.appendChild(document.createTextNode(ch));
+                    continue;
+                }
+                var span = document.createElement('span');
+                span.className = 'tw-char';
+                span.style.cssText = 'display:inline-block;will-change:transform,opacity';
+                span.textContent = ch;
+                frag.appendChild(span);
+            }
+            textNode.parentNode.replaceChild(frag, textNode);
+        });
+        el.__twSplit = 'chars';
+        return el.querySelectorAll('.tw-char');
+    }
+
+    /**
+     * Lines splitter — without measuring, we can only split on <br> tags.
+     * For natural line-wrap detection we'd need the GSAP SplitText plugin
+     * (paid). This works well for headlines authored with explicit \n
+     * or <br> separators (Avero hero uses this pattern).
+     */
+    function splitLines(el) {
+        if (el.__twSplit === 'lines') return el.querySelectorAll('.tw-line__inner');
+        if (!el.__twOriginalHTML) el.__twOriginalHTML = el.innerHTML;
+        var html = el.innerHTML;
+        var lines = html.split(/<br\s*\/?>/i);
+        if (lines.length < 2) return [el]; // single line — fall back to whole element
+        if (!el.getAttribute('aria-label')) el.setAttribute('aria-label', (el.textContent || '').trim());
+        el.innerHTML = lines.map(function (line) {
+            return '<span class="tw-line" style="display:block;overflow:hidden">' +
+                   '<span class="tw-line__inner" style="display:inline-block;will-change:transform">' + line + '</span></span>';
+        }).join('');
+        el.__twSplit = 'lines';
+        return el.querySelectorAll('.tw-line__inner');
+    }
+
+    /* ── Text-reveal presets (9, registered alongside element presets) */
+
+    function withST(opts) {
+        return opts && opts.scrollTrigger ? { scrollTrigger: opts.scrollTrigger } : {};
+    }
+
+    var TEXT_PRESETS = {
+
+        // 1. Word fade-up — DEFAULT for editorial headlines.
+        'word-fade-up': function (el, opts) {
+            var words = splitWords(el, false);
+            gsap().from(words, Object.assign({
+                opacity: 0, y: 16 * (opts.lvlFactor || 1),
+                duration: 0.6, ease: 'power3.out',
+                stagger: 0.03, clearProps: 'opacity,transform',
+            }, withST(opts)));
+        },
+
+        // 2. Word fade-blur — premium / editorial.
+        'word-fade-blur': function (el, opts) {
+            var words = splitWords(el, false);
+            gsap().from(words, Object.assign({
+                opacity: 0, filter: 'blur(8px)',
+                duration: 0.7, ease: 'power2.out',
+                stagger: 0.04, clearProps: 'opacity,filter',
+            }, withST(opts)));
+        },
+
+        // 3. Word slide-up (overflow) — cinematic Stripe-style.
+        'word-slide-up-overflow': function (el, opts) {
+            var inners = splitWords(el, true);
+            gsap().from(inners, Object.assign({
+                yPercent: 110, duration: 0.7, ease: 'power4.out',
+                stagger: 0.04, clearProps: 'transform',
+            }, withST(opts)));
+        },
+
+        // 4. Char up — short headlines only (auto-fallback if too long).
+        'char-up': function (el, opts) {
+            var text = (el.textContent || '').trim();
+            if (text.length > 60) return TEXT_PRESETS['word-fade-up'](el, opts);
+            var chars = splitChars(el);
+            gsap().from(chars, Object.assign({
+                opacity: 0, y: 8 * (opts.lvlFactor || 1),
+                duration: 0.5, ease: 'power3.out',
+                stagger: 0.018, clearProps: 'opacity,transform',
+            }, withST(opts)));
+        },
+
+        // 5. Line fade-up stagger — multi-line headlines (split on <br>).
+        'line-fade-up-stagger': function (el, opts) {
+            var lines = splitLines(el);
+            gsap().from(lines, Object.assign({
+                opacity: 0, y: 24 * (opts.lvlFactor || 1),
+                duration: 0.7, ease: 'power3.out',
+                stagger: 0.1, clearProps: 'opacity,transform',
+            }, withST(opts)));
+        },
+
+        // 6. Text typing — typewriter chars instant-reveal sequentially.
+        'text-typing': function (el, opts) {
+            var chars = splitChars(el);
+            gsap().set(chars, { opacity: 0 });
+            gsap().to(chars, Object.assign({
+                opacity: 1, duration: 0.001, stagger: 0.045, ease: 'none',
+            }, withST(opts)));
+        },
+
+        // 7. Text fill sweep — gradient color sweep using background-clip.
+        'text-fill-sweep': function (el, opts) {
+            // Inline minimal CSS so the preset is self-contained.
+            var s = el.style;
+            s.background = 'linear-gradient(90deg, currentColor 0%, currentColor 50%, color-mix(in srgb, currentColor 30%, transparent) 50%, color-mix(in srgb, currentColor 30%, transparent) 100%) 100% 0 / 200% 100% no-repeat';
+            s.webkitBackgroundClip = 'text';
+            s.backgroundClip = 'text';
+            s.webkitTextFillColor = 'transparent';
+            s.color = 'transparent';
+            gsap().to(el, Object.assign({
+                backgroundPosition: '0% 0',
+                duration: 1.4, ease: 'power2.out',
+            }, withST(opts)));
+        },
+
+        // 8. Scroll-linked words fill — Apple/Stripe-Tax style.
+        //    Requires ScrollTrigger; falls back to simple fade if absent.
+        'scroll-words-fill': function (el, opts) {
+            var words = splitWords(el, false);
+            gsap().set(words, { opacity: 0.18 });
+            if (hasST()) {
+                gsap().to(words, {
+                    opacity: 1, ease: 'none', stagger: 0.1,
+                    scrollTrigger: { trigger: el, start: 'top 80%', end: 'top 30%', scrub: true },
+                });
+            } else {
+                gsap().to(words, { opacity: 1, duration: 0.6, stagger: 0.05, ease: 'power2.out', clearProps: 'opacity' });
+            }
+        },
+
+        // 9. Editorial stack — composite, orchestrates the children
+        //    (eyebrow / headline / lead / cta-row) of a scope. Headline
+        //    auto-receives word-fade-up, others fade up sequentially.
+        'editorial-stack': function (rootEl, opts) {
+            var targets = rootEl.querySelectorAll('[data-tw-anim-target]');
+            if (!targets.length) return;
+            var tl = gsap().timeline(withST(opts));
+            Array.prototype.slice.call(targets).forEach(function (t, i) {
+                var tag = (t.tagName || '').toLowerCase();
+                var isHeadline = tag === 'h1' || tag === 'h2' || tag === 'h3';
+                if (isHeadline) {
+                    var words = splitWords(t, false);
+                    tl.from(words, {
+                        opacity: 0, y: 16 * (opts.lvlFactor || 1),
+                        duration: 0.65, ease: 'power3.out', stagger: 0.03,
+                        clearProps: 'opacity,transform',
+                    }, i === 0 ? 0 : 0.15);
+                } else {
+                    tl.from(t, {
+                        opacity: 0, y: 14 * (opts.lvlFactor || 1),
+                        duration: 0.55, ease: 'power3.out',
+                        clearProps: 'opacity,transform',
+                    }, i === 0 ? 0 : '<0.08');
+                }
+            });
+        },
+    };
+
     /* ── Behavioral animations (data-tw-anim attribute) ─────── */
 
     var BEHAVIORS = {
@@ -244,22 +478,7 @@
         var widgetCfg = cfg[scope] || {};
 
         var preset = widgetCfg.entrance || 'fade-up';
-        if (lvl === 'subtle' && preset !== 'none') preset = 'fade'; // downgrade on reduced-motion / subtle
-
-        var fn = PRESETS[preset];
-        if (!fn) return;
-
-        // Targets — all `[data-tw-anim-target]` children, OR the root itself
-        // if no targets are declared (whole-widget entrance).
-        var targets = rootEl.querySelectorAll('[data-tw-anim-target]');
-        if (!targets.length) targets = [rootEl];
-
-        // Sort by data-tw-anim-order if present, otherwise DOM order.
-        var sorted = Array.prototype.slice.call(targets).sort(function (a, b) {
-            var oa = parseFloat(a.getAttribute('data-tw-anim-order') || '0');
-            var ob = parseFloat(b.getAttribute('data-tw-anim-order') || '0');
-            return oa - ob;
-        });
+        if (lvl === 'subtle' && preset !== 'none' && !TEXT_PRESETS[preset]) preset = 'fade';
 
         var stMs   = parseInt(widgetCfg.stagger || 80, 10);
         var dur    = parseFloat(widgetCfg.duration || 0.7);
@@ -273,13 +492,62 @@
             scrollTrigger: hasST() && trig !== 'none' ? { trigger: rootEl, start: trig, once: true } : null,
         };
 
-        // Kill any prior tween on these targets so re-init in editor doesn't double.
-        if (rootEl.__twAnimTween) { try { rootEl.__twAnimTween.kill(); } catch (e) {} }
-        try {
-            fn(sorted, opts);
-            // GSAP returns either a tween or sets up multiple — we don't need
-            // to track every one, just the most recent if available.
-        } catch (e) { /* swallow */ }
+        // Composite text presets like 'editorial-stack' take the rootEl
+        // and orchestrate their own targets internally.
+        if (TEXT_PRESETS[preset] && (preset === 'editorial-stack')) {
+            try { TEXT_PRESETS[preset](rootEl, opts); } catch (e) {}
+            return;
+        }
+
+        // Per-target text-reveals — any `[data-tw-anim-text]` element
+        // gets its own preset and is excluded from the main entrance.
+        var textTargets = Array.prototype.slice.call(rootEl.querySelectorAll('[data-tw-anim-text]'));
+        textTargets.forEach(function (t) {
+            var name = t.getAttribute('data-tw-anim-text');
+            if (lvl === 'subtle') name = 'word-fade-up'; // downgrade text reveals
+            var fn = TEXT_PRESETS[name];
+            if (fn) {
+                try { fn(t, opts); } catch (e) {}
+            }
+        });
+
+        // Element entrance for remaining targets (excluding text-reveal ones).
+        var allTargets = rootEl.querySelectorAll('[data-tw-anim-target]');
+        var elemTargets = Array.prototype.slice.call(allTargets)
+            .filter(function (t) { return !t.hasAttribute('data-tw-anim-text'); });
+
+        if (!elemTargets.length && textTargets.length === 0) {
+            // No targets declared — animate the whole widget root.
+            elemTargets = [rootEl];
+        }
+        if (!elemTargets.length) return;
+
+        elemTargets.sort(function (a, b) {
+            return parseFloat(a.getAttribute('data-tw-anim-order') || '0')
+                 - parseFloat(b.getAttribute('data-tw-anim-order') || '0');
+        });
+
+        var fn = PRESETS[preset];
+        if (!fn) return;
+        try { fn(elemTargets, opts); } catch (e) {}
+    }
+
+    /* Standalone text-reveal — `data-tw-anim-text` outside any scope.
+     * Useful for marking individual headlines anywhere (above-fold copy
+     * blocks, page intros) without needing to wrap them in a scoped widget. */
+    function applyStandaloneTextReveal(el) {
+        if (!gsap()) return;
+        var lvl = level();
+        if (lvl === 'off') return;
+        var name = el.getAttribute('data-tw-anim-text');
+        if (lvl === 'subtle') name = 'word-fade-up';
+        var fn = TEXT_PRESETS[name];
+        if (!fn) return;
+        var opts = {
+            lvlFactor: intensityFactor(lvl),
+            scrollTrigger: hasST() ? { trigger: el, start: 'top 85%', once: true } : null,
+        };
+        try { fn(el, opts); } catch (e) {}
     }
 
     function applyBehaviors(rootEl) {
@@ -306,14 +574,23 @@
         if (fn) fn(el);
     });
 
+    // Standalone text-reveals — `data-tw-anim-text` outside any scope.
+    ts.onReady('[data-tw-anim-text]:not([data-tw-anim-target])', applyStandaloneTextReveal);
+
     /* ── Public API for power users ─────────────────────────── */
 
     ts.animations = {
-        presets:   PRESETS,
-        behaviors: BEHAVIORS,
-        register:  function (name, fn) { PRESETS[name] = fn; },
+        presets:      PRESETS,
+        textPresets:  TEXT_PRESETS,
+        behaviors:    BEHAVIORS,
+        register:     function (name, fn) { PRESETS[name] = fn; },
+        registerText: function (name, fn) { TEXT_PRESETS[name] = fn; },
         registerBehavior: function (name, fn) { BEHAVIORS[name] = fn; },
-        apply:     applyEntrance,
-        level:     level,
+        apply:        applyEntrance,
+        applyText:    applyStandaloneTextReveal,
+        level:        level,
+        splitWords:   splitWords,
+        splitChars:   splitChars,
+        splitLines:   splitLines,
     };
 })();

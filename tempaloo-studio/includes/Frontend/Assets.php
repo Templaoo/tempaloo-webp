@@ -18,6 +18,7 @@ namespace Tempaloo\Studio\Frontend;
 defined( 'ABSPATH' ) || exit;
 
 use Tempaloo\Studio\Elementor\Template_Manager;
+use Tempaloo\Studio\Elementor\Animation;
 
 final class Assets {
 
@@ -110,10 +111,30 @@ final class Assets {
             );
         }
 
-        // Template global JS (GSAP boot, ScrollTrigger registration,
-        // shared helper namespace window.tempaloo.{template} = {…}).
+        // ── Plugin-wide JS runtime (ALWAYS loaded) ─────────────
+        // Provides delegate() + onReady() — needed even when animation
+        // is disabled because widgets bind clicks (header drawer, FAQ
+        // accordion, testimonials dots) through this layer.
+        $runtime_js = TEMPALOO_STUDIO_DIR . 'assets/js/widget-base.js';
+        if ( file_exists( $runtime_js ) ) {
+            wp_register_script(
+                'tempaloo-studio-runtime',
+                TEMPALOO_STUDIO_URL . 'assets/js/widget-base.js',
+                [],
+                TEMPALOO_STUDIO_VERSION . '-' . filemtime( $runtime_js ),
+                true
+            );
+            wp_enqueue_script( 'tempaloo-studio-runtime' );
+        }
+
+        // PERF — Strategy 1: skip GSAP / ScrollTrigger / animations.js
+        // entirely when the user set animation intensity to "off". Saves
+        // ~120 KB of JS (gzipped ~46 KB) on sites that don't want motion.
+        // The runtime above is the only JS dep that survives.
+        $animation_off = ( Animation::intensity() === 'off' );
+
         $global_js = $template['global_js'] ?? 'global.js';
-        if ( file_exists( $dir . $global_js ) ) {
+        if ( file_exists( $dir . $global_js ) && ! $animation_off ) {
             // GSAP source: CDN by default (lighter dev loop, browser-
             // cache shared with thousands of other GSAP-powered sites,
             // always-fresh version). Switch to bundled local copy by
@@ -135,21 +156,6 @@ final class Assets {
 
             wp_register_script( 'tempaloo-studio-gsap',          $gsap_src, [],                              '3.12.5', true );
             wp_register_script( 'tempaloo-studio-scrolltrigger', $st_src,   [ 'tempaloo-studio-gsap' ],      '3.12.5', true );
-
-            // Plugin-wide JS runtime — provides delegate(), onReady(),
-            // prefersReducedMotion(), isEditMode(). Every widget script
-            // depends on this so document-level click delegation is the
-            // single place we wire interactivity (see WIDGET-SPEC §14).
-            $runtime_js = TEMPALOO_STUDIO_DIR . 'assets/js/widget-base.js';
-            if ( file_exists( $runtime_js ) ) {
-                wp_register_script(
-                    'tempaloo-studio-runtime',
-                    TEMPALOO_STUDIO_URL . 'assets/js/widget-base.js',
-                    [],
-                    TEMPALOO_STUDIO_VERSION . '-' . filemtime( $runtime_js ),
-                    true
-                );
-            }
 
             // Plugin-wide animation engine — driven by data-attributes on
             // widget markup + window.tempaloo.studio.anims config. Adds

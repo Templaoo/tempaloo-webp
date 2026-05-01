@@ -1074,6 +1074,149 @@
   right: 12px;
 }
 
+/* Per-widget editor list ------------------------------------- */
+.tsa-anim-widget-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tsa-space-3);
+}
+
+.tsa-anim-row {
+  background: var(--tsa-bg-soft);
+  border: 1px solid var(--tsa-border);
+  border-radius: var(--tsa-radius-md);
+  padding: var(--tsa-space-3) var(--tsa-space-4);
+  transition: border-color 140ms ease;
+}
+.tsa-anim-row.is-saving { border-color: var(--tsa-accent); }
+
+.tsa-anim-row__head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: var(--tsa-space-3);
+}
+.tsa-anim-row__name {
+  font-family: var(--tsa-font-mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--tsa-text);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+  min-width: 110px;
+}
+.tsa-anim-row__saving {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--tsa-accent);
+  font-style: italic;
+}
+
+.tsa-anim-row__controls {
+  display: grid;
+  grid-template-columns: 2fr 1.4fr 1.5fr;
+  gap: var(--tsa-space-3);
+  align-items: end;
+}
+
+.tsa-anim-row__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tsa-anim-row__label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--tsa-text-muted);
+  font-weight: 500;
+}
+
+.tsa-anim-row__slider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 8px;
+  background: var(--tsa-bg);
+  border: 1px solid var(--tsa-border);
+  border-radius: var(--tsa-radius-sm);
+}
+.tsa-anim-row__slider input[type="range"] {
+  flex: 1;
+  accent-color: var(--tsa-accent);
+}
+.tsa-anim-row__num {
+  font-family: var(--tsa-font-mono);
+  font-size: 10.5px;
+  color: var(--tsa-text);
+  min-width: 42px;
+  text-align: right;
+}
+
+@media (max-width: 720px) {
+  .tsa-anim-row__controls { grid-template-columns: 1fr; }
+}
+
+/* CSS-only demo strips ---------------------------------------- */
+.tsa-demo-strip {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.tsa-demo-strip span {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--tsa-accent);
+}
+
+@keyframes tsa-demo-fade   { from { opacity: 0; }                     to { opacity: 1; } }
+@keyframes tsa-demo-up     { from { opacity: 0; transform: translateY(8px); }  to { opacity: 1; transform: translateY(0); } }
+@keyframes tsa-demo-scale  { from { opacity: 0; transform: scale(0.4); }       to { opacity: 1; transform: scale(1); } }
+@keyframes tsa-demo-blur   { from { opacity: 0; filter: blur(6px); }           to { opacity: 1; filter: blur(0); } }
+@keyframes tsa-demo-left   { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes tsa-demo-right  { from { opacity: 0; transform: translateX(10px); }  to { opacity: 1; transform: translateX(0); } }
+@keyframes tsa-demo-mask   { from { clip-path: inset(0 100% 0 0); }            to { clip-path: inset(0 0 0 0); } }
+@keyframes tsa-demo-word   { from { opacity: 0; transform: translateY(6px); }  to { opacity: 1; transform: translateY(0); } }
+@keyframes tsa-demo-char   { from { opacity: 0; transform: translateY(4px); }  to { opacity: 1; transform: translateY(0); } }
+
+.tsa-demo-anim--fade  span,
+.tsa-demo-anim--up    span,
+.tsa-demo-anim--scale span,
+.tsa-demo-anim--blur  span,
+.tsa-demo-anim--left  span,
+.tsa-demo-anim--right span,
+.tsa-demo-anim--mask  span,
+.tsa-demo-anim--word  span,
+.tsa-demo-anim--char  span {
+  animation-duration: 0.5s;
+  animation-fill-mode: backwards;
+  animation-timing-function: cubic-bezier(0.215, 0.61, 0.355, 1);
+}
+.tsa-demo-anim--fade  span { animation-name: tsa-demo-fade; }
+.tsa-demo-anim--up    span { animation-name: tsa-demo-up;   }
+.tsa-demo-anim--scale span { animation-name: tsa-demo-scale; }
+.tsa-demo-anim--blur  span { animation-name: tsa-demo-blur; }
+.tsa-demo-anim--left  span { animation-name: tsa-demo-left; }
+.tsa-demo-anim--right span { animation-name: tsa-demo-right; }
+.tsa-demo-anim--mask  span { animation-name: tsa-demo-mask;  animation-duration: 0.6s; }
+.tsa-demo-anim--word  span { animation-name: tsa-demo-word; }
+.tsa-demo-anim--char  span { animation-name: tsa-demo-char; animation-duration: 0.4s; }
+
+/* Stagger between dots (the most visible difference between presets). */
+.tsa-demo-strip span:nth-child(1) { animation-delay: 0s; }
+.tsa-demo-strip span:nth-child(2) { animation-delay: 0.08s; }
+.tsa-demo-strip span:nth-child(3) { animation-delay: 0.16s; }
+.tsa-demo-anim--word .tsa-demo-strip span:nth-child(2) { animation-delay: 0.04s; }
+.tsa-demo-anim--word .tsa-demo-strip span:nth-child(3) { animation-delay: 0.08s; }
+.tsa-demo-anim--char span:nth-child(2) { animation-delay: 0.018s; }
+.tsa-demo-anim--char span:nth-child(3) { animation-delay: 0.036s; }
+
+.tsa-demo-anim--none span { opacity: 0.3; animation: none; }
+
 /* ── Components page (Buttons editor) ───────────────────── */
 
 .tsa-comp-preview {

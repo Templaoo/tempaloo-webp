@@ -83,7 +83,7 @@ final class Rest {
             'methods'             => 'POST',
             'callback'            => [ $this, 'set_animation' ],
             'permission_callback' => [ $this, 'can_manage' ],
-            'args'                => [ 'intensity' => [ 'required' => true, 'type' => 'string' ] ],
+            // intensity OR presets — at least one. Validation in handler.
         ] );
     }
 
@@ -212,17 +212,53 @@ final class Rest {
     }
 
     public function get_animation(): \WP_REST_Response {
+        $active = $this->templates->active();
+        $slug   = $active ? (string) $active['slug'] : '';
+
+        $animation = new Animation( $this->templates );
+        $presets   = $slug !== '' ? $animation->presets_for( $slug ) : [];
+
+        // Group preset names by category for nicer dropdowns in the admin.
+        $entrance_text = [
+            'word-fade-up', 'word-fade-blur', 'word-slide-up-overflow',
+            'char-up', 'line-fade-up-stagger', 'text-typing', 'text-fill-sweep',
+            'scroll-words-fill', 'editorial-stack',
+        ];
+        $entrance_element = array_values( array_diff( Animation::PRESETS, $entrance_text ) );
+
         return rest_ensure_response( [
-            'intensity' => Animation::intensity(),
-            'allowed'   => Animation::ALLOWED,
+            'intensity'        => Animation::intensity(),
+            'allowed'          => Animation::ALLOWED,
+            'presets_allowed'  => Animation::PRESETS,
+            'presets_grouped'  => [
+                'element' => $entrance_element,
+                'text'    => $entrance_text,
+            ],
+            'template_slug'    => $slug,
+            'widgets'          => $active && is_array( $active['widgets'] ?? null ) ? array_values( $active['widgets'] ) : [],
+            'presets'          => (object) $presets,
         ] );
     }
 
     public function set_animation( \WP_REST_Request $req ) {
-        $intensity = (string) $req->get_param( 'intensity' );
-        if ( ! Animation::set_intensity( $intensity ) ) {
-            return new \WP_Error( 'bad_intensity', 'Allowed values: ' . implode( ', ', Animation::ALLOWED ), [ 'status' => 400 ] );
+        $intensity     = $req->get_param( 'intensity' );
+        $presets       = $req->get_param( 'presets' );
+        $template_slug = sanitize_key( (string) ( $req->get_param( 'template_slug' ) ?? '' ) );
+
+        if ( $intensity !== null && $intensity !== '' ) {
+            if ( ! Animation::set_intensity( (string) $intensity ) ) {
+                return new \WP_Error( 'bad_intensity', 'Allowed values: ' . implode( ', ', Animation::ALLOWED ), [ 'status' => 400 ] );
+            }
         }
+
+        if ( is_array( $presets ) && $template_slug !== '' ) {
+            $animation = new Animation( $this->templates );
+            foreach ( $presets as $widget => $cfg ) {
+                if ( ! is_array( $cfg ) ) continue;
+                $animation->set_preset( $template_slug, (string) $widget, $cfg );
+            }
+        }
+
         return $this->get_animation();
     }
 }

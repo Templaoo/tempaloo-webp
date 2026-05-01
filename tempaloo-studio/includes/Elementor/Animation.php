@@ -36,10 +36,21 @@ final class Animation {
     const DEFAULT_         = 'medium';
     const ALLOWED          = [ 'off', 'subtle', 'medium', 'bold' ];
 
-    /** Available preset names — must match keys in animations.js PRESETS table. */
+    /** Available preset names — must match keys in animations.js
+     *  PRESETS or TEXT_PRESETS tables. Validation in `set_preset()`
+     *  whitelists against this list to prevent users from saving
+     *  arbitrary strings via the admin REST API. */
     const PRESETS = [
+        // Element entrance presets (PRESETS table in animations.js)
         'none', 'fade', 'fade-up', 'fade-down', 'fade-left', 'fade-right',
         'scale-in', 'blur-in', 'mask-reveal',
+        // Text reveal presets (TEXT_PRESETS table) — Phase 2.1 additions
+        'word-fade-up', 'word-fade-blur', 'word-slide-up-overflow',
+        'char-up', 'line-fade-up-stagger',
+        'text-typing', 'text-fill-sweep',
+        'scroll-words-fill',
+        // Composite preset — orchestrates a whole widget root
+        'editorial-stack',
     ];
 
     private ?Template_Manager $templates;
