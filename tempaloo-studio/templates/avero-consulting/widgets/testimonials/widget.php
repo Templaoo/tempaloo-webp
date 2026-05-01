@@ -91,7 +91,7 @@ class Testimonials extends Widget_Base {
         $items    = is_array( $s['items'] ?? null ) ? $s['items'] : [];
         $autoplay = (int) ( $s['autoplay_seconds'] ?? 8 );
         ?>
-        <section class="tw-avero-testimonials" data-tw-autoplay="<?php echo (int) $autoplay; ?>">
+        <section class="tw-avero-testimonials" data-tw-autoplay="<?php echo (int) $autoplay; ?>" data-tw-anim-scope="testimonials">
             <div class="tw-avero-testimonials__container">
 
                 <?php if ( $eyebrow !== '' ) : ?>

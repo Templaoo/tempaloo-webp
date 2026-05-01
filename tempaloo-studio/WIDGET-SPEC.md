@@ -2,7 +2,7 @@
 
 > **Single source of truth.** Every landing page authored on Stitch / Claude Design / hand-coded HTML+CSS+GSAP **must** follow this spec to be cleanly converted into a Tempaloo Studio widget. Following this spec is not optional — it's the contract that makes the conversion possible (and eventually automatic via the planned converter tool).
 
-> **Status:** v0.3 — 2026-05-01. Living document. Every new constraint discovered during a real conversion is added here.
+> **Status:** v0.4 — 2026-05-01. Living document. Every new constraint discovered during a real conversion is added here.
 >
 > **Plugin identity:**
 > - Display name: `Tempaloo Studio`
@@ -45,9 +45,9 @@ When you design on Stitch / Claude:
 
 ---
 
-## 1. The 13 commandments
+## 1. The 14 commandments
 
-A widget that follows all 13 rules is **conversion-ready**. A widget that misses any one is **not safe to ship**.
+A widget that follows all 14 rules is **conversion-ready**. A widget that misses any one is **not safe to ship**.
 
 ### 1. Top-level wrapper carries the widget identity
 
@@ -417,6 +417,50 @@ Rules:
 - **Idempotent**: this template runs many times per second while the user types. No side effects, no listeners — just markup.
 
 When you ship a widget without `_content_template()`, the editor shows a "Click to start editing" placeholder until the user saves. That's not what users expect from a "premium template" plugin — every text-heavy widget MUST have it.
+
+### 14. ALL JS via `tempaloo.studio.delegate()` + `onReady()` — never element-bound listeners
+
+The plugin core ships `tempaloo.studio.delegate(selector, eventType, handler)` for clicks/changes and `tempaloo.studio.onReady(selector, fn)` for per-instance setup (animations, scroll listeners). **Every widget script.js MUST use these** — never `el.addEventListener()` directly on widget DOM elements.
+
+```js
+// ❌ WRONG — element-bound listener
+btn.addEventListener('click', handler);
+
+// ✅ CORRECT — document-level delegation
+ts.delegate('.tw-{template}-mywidget__btn', 'click', function (e, btn) {
+    e.preventDefault();
+    /* handler */
+});
+
+// ✅ CORRECT — per-instance animation init
+ts.onReady('.tw-{template}-mywidget', function (rootEl) {
+    /* setup GSAP timeline / scroll listener / etc. */
+});
+```
+
+**Why this is non-negotiable:**
+
+1. **Survives Elementor editor re-renders.** Every keystroke in a widget's control replaces the widget DOM via the underscore template (rule §13). Old element-bound listeners disappear silently. Delegation is bound to `document` ONCE — clicks always reach the handler regardless of how many times Elementor re-mounts the markup.
+
+2. **Survives Elementor's editor click-swallowers.** The editor wraps widgets in click-capturing overlays so users can select+edit them. Delegation runs in the **capture phase** (`addEventListener(..., true)`) — our handlers fire BEFORE Elementor's interceptor.
+
+3. **No timing race.** When the script loads, the widget DOM may not exist yet (Elementor renders it asynchronously). Delegation is registered before any DOM exists; clicks on widgets that mount later still work without retries or polling.
+
+4. **Idempotent by construction.** `onReady` re-fires when Elementor mounts a new instance. Each call to `delegate` adds to a single document dispatcher — no duplicate listeners no matter how many times the widget script evaluates.
+
+**The audit:** every widget that has any JS interactivity has been migrated to this pattern. Reference implementations:
+
+| Widget | Has clicks | Has init | Pattern |
+|---|---|---|---|
+| header     | yes (toggle, menu, drawer close, ESC, backdrop) | yes (sticky section, scroll) | `delegate` × 4 + `onReady` |
+| services   | no | yes (GSAP stagger) | `onReady` |
+| testimonials | yes (dots) | yes (rotator + autoplay timer) | `delegate` + `onReady` |
+| faq        | yes (question buttons) | no | `delegate` only |
+| cta        | no | yes (entrance + halo) | `onReady` |
+| hero       | no | yes (timeline) | `onReady` |
+| pricing, footer | no | no | no script.js needed |
+
+**Future widgets that don't follow this pattern will be reverted in code review** — there is no scenario where direct element binding is acceptable inside a Tempaloo Studio widget.
 
 ---
 

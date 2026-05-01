@@ -1,12 +1,23 @@
 /* ============================================================
  * Avero Consulting — Testimonials widget JS
- * Synchronous class swap (only one .is-active at a time → no
- * layout doubling) + optional GSAP fade-in on the new active.
- * Auto-cycles every N seconds (data-tw-autoplay), pauses on hover.
- * Idempotent: re-running clears prior timer + bindings.
+ *
+ * - Click delegation on dots (survives editor re-renders).
+ * - onReady() for the per-instance rotator + auto-cycle timer.
  * ============================================================ */
 (function () {
     'use strict';
+
+    var ts = (window.tempaloo && window.tempaloo.studio) || {};
+    if (!ts.delegate || !ts.onReady) return;
+
+    /* Click handler — works on the live page and inside the editor
+     * preview iframe regardless of when the widget mounts. */
+    ts.delegate('.tw-avero-testimonials__dot', 'click', function (e, dot) {
+        e.preventDefault();
+        var rootEl = dot.closest('.tw-avero-testimonials');
+        if (!rootEl || !rootEl.__twAveroTSShow) return;
+        rootEl.__twAveroTSShow(parseInt(dot.getAttribute('data-tw-target') || '0', 10));
+    });
 
     function init(rootEl) {
         if (!rootEl) return;
@@ -21,8 +32,7 @@
         var reduced = level === 'subtle' || level === 'off';
         var idx     = 0;
 
-        // Make sure exactly one is-active at boot — defensive for
-        // re-init in editor where state can be stale.
+        // Defensive: ensure exactly one is-active at boot.
         for (var i = 0; i < quotes.length; i++) {
             quotes[i].classList.toggle('is-active', i === 0);
             if (dots[i]) dots[i].classList.toggle('is-active', i === 0);
@@ -32,14 +42,10 @@
             target = ((target % quotes.length) + quotes.length) % quotes.length;
             if (target === idx) return;
 
-            // Strip any inline opacity/transform GSAP left on the
-            // outgoing quote — without this the inline `opacity: 1`
-            // wins against the CSS rule for non-active quotes and
-            // the slide remains visible behind the new one.
+            // Strip any inline opacity/transform GSAP left on the outgoing quote.
             if (window.gsap) window.gsap.set(quotes[idx], { clearProps: 'opacity,transform' });
             else { quotes[idx].style.opacity = ''; quotes[idx].style.transform = ''; }
 
-            // Synchronous swap — at no point are two quotes both active.
             quotes[idx].classList.remove('is-active');
             quotes[target].classList.add('is-active');
             dots.forEach(function (d, i) { d.classList.toggle('is-active', i === target); });
@@ -52,17 +58,11 @@
                 );
             }
             idx = target;
+            restartTimer();
         }
 
-        // Bind dots once.
-        dots.forEach(function (d) {
-            if (d.__bound) return;
-            d.__bound = true;
-            d.addEventListener('click', function () {
-                show(parseInt(d.getAttribute('data-tw-target') || '0', 10));
-                restartTimer();
-            });
-        });
+        // Expose for the delegated dot click handler above.
+        rootEl.__twAveroTSShow = show;
 
         // Auto-rotate.
         var seconds = parseInt(rootEl.getAttribute('data-tw-autoplay') || '0', 10);
@@ -83,26 +83,14 @@
         }
         startTimer();
 
-        // Entrance for the initially-active quote. clearProps so the
-        // inline `opacity:1` GSAP leaves doesn't fight the CSS rule
-        // when this quote later loses .is-active.
-        if (window.gsap && !reduced) {
-            window.gsap.from(quotes[0], {
-                opacity: 0, y: 16, duration: 0.7, ease: 'power3.out', clearProps: 'opacity,transform',
-                scrollTrigger: window.ScrollTrigger ? { trigger: rootEl, start: 'top 80%', once: true } : undefined,
-            });
-        }
+        // Entrance is now handled by the central animation runtime via
+        // `data-tw-anim-scope="testimonials"` on the root + the preset
+        // declared in template.json::animations.presets.testimonials.
     }
 
     window.tempaloo = window.tempaloo || {};
     window.tempaloo.avero = window.tempaloo.avero || {};
     window.tempaloo.avero.testimonials = init;
 
-    function boot() { document.querySelectorAll('.tw-avero-testimonials').forEach(init); }
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
-    else boot();
-
-    if (window.elementorFrontend && window.elementorFrontend.hooks) {
-        window.elementorFrontend.hooks.addAction('frontend/element_ready/testimonials.default', function ($el) { init($el[0]); });
-    }
+    ts.onReady('.tw-avero-testimonials', init);
 })();

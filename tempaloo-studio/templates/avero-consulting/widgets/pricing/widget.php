@@ -105,10 +105,10 @@ class Pricing extends Widget_Base {
         $lead    = $this->s( $s, 'lead' );
         $tiers   = is_array( $s['tiers'] ?? null ) ? $s['tiers'] : [];
         ?>
-        <section class="tw-avero-pricing">
+        <section class="tw-avero-pricing" data-tw-anim-scope="pricing">
             <div class="tw-avero-pricing__container">
 
-                <header class="tw-avero-pricing__intro">
+                <header class="tw-avero-pricing__intro" data-tw-anim-target>
                     <?php if ( $eyebrow !== '' ) : ?>
                         <span class="tw-avero-pricing__eyebrow"><?php echo esc_html( $eyebrow ); ?></span>
                     <?php endif; ?>
@@ -126,7 +126,7 @@ class Pricing extends Widget_Base {
                         $features    = preg_split( "/\r\n|\r|\n/", (string) ( $tier['tier_features'] ?? '' ) );
                         $features    = array_filter( array_map( 'trim', $features ) );
                     ?>
-                        <article class="tw-avero-pricing__tier <?php echo $is_featured ? 'tw-avero-pricing__tier--featured' : ''; ?>">
+                        <article class="tw-avero-pricing__tier <?php echo $is_featured ? 'tw-avero-pricing__tier--featured' : ''; ?>" data-tw-anim-target>
                             <?php if ( $is_featured && ! empty( $tier['tier_badge'] ) ) : ?>
                                 <span class="tw-avero-pricing__badge"><?php echo esc_html( $tier['tier_badge'] ); ?></span>
                             <?php endif; ?>

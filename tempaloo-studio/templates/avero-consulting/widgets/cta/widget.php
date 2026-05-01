@@ -43,23 +43,23 @@ class Cta extends Widget_Base {
     protected function render(): void {
         $s = $this->get_settings_for_display();
         ?>
-        <section class="tw-avero-cta">
+        <section class="tw-avero-cta" data-tw-anim-scope="cta">
             <div class="tw-avero-cta__container">
                 <span class="tw-avero-cta__halo" aria-hidden="true"></span>
 
                 <?php if ( ! empty( $s['eyebrow'] ) ) : ?>
-                    <span class="tw-avero-cta__eyebrow"><?php echo esc_html( $s['eyebrow'] ); ?></span>
+                    <span class="tw-avero-cta__eyebrow" data-tw-anim-target><?php echo esc_html( $s['eyebrow'] ); ?></span>
                 <?php endif; ?>
 
-                <h2 class="tw-avero-cta__title"><?php
+                <h2 class="tw-avero-cta__title" data-tw-anim-target><?php
                     echo wp_kses( nl2br( (string) ( $s['title'] ?? '' ), false ), [ 'em' => [], 'br' => [] ] );
                 ?></h2>
 
                 <?php if ( ! empty( $s['lead'] ) ) : ?>
-                    <p class="tw-avero-cta__lead"><?php echo wp_kses_post( $s['lead'] ); ?></p>
+                    <p class="tw-avero-cta__lead" data-tw-anim-target><?php echo wp_kses_post( $s['lead'] ); ?></p>
                 <?php endif; ?>
 
-                <div class="tw-avero-cta__row">
+                <div class="tw-avero-cta__row" data-tw-anim-target>
                     <?php if ( ! empty( $s['cta1_text'] ) ) : ?>
                         <a class="tw-avero-cta__btn tw-avero-cta__btn--primary" href="<?php echo esc_url( $s['cta1_url']['url'] ?? '#' ); ?>">
                             <?php echo esc_html( $s['cta1_text'] ); ?>

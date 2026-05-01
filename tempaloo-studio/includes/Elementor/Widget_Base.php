@@ -45,9 +45,14 @@ abstract class Widget_Base extends \Elementor\Widget_Base {
      * Auto-register the widget's script.js when it exists. Frontend\Assets
      * actually enqueues the file; we just declare the handle here so
      * Elementor knows to load it on pages that include this widget.
+     *
+     * Returns an empty array when the widget folder has no `script.js`
+     * — common after the central animation runtime took over entrance
+     * animations (hero/services/cta no longer need their own JS).
      */
     public function get_script_depends(): array {
-        return [ 'tempaloo-studio-' . $this->get_name() ];
+        $script = TEMPALOO_STUDIO_TEMPLATES . $this->get_template_slug() . '/widgets/' . $this->get_name() . '/script.js';
+        return file_exists( $script ) ? [ 'tempaloo-studio-' . $this->get_name() ] : [];
     }
 
     /**

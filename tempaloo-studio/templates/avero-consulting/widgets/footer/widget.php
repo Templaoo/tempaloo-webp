@@ -87,7 +87,7 @@ class Footer extends Widget_Base {
         $s        = $this->get_settings_for_display();
         $columns  = is_array( $s['columns'] ?? null ) ? $s['columns'] : [];
         ?>
-        <footer class="tw-avero-footer">
+        <footer class="tw-avero-footer" data-tw-anim-scope="footer">
             <div class="tw-avero-footer__container">
                 <div class="tw-avero-footer__top">
                     <div class="tw-avero-footer__brand-block">

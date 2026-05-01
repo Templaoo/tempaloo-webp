@@ -107,10 +107,10 @@ class Services extends Widget_Base {
         $lead     = $this->s( $s, 'lead' );
         $services = is_array( $s['services'] ?? null ) ? $s['services'] : [];
         ?>
-        <section class="tw-avero-services">
+        <section class="tw-avero-services" data-tw-anim-scope="services">
             <div class="tw-avero-services__container">
 
-                <header class="tw-avero-services__intro">
+                <header class="tw-avero-services__intro" data-tw-anim-target>
                     <?php if ( $eyebrow !== '' ) : ?>
                         <span class="tw-avero-services__eyebrow"><?php echo esc_html( $eyebrow ); ?></span>
                     <?php endif; ?>
@@ -127,7 +127,7 @@ class Services extends Widget_Base {
 
                 <ul class="tw-avero-services__grid" role="list">
                     <?php foreach ( $services as $i => $svc ) : ?>
-                        <li class="tw-avero-services__card" data-tw-i="<?php echo (int) $i; ?>">
+                        <li class="tw-avero-services__card" data-tw-i="<?php echo (int) $i; ?>" data-tw-anim-target>
                             <span class="tw-avero-services__num">0<?php echo (int) ( $i + 1 ); ?></span>
 
                             <span class="tw-avero-services__icon" aria-hidden="true">

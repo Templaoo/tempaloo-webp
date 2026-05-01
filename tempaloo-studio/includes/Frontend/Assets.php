@@ -151,6 +151,25 @@ final class Assets {
                 );
             }
 
+            // Plugin-wide animation engine — driven by data-attributes on
+            // widget markup + window.tempaloo.studio.anims config. Adds
+            // entrance presets (fade-up / scale-in / blur-in / mask /
+            // …) and behavioral animations (counter, magnetic, marquee).
+            $anim_js = TEMPALOO_STUDIO_DIR . 'assets/js/animations.js';
+            if ( file_exists( $anim_js ) ) {
+                wp_register_script(
+                    'tempaloo-studio-animations',
+                    TEMPALOO_STUDIO_URL . 'assets/js/animations.js',
+                    [ 'tempaloo-studio-runtime', 'tempaloo-studio-gsap', 'tempaloo-studio-scrolltrigger' ],
+                    TEMPALOO_STUDIO_VERSION . '-' . filemtime( $anim_js ),
+                    true
+                );
+                // Force-enqueue so animations work on every page that
+                // hosts a Tempaloo widget — no need for each widget to
+                // re-declare the dep.
+                wp_enqueue_script( 'tempaloo-studio-animations' );
+            }
+
             wp_register_script(
                 'tempaloo-studio-' . $slug . '-global',
                 $url . $global_js,

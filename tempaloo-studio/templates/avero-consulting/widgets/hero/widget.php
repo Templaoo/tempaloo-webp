@@ -179,7 +179,7 @@ class Hero extends Widget_Base {
         ?>
         <section
             class="tw-avero-hero"
-            data-tw-animate="<?php echo $animate ? '1' : '0'; ?>"
+            <?php echo $animate ? 'data-tw-anim-scope="hero"' : ''; ?>
         >
             <div class="tw-avero-hero__container">
 
@@ -187,13 +187,13 @@ class Hero extends Widget_Base {
                 <div class="tw-avero-hero__content">
 
                     <?php if ( $rating !== '' ) : ?>
-                        <span class="tw-avero-hero__rating">
+                        <span class="tw-avero-hero__rating" data-tw-anim-target>
                             <span class="tw-avero-hero__rating-stars" aria-hidden="true">★★★★★</span>
                             <?php echo esc_html( $rating ); ?>
                         </span>
                     <?php endif; ?>
 
-                    <h1 class="tw-avero-hero__title"><?php
+                    <h1 class="tw-avero-hero__title" data-tw-anim-target><?php
                         // Allow <em> for italic accent + plain line breaks.
                         echo wp_kses(
                             nl2br( $title, false ),
@@ -202,10 +202,10 @@ class Hero extends Widget_Base {
                     ?></h1>
 
                     <?php if ( $lead !== '' ) : ?>
-                        <p class="tw-avero-hero__lead"><?php echo wp_kses_post( $lead ); ?></p>
+                        <p class="tw-avero-hero__lead" data-tw-anim-target><?php echo wp_kses_post( $lead ); ?></p>
                     <?php endif; ?>
 
-                    <div class="tw-avero-hero__cta-row">
+                    <div class="tw-avero-hero__cta-row" data-tw-anim-target>
                         <?php if ( $cta1_text !== '' ) : ?>
                             <a class="tw-avero-hero__cta tw-avero-hero__cta--primary"
                                href="<?php echo esc_url( $cta1_url ); ?>"<?php echo $cta1_target . $cta1_rel; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
@@ -225,7 +225,7 @@ class Hero extends Widget_Base {
                     </div>
 
                     <?php if ( $trust !== '' ) : ?>
-                        <div class="tw-avero-hero__trust">
+                        <div class="tw-avero-hero__trust" data-tw-anim-target>
                             <div class="tw-avero-hero__trust-avatars" aria-hidden="true">
                                 <span class="tw-avero-hero__trust-avatar" style="background:linear-gradient(135deg,#3fb2a2,#214d47)"></span>
                                 <span class="tw-avero-hero__trust-avatar" style="background:linear-gradient(135deg,#f5c453,#c08a2b)"></span>
@@ -239,7 +239,7 @@ class Hero extends Widget_Base {
                 </div>
 
                 <!-- Media column -->
-                <div class="tw-avero-hero__media">
+                <div class="tw-avero-hero__media" data-tw-anim-target>
                     <?php if ( $image_url !== '' ) : ?>
                         <img class="tw-avero-hero__image"
                              src="<?php echo esc_url( $image_url ); ?>"

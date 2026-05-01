@@ -72,10 +72,10 @@ class Faq extends Widget_Base {
         $items = is_array( $s['items'] ?? null ) ? $s['items'] : [];
         $expand_first = ! empty( $s['expand_first'] ) && $s['expand_first'] === 'yes';
         ?>
-        <section class="tw-avero-faq">
+        <section class="tw-avero-faq" data-tw-anim-scope="faq">
             <div class="tw-avero-faq__container">
 
-                <header class="tw-avero-faq__intro">
+                <header class="tw-avero-faq__intro" data-tw-anim-target>
                     <?php if ( ! empty( $s['eyebrow'] ) ) : ?>
                         <span class="tw-avero-faq__eyebrow"><?php echo esc_html( $s['eyebrow'] ); ?></span>
                     <?php endif; ?>
@@ -87,7 +87,7 @@ class Faq extends Widget_Base {
                     <?php endif; ?>
                 </header>
 
-                <ul class="tw-avero-faq__list" role="list">
+                <ul class="tw-avero-faq__list" role="list" data-tw-anim-target>
                     <?php foreach ( $items as $i => $it ) :
                         $open = $expand_first && $i === 0;
                     ?>

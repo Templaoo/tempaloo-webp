@@ -40,7 +40,7 @@ final class Plugin {
         // requests where the editor handles its own asset pipeline.
         ( new Theme_Tokens( $templates ) )->register();
         ( new Breakpoints( $templates ) )->register();
-        ( new Animation() )->register();
+        ( new Animation( $templates ) )->register();
         ( new Assets( $templates ) )->register();
 
         // Elementor: register the active template's widgets. Hooks

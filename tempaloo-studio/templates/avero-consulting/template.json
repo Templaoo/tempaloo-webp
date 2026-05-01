@@ -135,6 +135,18 @@
     "footer"
   ],
 
+  "animations": {
+    "presets": {
+      "hero":         { "entrance": "fade-up", "stagger": 80,  "trigger": "top 85%" },
+      "services":     { "entrance": "fade-up", "stagger": 120, "trigger": "top 75%" },
+      "pricing":      { "entrance": "scale-in","stagger": 100, "trigger": "top 80%" },
+      "testimonials": { "entrance": "fade",    "stagger": 0,   "trigger": "top 80%" },
+      "faq":          { "entrance": "fade-up", "stagger": 60,  "trigger": "top 80%" },
+      "cta":          { "entrance": "blur-in", "stagger": 100, "trigger": "top 80%" },
+      "footer":       { "entrance": "fade",    "stagger": 0,   "trigger": "top 90%" }
+    }
+  },
+
   "responsive_overrides": [
     {
       "alias":     "tablet",
