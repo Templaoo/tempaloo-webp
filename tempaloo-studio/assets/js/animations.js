@@ -31,6 +31,49 @@
     var ts = (window.tempaloo && window.tempaloo.studio) || {};
     if (!ts.onReady || !ts.delegate) return;
 
+    /* ── Register ScrollTrigger with GSAP — CRITICAL ─────────
+     *
+     * Without this, every `gsap.from(target, { scrollTrigger: {…} })`
+     * call has its scrollTrigger option silently ignored — the tween
+     * fires immediately on init instead of waiting for the element
+     * to enter the viewport. GSAP requires `registerPlugin` to expose
+     * ScrollTrigger to its tween parser.
+     *
+     * We do it here (animations.js) rather than relying on global.js
+     * because the load order between the two scripts isn't guaranteed
+     * in every setup. Idempotent via `__twSTRegistered` flag.
+     */
+    if (window.gsap && window.ScrollTrigger && !window.gsap.__twSTRegistered) {
+        if (typeof window.gsap.registerPlugin === 'function') {
+            try {
+                window.gsap.registerPlugin(window.ScrollTrigger);
+                window.gsap.__twSTRegistered = true;
+            } catch (e) { /* swallow — still try to animate */ }
+        }
+    }
+
+    /* ── Refresh ScrollTrigger once layout is final ─────────
+     *
+     * Fonts loading after first paint shifts widget positions, which
+     * means start/end offsets ScrollTrigger computed on init are off.
+     * Refresh on window.load (everything done) and document.fonts.ready
+     * (web fonts swapped in) so triggers fire at the right scroll point.
+     */
+    function refreshScrollTrigger() {
+        if (window.ScrollTrigger && typeof window.ScrollTrigger.refresh === 'function') {
+            try { window.ScrollTrigger.refresh(); } catch (e) {}
+        }
+    }
+    if (document.readyState === 'complete') {
+        // Page already loaded by the time we got here — refresh next tick.
+        setTimeout(refreshScrollTrigger, 50);
+    } else {
+        window.addEventListener('load', function () { setTimeout(refreshScrollTrigger, 50); });
+    }
+    if (document.fonts && document.fonts.ready && typeof document.fonts.ready.then === 'function') {
+        document.fonts.ready.then(refreshScrollTrigger);
+    }
+
     /* ── Helpers ─────────────────────────────────────────────── */
 
     function gsap()   { return window.gsap || null; }
