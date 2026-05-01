@@ -372,27 +372,44 @@
         },
 
         // 6. Text typing — typewriter chars instant-reveal sequentially.
+        //    Stagger cap: keep total animation duration under 1.5s even
+        //    on long sentences (200-char text would otherwise type for
+        //    9 seconds — too slow for a hero headline).
         'text-typing': function (el, opts) {
             var chars = splitChars(el);
+            var stagger = Math.min(0.045, chars.length > 0 ? 1.5 / chars.length : 0.045);
             gsap().set(chars, { opacity: 0 });
             gsap().to(chars, Object.assign({
-                opacity: 1, duration: 0.001, stagger: 0.045, ease: 'none',
+                opacity: 1, duration: 0.001, stagger: stagger, ease: 'none',
             }, withST(opts)));
         },
 
-        // 7. Text fill sweep — gradient color sweep using background-clip.
+        // 7. Text fill sweep — wave from dim to full opacity, char-by-char.
+        //    Falls back to word-stagger if the text is too long to char-split
+        //    cleanly. Reliable across all browsers (no background-clip:text
+        //    or color-mix() — those have spotty Safari support).
         'text-fill-sweep': function (el, opts) {
-            // Inline minimal CSS so the preset is self-contained.
-            var s = el.style;
-            s.background = 'linear-gradient(90deg, currentColor 0%, currentColor 50%, color-mix(in srgb, currentColor 30%, transparent) 50%, color-mix(in srgb, currentColor 30%, transparent) 100%) 100% 0 / 200% 100% no-repeat';
-            s.webkitBackgroundClip = 'text';
-            s.backgroundClip = 'text';
-            s.webkitTextFillColor = 'transparent';
-            s.color = 'transparent';
-            gsap().to(el, Object.assign({
-                backgroundPosition: '0% 0',
-                duration: 1.4, ease: 'power2.out',
-            }, withST(opts)));
+            var text = (el.textContent || '').trim();
+            // Auto-fallback to word-level for long text (paragraphs).
+            if (text.length > 80) {
+                var words = splitWords(el, false);
+                gsap().fromTo(words,
+                    { opacity: 0.22 },
+                    Object.assign({
+                        opacity: 1, duration: 0.4, stagger: 0.05,
+                        ease: 'power2.out', clearProps: 'opacity',
+                    }, withST(opts))
+                );
+                return;
+            }
+            var chars = splitChars(el);
+            gsap().fromTo(chars,
+                { opacity: 0.22 },
+                Object.assign({
+                    opacity: 1, duration: 0.3, stagger: 0.022,
+                    ease: 'power2.out', clearProps: 'opacity',
+                }, withST(opts))
+            );
         },
 
         // 8. Scroll-linked words fill — Apple/Stripe-Tax style.
@@ -413,9 +430,21 @@
         // 9. Editorial stack — composite, orchestrates the children
         //    (eyebrow / headline / lead / cta-row) of a scope. Headline
         //    auto-receives word-fade-up, others fade up sequentially.
+        //    Falls back to fade-up of the root if no targets declared,
+        //    so picking this preset on a non-editorial widget still
+        //    plays SOMETHING rather than silently no-op'ing.
         'editorial-stack': function (rootEl, opts) {
             var targets = rootEl.querySelectorAll('[data-tw-anim-target]');
-            if (!targets.length) return;
+            if (!targets.length) {
+                // Graceful fallback — the widget didn't mark its children,
+                // so just fade the whole widget root in.
+                gsap().from(rootEl, Object.assign({
+                    opacity: 0, y: 16 * (opts.lvlFactor || 1),
+                    duration: 0.7, ease: 'power3.out',
+                    clearProps: 'opacity,transform',
+                }, withST(opts)));
+                return;
+            }
             var tl = gsap().timeline(withST(opts));
             Array.prototype.slice.call(targets).forEach(function (t, i) {
                 var tag = (t.tagName || '').toLowerCase();
