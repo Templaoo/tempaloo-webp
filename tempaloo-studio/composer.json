@@ -1,0 +1,18 @@
+{
+    "name": "tempaloo/studio",
+    "description": "Tempaloo Studio — premium Elementor template kits with bespoke widgets and a React admin.",
+    "type": "wordpress-plugin",
+    "license": "proprietary",
+    "require": {
+        "php": ">=7.4"
+    },
+    "autoload": {
+        "psr-4": {
+            "Tempaloo\\Studio\\": "includes/"
+        }
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true
+    }
+}

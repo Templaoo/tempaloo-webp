@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tempaloo Studio — Admin (dev)</title>
+    <style>
+      html, body { margin: 0; padding: 0; background: #0c100f; min-height: 100vh; }
+      body { font-family: 'Inter', system-ui, sans-serif; }
+    </style>
+  </head>
+  <body>
+    <!--
+      Dev-only: stub WordPress's localized boot data so the admin app
+      can render outside wp-admin. The real `TempalooStudioBoot` is
+      injected by Menu.php → wp_localize_script() in production.
+    -->
+    <script>
+      window.TempalooStudioBoot = {
+        rest:  { root: 'http://web.local/wp-json/', nonce: 'dev-nonce' },
+        admin: { url:  'http://web.local/wp-admin/' },
+        dev:   true
+      };
+    </script>
+    <div id="tempaloo-studio-admin-root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,162 @@
+/* ============================================================
+ * Tempaloo Studio — widget-scoped reset (loaded for every template)
+ *
+ * Wrapped in `@layer tempaloo-reset` so it has LOWER cascade priority
+ * than any un-layered rule (widget CSS files are intentionally not
+ * layered, and so are most WP themes). The cascade order is:
+ *
+ *   1. widget global.css   ← highest, our designed look wins
+ *   2. theme stylesheet    ← still wins against the reset
+ *   3. tempaloo-reset      ← lowest, just normalizes browser defaults
+ *
+ * This means our reset normalizes things browsers / themes leave
+ * unset (margin on h1, list-style on ul, …) but DOES NOT override
+ * any class-based widget rule. Conversely, the body baseline + sticky
+ * helpers stay un-layered because they SHOULD win.
+ *
+ * Browser support: @layer is in all modern browsers since Apr 2022.
+ * ============================================================ */
+
+@layer tempaloo-reset {
+
+    [class^="tw-"], [class*=" tw-"],
+    [class^="tw-"] *, [class*=" tw-"] * {
+        box-sizing: border-box;
+    }
+
+    [class^="tw-"], [class*=" tw-"] {
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+    }
+
+    /* Typography reset — beat browser/theme defaults inside any tw-* widget. */
+    [class^="tw-"] h1, [class*=" tw-"] h1,
+    [class^="tw-"] h2, [class*=" tw-"] h2,
+    [class^="tw-"] h3, [class*=" tw-"] h3,
+    [class^="tw-"] h4, [class*=" tw-"] h4,
+    [class^="tw-"] h5, [class*=" tw-"] h5,
+    [class^="tw-"] h6, [class*=" tw-"] h6,
+    [class^="tw-"] p,  [class*=" tw-"] p,
+    [class^="tw-"] blockquote, [class*=" tw-"] blockquote,
+    [class^="tw-"] figure,     [class*=" tw-"] figure {
+        margin: 0;
+        padding: 0;
+        color: inherit;
+        background: transparent;
+    }
+
+    [class^="tw-"] ul, [class*=" tw-"] ul,
+    [class^="tw-"] ol, [class*=" tw-"] ol {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+
+    [class^="tw-"] li, [class*=" tw-"] li {
+        margin: 0;
+        padding: 0;
+    }
+
+    [class^="tw-"] a, [class*=" tw-"] a {
+        color: inherit;
+        text-decoration: none;
+        background: transparent;
+    }
+
+    [class^="tw-"] button, [class*=" tw-"] button,
+    [class^="tw-"] input, [class*=" tw-"] input,
+    [class^="tw-"] select, [class*=" tw-"] select,
+    [class^="tw-"] textarea, [class*=" tw-"] textarea {
+        font: inherit;
+        color: inherit;
+        background: transparent;
+        border: none;
+        margin: 0;
+        padding: 0;
+    }
+
+    [class^="tw-"] img, [class*=" tw-"] img,
+    [class^="tw-"] picture, [class*=" tw-"] picture {
+        max-width: 100%;
+    }
+
+    /* SVG: cap max-width but DON'T force display. Inline icons inside
+       text need to stay inline — forcing display:block breaks every
+       <button><span/><svg/></button> layout in our widgets. */
+    [class^="tw-"] svg, [class*=" tw-"] svg {
+        max-width: 100%;
+    }
+
+}
+
+/* ============================================================
+ * Un-layered helpers — always win against the reset above and
+ * against typical theme rules at equal specificity.
+ * ============================================================ */
+
+/* Interactive-state reset — must be UN-layered to beat theme rules
+ * like Hello Elementor's `button:hover { background: #cc3366 }`. We
+ * use `:where()` so the [class^="tw-"] match contributes 0 to
+ * specificity → effective specificity is exactly `button:hover`
+ * (0,1,1), same as the theme. We win by source order because our
+ * CSS loads AFTER the theme's via the Elementor enqueue chain.
+ *
+ * IMPORTANT — we deliberately do NOT touch `color` here. Forcing
+ * `color: inherit` on a:hover / button:hover at 0,1,1 would beat
+ * widget-class rules like `.tw-avero-header__cta { color: cream }`
+ * (0,1,0), turning button text invisible against the button bg on
+ * hover. Widgets that intentionally invert text/bg are responsible
+ * for restating `color` in their own :hover rule (defensive — see
+ * the audit comment in global.css).
+ *
+ * Widget-level rules like `.tw-avero-faq__q:hover` (0,2,0) easily
+ * beat this reset's other declarations for designed-look hovers.
+ */
+:where([class^="tw-"], [class*=" tw-"]) button:hover,
+:where([class^="tw-"], [class*=" tw-"]) button:focus,
+:where([class^="tw-"], [class*=" tw-"]) button:active,
+:where([class^="tw-"], [class*=" tw-"]) [type="button"]:hover,
+:where([class^="tw-"], [class*=" tw-"]) [type="button"]:focus,
+:where([class^="tw-"], [class*=" tw-"]) [type="submit"]:hover,
+:where([class^="tw-"], [class*=" tw-"]) [type="submit"]:focus {
+    background: transparent;
+    outline: none;
+    box-shadow: none;
+}
+
+/* Anchors only need outline + text-decoration neutralization.
+ * Background and color stay alone — themes rarely touch a:hover bg,
+ * and resetting color would break designed buttons (see above). */
+:where([class^="tw-"], [class*=" tw-"]) a:hover,
+:where([class^="tw-"], [class*=" tw-"]) a:focus {
+    outline: none;
+    text-decoration: none;
+}
+
+/* Visible focus ring for accessibility — only when reaching via keyboard
+ * (avoid the noisy ring on mouse-click focus). Lives outside @layer for
+ * the same reason as above. */
+:where([class^="tw-"], [class*=" tw-"]) :focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+}
+
+body.tempaloo-studio-active {
+    margin: 0;
+}
+
+/* Sticky-section helper — applied via JS to the .elementor-section
+   that contains a sticky widget (e.g. the Avero header). */
+.elementor-section.tempaloo-studio-sticky-section {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: transparent;
+}
+.elementor-section.tempaloo-studio-sticky-section,
+.elementor-section.tempaloo-studio-sticky-section > .elementor-container,
+.elementor-section.tempaloo-studio-sticky-section .elementor-column,
+.elementor-section.tempaloo-studio-sticky-section .elementor-widget-wrap {
+    overflow: visible;
+}

@@ -1,0 +1,185 @@
+{
+  "slug": "avero-consulting",
+  "name": "Avero Consulting",
+  "version": "1.0.0",
+  "description": "Premium consulting agency template — calm, editorial, GSAP-powered. Light + dark mode out of the box.",
+  "category": "consulting",
+  "thumbnail": "thumbnail.jpg",
+  "spec_version": "0.2",
+
+  "fonts": {
+    "heading": "'Hedvig Letters Serif', serif",
+    "body":    "'Inter', sans-serif",
+    "google_fonts_url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Hedvig+Letters+Serif:opsz,wght@12..24,400..600&display=swap"
+  },
+
+  "tokens": {
+    "light": {
+      "--tw-avero-bg":               "#fafaf7",
+      "--tw-avero-bg-soft":          "#f1efe8",
+      "--tw-avero-bg-strong":        "#ffffff",
+      "--tw-avero-text":             "#1a1f1d",
+      "--tw-avero-text-soft":        "#4a534f",
+      "--tw-avero-text-muted":       "#8a928e",
+      "--tw-avero-accent":           "#214d47",
+      "--tw-avero-accent-hover":     "#2a615a",
+      "--tw-avero-border":           "rgba(26, 31, 29, 0.08)",
+      "--tw-avero-border-strong":    "rgba(26, 31, 29, 0.16)",
+      "--tw-avero-cta-primary":      "#1a1f1d",
+      "--tw-avero-cta-primary-hover": "#2a3331",
+      "--tw-avero-cta-primary-text": "#fafaf7",
+      "--tw-avero-cta-secondary":    "transparent",
+      "--tw-avero-cta-secondary-hover": "rgba(26, 31, 29, 0.04)",
+      "--tw-avero-cta-secondary-text": "#1a1f1d",
+
+      "--tw-avero-btn-primary-bg":         "#1a1f1d",
+      "--tw-avero-btn-primary-bg-hover":   "#2a3331",
+      "--tw-avero-btn-primary-text":       "#fafaf7",
+      "--tw-avero-btn-primary-text-hover": "#fafaf7",
+      "--tw-avero-btn-primary-border":     "transparent",
+      "--tw-avero-btn-primary-border-hover":"transparent",
+      "--tw-avero-btn-primary-radius":     "999px",
+      "--tw-avero-btn-primary-height":     "52px",
+      "--tw-avero-btn-primary-padding-x":  "28px",
+
+      "--tw-avero-btn-secondary-bg":         "transparent",
+      "--tw-avero-btn-secondary-bg-hover":   "rgba(26, 31, 29, 0.04)",
+      "--tw-avero-btn-secondary-text":       "#1a1f1d",
+      "--tw-avero-btn-secondary-text-hover": "#1a1f1d",
+      "--tw-avero-btn-secondary-border":     "rgba(26, 31, 29, 0.16)",
+      "--tw-avero-btn-secondary-border-hover":"#1a1f1d",
+      "--tw-avero-btn-secondary-radius":     "999px",
+      "--tw-avero-btn-secondary-height":     "52px",
+      "--tw-avero-btn-secondary-padding-x":  "28px",
+
+      "--tw-avero-btn-ghost-bg":         "transparent",
+      "--tw-avero-btn-ghost-bg-hover":   "transparent",
+      "--tw-avero-btn-ghost-text":       "#4a534f",
+      "--tw-avero-btn-ghost-text-hover": "#1a1f1d",
+      "--tw-avero-btn-ghost-border":     "transparent",
+      "--tw-avero-btn-ghost-border-hover":"transparent",
+      "--tw-avero-btn-ghost-radius":     "0",
+      "--tw-avero-btn-ghost-height":     "auto",
+      "--tw-avero-btn-ghost-padding-x":  "0",
+
+      "--tw-avero-radius-sm":        "6px",
+      "--tw-avero-radius-md":        "12px",
+      "--tw-avero-radius-lg":        "24px",
+      "--tw-avero-radius-pill":      "999px",
+      "--tw-avero-shadow-sm":        "0 1px 2px rgba(26, 31, 29, 0.04)",
+      "--tw-avero-shadow-md":        "0 8px 24px -8px rgba(26, 31, 29, 0.12)",
+      "--tw-avero-shadow-lg":        "0 24px 48px -16px rgba(26, 31, 29, 0.18)",
+      "--tw-avero-font-heading":     "'Hedvig Letters Serif', serif",
+      "--tw-avero-font-body":        "'Inter', sans-serif"
+    },
+    "dark": {
+      "--tw-avero-bg":               "#0c100f",
+      "--tw-avero-bg-soft":          "#161b1a",
+      "--tw-avero-bg-strong":        "#1d2322",
+      "--tw-avero-text":             "#f5f4ef",
+      "--tw-avero-text-soft":        "#b8b4a8",
+      "--tw-avero-text-muted":       "#7a766c",
+      "--tw-avero-accent":           "#3fb2a2",
+      "--tw-avero-accent-hover":     "#4dcabd",
+      "--tw-avero-border":           "rgba(245, 244, 239, 0.08)",
+      "--tw-avero-border-strong":    "rgba(245, 244, 239, 0.16)",
+      "--tw-avero-cta-primary":      "#f5f4ef",
+      "--tw-avero-cta-primary-hover": "#ffffff",
+      "--tw-avero-cta-primary-text": "#0c100f",
+      "--tw-avero-cta-secondary":    "transparent",
+      "--tw-avero-cta-secondary-hover": "rgba(245, 244, 239, 0.06)",
+      "--tw-avero-cta-secondary-text": "#f5f4ef",
+
+      "--tw-avero-btn-primary-bg":         "#f5f4ef",
+      "--tw-avero-btn-primary-bg-hover":   "#ffffff",
+      "--tw-avero-btn-primary-text":       "#0c100f",
+      "--tw-avero-btn-primary-text-hover": "#0c100f",
+      "--tw-avero-btn-primary-border":     "transparent",
+      "--tw-avero-btn-primary-border-hover":"transparent",
+
+      "--tw-avero-btn-secondary-bg":         "transparent",
+      "--tw-avero-btn-secondary-bg-hover":   "rgba(245, 244, 239, 0.06)",
+      "--tw-avero-btn-secondary-text":       "#f5f4ef",
+      "--tw-avero-btn-secondary-text-hover": "#f5f4ef",
+      "--tw-avero-btn-secondary-border":     "rgba(245, 244, 239, 0.16)",
+      "--tw-avero-btn-secondary-border-hover":"#f5f4ef",
+
+      "--tw-avero-btn-ghost-bg":         "transparent",
+      "--tw-avero-btn-ghost-bg-hover":   "transparent",
+      "--tw-avero-btn-ghost-text":       "#b8b4a8",
+      "--tw-avero-btn-ghost-text-hover": "#f5f4ef",
+      "--tw-avero-btn-ghost-border":     "transparent",
+      "--tw-avero-btn-ghost-border-hover":"transparent",
+      "--tw-avero-shadow-sm":        "0 1px 2px rgba(0, 0, 0, 0.3)",
+      "--tw-avero-shadow-md":        "0 8px 24px -8px rgba(0, 0, 0, 0.5)",
+      "--tw-avero-shadow-lg":        "0 24px 48px -16px rgba(0, 0, 0, 0.6)"
+    },
+    "dark_selector": "[data-theme=\"dark\"]"
+  },
+
+  "global_css": "global.css",
+  "global_js":  "global.js",
+
+  "required_plugins": [
+    { "slug": "elementor", "min_version": "3.20.0" }
+  ],
+
+  "widgets": [
+    "header",
+    "hero",
+    "services",
+    "pricing",
+    "testimonials",
+    "faq",
+    "cta",
+    "footer"
+  ],
+
+  "responsive_overrides": [
+    {
+      "alias":     "tablet",
+      "direction": "max",
+      "default":   1024,
+      "rules":     ".tw-avero-hero__container{grid-template-columns:1fr;gap:48px;}"
+    },
+    {
+      "alias":     "mobile",
+      "direction": "max",
+      "default":   767,
+      "rules":     ".tw-avero-hero{padding:clamp(48px,12vw,96px) clamp(16px,5vw,32px);} .tw-avero-hero__container{gap:32px;} .tw-avero-hero__media{aspect-ratio:4/3;}"
+    }
+  ],
+
+  "pages": [
+    {
+      "title":          "Avero Home",
+      "slug":           "avero-home",
+      "page_template":  "elementor_canvas",
+      "elementor_data": "pages/home.json"
+    }
+  ],
+
+  "menus": [
+    {
+      "slug":     "avero-primary",
+      "name":     "Avero Primary",
+      "location": "avero_primary",
+      "items": [
+        { "title": "Services", "url": "#services" },
+        { "title": "Work",     "url": "#work" },
+        { "title": "Process",  "url": "#process" },
+        { "title": "Pricing",  "url": "#pricing" }
+      ]
+    },
+    {
+      "slug":     "avero-footer",
+      "name":     "Avero Footer",
+      "location": "avero_footer",
+      "items": [
+        { "title": "Privacy", "url": "#privacy" },
+        { "title": "Terms",   "url": "#terms" },
+        { "title": "Imprint", "url": "#imprint" }
+      ]
+    }
+  ]
+}

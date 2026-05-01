@@ -1,0 +1,1358 @@
+/* ============================================================
+ * Avero Consulting — global stylesheet
+ * Tempaloo Studio v0.1.0
+ *
+ * @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Hedvig+Letters+Serif:opsz,wght@12..24,400..600&display=swap');
+ *
+ * Tokens are NOT declared here. They are emitted at runtime by
+ * Theme_Tokens.php into a <style id="tempaloo-studio-tokens"> block
+ * in the head, so the React admin's "Settings" tab can override them
+ * live without a rebuild.
+ *
+ * BREAKPOINTS — aligned with Elementor's defaults so widgets respond
+ * naturally inside Elementor sites:
+ *   max-width: 1024px → Elementor "tablet"  (default tablet_breakpoint)
+ *   max-width:  767px → Elementor "mobile"  (default mobile_breakpoint)
+ *   max-width:  480px → small-phone tightening (no Elementor equiv.)
+ * If a site customizes its Elementor breakpoints (Site Settings →
+ * Layout → Breakpoints), the Breakpoints sync class emits override
+ * CSS at runtime — see includes/Elementor/Breakpoints.php.
+ *
+ * This file owns:
+ *   1. Minimal scoped reset (only inside .tw-avero-* containers)
+ *   2. Per-widget rules
+ * ============================================================ */
+
+/* ── Scoped base ───────────────────────────────────────────── */
+
+[class^="tw-avero-"],
+[class*=" tw-avero-"] {
+    box-sizing: border-box;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+[class^="tw-avero-"] *,
+[class*=" tw-avero-"] * {
+    box-sizing: inherit;
+}
+
+/* ============================================================
+ * Widget: tw-avero-hero
+ * ============================================================ */
+
+.tw-avero-hero {
+    background: var(--tw-avero-bg);
+    color: var(--tw-avero-text);
+    font-family: var(--tw-avero-font-body);
+    padding: clamp(64px, 10vw, 140px) clamp(20px, 5vw, 56px);
+    overflow: hidden;
+    position: relative;
+}
+
+.tw-avero-hero__container {
+    max-width: 1240px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: minmax(0, 6fr) minmax(0, 5fr);
+    gap: clamp(32px, 5vw, 80px);
+    align-items: center;
+}
+
+/* Tablet (Elementor default tablet_breakpoint = 1024) — collapse to one column. */
+@media (max-width: 1024px) {
+    .tw-avero-hero__container {
+        grid-template-columns: 1fr;
+        gap: 48px;
+    }
+}
+
+/* Mobile (Elementor default mobile_breakpoint = 767) — tighten padding + media aspect. */
+@media (max-width: 767px) {
+    .tw-avero-hero {
+        padding: clamp(48px, 12vw, 96px) clamp(16px, 5vw, 32px);
+    }
+    .tw-avero-hero__container {
+        gap: 32px;
+    }
+    .tw-avero-hero__media {
+        aspect-ratio: 4 / 3;
+    }
+}
+
+/* Small phones — reduce CTA height + trust strip layout. */
+@media (max-width: 480px) {
+    .tw-avero-hero__cta {
+        height: 48px;
+        padding: 0 22px;
+        font-size: 14px;
+    }
+    .tw-avero-hero__cta-row {
+        gap: 8px;
+    }
+    .tw-avero-hero__trust {
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+    .tw-avero-hero__floating-card {
+        bottom: 16px;
+        left: 16px;
+        right: 16px;
+        padding: 12px 14px;
+    }
+}
+
+/* Content column ─────────────────────────────────────────── */
+
+.tw-avero-hero__content {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.tw-avero-hero__rating {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    align-self: flex-start;
+    padding: 8px 14px;
+    border-radius: var(--tw-avero-radius-pill);
+    background: var(--tw-avero-bg-soft);
+    border: 1px solid var(--tw-avero-border);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--tw-avero-text-soft);
+    letter-spacing: -0.01em;
+}
+
+.tw-avero-hero__rating-stars {
+    color: var(--tw-avero-accent);
+    letter-spacing: 1px;
+    font-size: 12px;
+}
+
+.tw-avero-hero__title {
+    font-family: var(--tw-avero-font-heading);
+    font-size: clamp(2.25rem, 5.5vw, 4.25rem);
+    line-height: 1.04;
+    letter-spacing: -0.035em;
+    font-weight: 500;
+    margin: 0;
+    color: var(--tw-avero-text);
+    text-wrap: balance;
+}
+
+.tw-avero-hero__title-accent {
+    font-style: italic;
+    color: var(--tw-avero-accent);
+    font-weight: 400;
+}
+
+.tw-avero-hero__lead {
+    font-size: clamp(1rem, 1.4vw, 1.125rem);
+    line-height: 1.6;
+    color: var(--tw-avero-text-soft);
+    max-width: 540px;
+    margin: 0;
+    letter-spacing: -0.005em;
+}
+
+.tw-avero-hero__cta-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+
+.tw-avero-hero__cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    height: 52px;
+    padding: 0 28px;
+    border-radius: var(--tw-avero-radius-pill);
+    font-family: var(--tw-avero-font-body);
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background-color 200ms ease, color 200ms ease, transform 200ms ease, border-color 200ms ease;
+    border: 1px solid transparent;
+}
+
+.tw-avero-hero__cta:hover {
+    transform: translateY(-1px);
+}
+
+.tw-avero-hero__cta--primary {
+    background: var(--tw-avero-btn-primary-bg);
+    color: var(--tw-avero-btn-primary-text);
+    border-color: var(--tw-avero-btn-primary-border);
+}
+
+.tw-avero-hero__cta--primary:hover,
+.tw-avero-hero__cta--primary:focus {
+    background: var(--tw-avero-btn-primary-bg-hover);
+    color: var(--tw-avero-btn-primary-text-hover);
+    border-color: var(--tw-avero-btn-primary-border-hover);
+}
+
+.tw-avero-hero__cta--secondary {
+    background: var(--tw-avero-btn-secondary-bg);
+    color: var(--tw-avero-btn-secondary-text);
+    border-color: var(--tw-avero-btn-secondary-border);
+}
+
+.tw-avero-hero__cta--secondary:hover,
+.tw-avero-hero__cta--secondary:focus {
+    background: var(--tw-avero-btn-secondary-bg-hover);
+    color: var(--tw-avero-btn-secondary-text-hover);
+    border-color: var(--tw-avero-btn-secondary-border-hover);
+}
+
+.tw-avero-hero__cta-arrow {
+    width: 18px;
+    height: 18px;
+    transition: transform 200ms ease;
+}
+
+.tw-avero-hero__cta:hover .tw-avero-hero__cta-arrow {
+    transform: translateX(2px);
+}
+
+/* Trust strip below CTAs ─────────────────────────────────── */
+
+.tw-avero-hero__trust {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid var(--tw-avero-border);
+}
+
+.tw-avero-hero__trust-avatars {
+    display: inline-flex;
+}
+
+.tw-avero-hero__trust-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 2px solid var(--tw-avero-bg);
+    margin-left: -8px;
+    background: var(--tw-avero-bg-soft);
+    overflow: hidden;
+}
+
+.tw-avero-hero__trust-avatar:first-child {
+    margin-left: 0;
+}
+
+.tw-avero-hero__trust-text {
+    font-size: 13px;
+    color: var(--tw-avero-text-soft);
+    line-height: 1.5;
+}
+
+.tw-avero-hero__trust-text strong {
+    color: var(--tw-avero-text);
+    font-weight: 600;
+}
+
+/* Media column ───────────────────────────────────────────── */
+
+.tw-avero-hero__media {
+    position: relative;
+    aspect-ratio: 4 / 5;
+    border-radius: var(--tw-avero-radius-lg);
+    overflow: hidden;
+    background: var(--tw-avero-bg-soft);
+    box-shadow: var(--tw-avero-shadow-lg);
+}
+
+.tw-avero-hero__image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+/* Floating accent card on the hero image ────────────────── */
+
+.tw-avero-hero__floating-card {
+    position: absolute;
+    bottom: 24px;
+    left: 24px;
+    right: 24px;
+    background: var(--tw-avero-bg-strong);
+    border-radius: var(--tw-avero-radius-md);
+    padding: 16px 20px;
+    box-shadow: var(--tw-avero-shadow-md);
+    border: 1px solid var(--tw-avero-border);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.tw-avero-hero__floating-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--tw-avero-radius-sm);
+    background: var(--tw-avero-accent);
+    color: var(--tw-avero-bg);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.tw-avero-hero__floating-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.tw-avero-hero__floating-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--tw-avero-text);
+    margin: 0 0 2px;
+}
+
+.tw-avero-hero__floating-subtitle {
+    font-size: 12px;
+    color: var(--tw-avero-text-muted);
+    margin: 0;
+    line-height: 1.4;
+}
+
+/* ── Reduced motion ───────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+    .tw-avero-hero__cta,
+    .tw-avero-hero__cta-arrow {
+        transition: none;
+    }
+}
+
+/* ============================================================
+ * Widget: tw-avero-header
+ * ============================================================ */
+
+.tw-avero-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    width: 100%;
+    background: transparent;
+    transition: background 240ms ease, border-color 240ms ease, backdrop-filter 240ms ease;
+    border-bottom: 1px solid transparent;
+    font-family: var(--tw-avero-font-body);
+}
+
+.tw-avero-header--scrolled {
+    background: color-mix(in srgb, var(--tw-avero-bg) 78%, transparent);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    border-bottom-color: var(--tw-avero-border);
+}
+
+.tw-avero-header__inner {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 18px clamp(20px, 5vw, 56px);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 32px;
+    position: relative;
+}
+
+.tw-avero-header__brand {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    text-decoration: none;
+    color: var(--tw-avero-text);
+    font-family: var(--tw-avero-font-heading);
+    font-size: 22px;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    font-style: italic;
+}
+
+.tw-avero-header__brand-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--tw-avero-accent);
+    display: inline-block;
+}
+
+/* Drawer — desktop: inline flex (becomes the right-hand zone of the
+   header); mobile: fixed off-canvas slide-in from right. */
+.tw-avero-header__drawer {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    flex: 1;
+    justify-content: flex-end;
+}
+
+.tw-avero-header__nav {
+    display: flex;
+    gap: 4px;
+}
+
+.tw-avero-header__navlink {
+    color: var(--tw-avero-text-soft);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: -0.005em;
+    padding: 8px 14px;
+    border-radius: var(--tw-avero-radius-pill);
+    transition: color 160ms ease, background-color 160ms ease;
+}
+
+.tw-avero-header__navlink:hover,
+.tw-avero-header__navlink:focus {
+    color: var(--tw-avero-text);
+    background: var(--tw-avero-bg-soft);
+    outline: none;
+}
+
+.tw-avero-header__drawer-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.tw-avero-header__close { display: none; }
+.tw-avero-header__backdrop { display: none; }
+
+.tw-avero-header__cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 40px;
+    padding: 0 18px;
+    border-radius: var(--tw-avero-btn-primary-radius, 9999px);
+    background: var(--tw-avero-btn-primary-bg);
+    color: var(--tw-avero-btn-primary-text);
+    border: 1px solid var(--tw-avero-btn-primary-border);
+    font-size: 13.5px;
+    font-weight: 500;
+    letter-spacing: -0.005em;
+    text-decoration: none;
+    transition: background 180ms ease, color 180ms ease, border-color 180ms ease, transform 180ms ease;
+}
+
+.tw-avero-header__cta:hover,
+.tw-avero-header__cta:focus {
+    background: var(--tw-avero-btn-primary-bg-hover);
+    color: var(--tw-avero-btn-primary-text-hover);
+    border-color: var(--tw-avero-btn-primary-border-hover);
+    transform: translateY(-1px);
+    outline: none;
+}
+
+.tw-avero-header__menu-btn {
+    display: none;
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--tw-avero-border-strong);
+    background: transparent;
+    border-radius: var(--tw-avero-radius-pill);
+    cursor: pointer;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 4px;
+}
+.tw-avero-header__menu-btn span {
+    display: block; width: 14px; height: 1.5px; background: var(--tw-avero-text); border-radius: 2px;
+}
+.tw-avero-header__menu-btn:hover,
+.tw-avero-header__menu-btn:focus {
+    background: var(--tw-avero-bg-soft);
+    border-color: var(--tw-avero-text);
+    outline: none;
+}
+
+/* Theme toggle button — sun visible in dark mode, moon in light. */
+.tw-avero-header__theme-toggle {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--tw-avero-radius-pill);
+    border: 1px solid var(--tw-avero-border-strong);
+    background: transparent;
+    color: var(--tw-avero-text);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 200ms ease, border-color 200ms ease, transform 300ms ease;
+    padding: 0;
+    flex-shrink: 0;
+}
+.tw-avero-header__theme-toggle:hover,
+.tw-avero-header__theme-toggle:focus {
+    background: var(--tw-avero-bg-soft);
+    border-color: var(--tw-avero-text);
+    color: var(--tw-avero-text);
+    outline: none;
+}
+.tw-avero-header__theme-toggle:active { transform: rotate(15deg); }
+.tw-avero-header__icon-sun  { display: none; }
+.tw-avero-header__icon-moon { display: inline-block; }
+[data-theme="dark"] .tw-avero-header__icon-sun  { display: inline-block; }
+[data-theme="dark"] .tw-avero-header__icon-moon { display: none; }
+
+/* ── Off-canvas drawer (mobile) ─────────────────────────── */
+@media (max-width: 880px) {
+    .tw-avero-header__inner {
+        gap: 16px;
+    }
+    .tw-avero-header__menu-btn { display: inline-flex; order: 2; }
+
+    .tw-avero-header__drawer {
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: min(380px, 88vw);
+        background: var(--tw-avero-bg);
+        border-left: 1px solid var(--tw-avero-border);
+        flex-direction: column;
+        align-items: stretch;
+        justify-content: flex-start;
+        gap: 8px;
+        padding: 24px 24px 32px;
+        transform: translateX(100%);
+        transition: transform 360ms cubic-bezier(0.32, 0.72, 0.24, 1);
+        z-index: 200;
+        overflow-y: auto;
+        box-shadow: var(--tw-avero-shadow-lg);
+    }
+
+    .tw-avero-header--open .tw-avero-header__drawer {
+        transform: translateX(0);
+    }
+
+    .tw-avero-header__close {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        align-self: flex-end;
+        width: 40px;
+        height: 40px;
+        border-radius: var(--tw-avero-radius-pill);
+        background: transparent;
+        border: 1px solid var(--tw-avero-border-strong);
+        color: var(--tw-avero-text);
+        cursor: pointer;
+        margin-bottom: 24px;
+        transition: background 160ms ease;
+    }
+    .tw-avero-header__close:hover,
+    .tw-avero-header__close:focus { background: var(--tw-avero-bg-soft); outline: none; }
+
+    .tw-avero-header__nav {
+        flex-direction: column;
+        gap: 0;
+        margin-bottom: auto;
+    }
+
+    .tw-avero-header__navlink {
+        font-family: var(--tw-avero-font-heading);
+        font-size: clamp(1.5rem, 6vw, 2rem);
+        line-height: 1.2;
+        letter-spacing: -0.02em;
+        color: var(--tw-avero-text);
+        padding: 14px 0;
+        border-radius: 0;
+        border-bottom: 1px solid var(--tw-avero-border);
+    }
+    .tw-avero-header__navlink:hover,
+    .tw-avero-header__navlink:focus {
+        background: transparent;
+        color: var(--tw-avero-accent);
+    }
+
+    .tw-avero-header__drawer-actions {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+        padding-top: 24px;
+        border-top: 1px solid var(--tw-avero-border);
+    }
+    .tw-avero-header__drawer-actions .tw-avero-header__theme-toggle {
+        align-self: flex-start;
+        width: 44px;
+        height: 44px;
+    }
+    .tw-avero-header__drawer-actions .tw-avero-header__cta {
+        height: 52px;
+        justify-content: center;
+        font-size: 15px;
+    }
+
+    .tw-avero-header__backdrop {
+        display: block;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.45);
+        backdrop-filter: blur(2px);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 320ms ease;
+        z-index: 150;
+    }
+    .tw-avero-header--open .tw-avero-header__backdrop {
+        opacity: 1;
+        pointer-events: auto;
+    }
+}
+
+/* ============================================================
+ * Widget: tw-avero-services
+ * ============================================================ */
+
+.tw-avero-services {
+    background: var(--tw-avero-bg);
+    color: var(--tw-avero-text);
+    padding: clamp(80px, 11vw, 160px) clamp(20px, 5vw, 56px);
+    font-family: var(--tw-avero-font-body);
+}
+
+.tw-avero-services__container {
+    max-width: 1240px;
+    margin: 0 auto;
+}
+
+.tw-avero-services__intro {
+    max-width: 760px;
+    margin-bottom: clamp(48px, 6vw, 88px);
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.tw-avero-services__eyebrow,
+.tw-avero-pricing__eyebrow,
+.tw-avero-faq__eyebrow,
+.tw-avero-cta__eyebrow,
+.tw-avero-testimonials__eyebrow {
+    display: inline-flex;
+    align-self: flex-start;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--tw-avero-text-muted);
+}
+.tw-avero-services__eyebrow::before,
+.tw-avero-pricing__eyebrow::before,
+.tw-avero-faq__eyebrow::before,
+.tw-avero-cta__eyebrow::before,
+.tw-avero-testimonials__eyebrow::before {
+    content: '';
+    width: 24px; height: 1px;
+    background: var(--tw-avero-accent);
+}
+
+.tw-avero-services__title,
+.tw-avero-pricing__title,
+.tw-avero-faq__title,
+.tw-avero-cta__title {
+    font-family: var(--tw-avero-font-heading);
+    font-size: clamp(2rem, 4.4vw, 3.5rem);
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+    font-weight: 500;
+    margin: 0;
+    color: var(--tw-avero-text);
+    text-wrap: balance;
+}
+.tw-avero-services__title em,
+.tw-avero-pricing__title em,
+.tw-avero-faq__title em,
+.tw-avero-cta__title em {
+    font-style: italic;
+    color: var(--tw-avero-accent);
+    font-weight: 400;
+}
+
+.tw-avero-services__lead,
+.tw-avero-pricing__lead,
+.tw-avero-faq__lead,
+.tw-avero-cta__lead {
+    font-size: clamp(1rem, 1.3vw, 1.0625rem);
+    line-height: 1.7;
+    color: var(--tw-avero-text-soft);
+    margin: 0;
+    max-width: 60ch;
+    letter-spacing: -0.005em;
+}
+
+.tw-avero-services__grid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 20px;
+}
+
+.tw-avero-services__card {
+    background: var(--tw-avero-bg-strong);
+    border: 1px solid var(--tw-avero-border);
+    border-radius: var(--tw-avero-radius-lg);
+    padding: clamp(24px, 2.6vw, 36px);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    position: relative;
+    transition: border-color 200ms ease, transform 200ms ease, box-shadow 200ms ease;
+}
+
+.tw-avero-services__card:hover {
+    border-color: var(--tw-avero-border-strong);
+    transform: translateY(-2px);
+    box-shadow: var(--tw-avero-shadow-md);
+}
+
+.tw-avero-services__num {
+    font-family: var(--tw-avero-font-heading);
+    font-style: italic;
+    font-size: 13px;
+    color: var(--tw-avero-text-muted);
+    letter-spacing: 0.05em;
+}
+
+.tw-avero-services__icon {
+    display: inline-flex;
+    width: 44px;
+    height: 44px;
+    border-radius: var(--tw-avero-radius-md);
+    background: var(--tw-avero-bg-soft);
+    color: var(--tw-avero-accent);
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    margin-top: 4px;
+}
+
+.tw-avero-services__name {
+    font-size: 1.375rem;
+    font-weight: 500;
+    line-height: 1.2;
+    margin: 4px 0 0;
+    color: var(--tw-avero-text);
+    letter-spacing: -0.01em;
+    font-family: var(--tw-avero-font-body);
+}
+
+.tw-avero-services__desc {
+    font-size: 14.5px;
+    line-height: 1.6;
+    color: var(--tw-avero-text-soft);
+    margin: 0;
+    flex: 1;
+}
+
+.tw-avero-services__link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--tw-avero-accent);
+    text-decoration: none;
+    letter-spacing: -0.005em;
+    transition: gap 180ms ease;
+}
+.tw-avero-services__link:hover { gap: 10px; }
+
+@media (max-width: 1024px) { .tw-avero-services__grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 767px)  { .tw-avero-services__grid { grid-template-columns: 1fr; } }
+
+/* ============================================================
+ * Widget: tw-avero-pricing
+ * ============================================================ */
+
+.tw-avero-pricing {
+    background: var(--tw-avero-bg-soft);
+    color: var(--tw-avero-text);
+    padding: clamp(80px, 11vw, 160px) clamp(20px, 5vw, 56px);
+    font-family: var(--tw-avero-font-body);
+}
+.tw-avero-pricing__container { max-width: 1240px; margin: 0 auto; }
+
+.tw-avero-pricing__intro {
+    max-width: 760px;
+    margin: 0 auto clamp(48px, 6vw, 88px);
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    text-align: center;
+    align-items: center;
+}
+.tw-avero-pricing__intro .tw-avero-pricing__title { text-align: center; }
+
+.tw-avero-pricing__grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 20px;
+    align-items: stretch;
+}
+
+.tw-avero-pricing__tier {
+    background: var(--tw-avero-bg-strong);
+    border: 1px solid var(--tw-avero-border);
+    border-radius: var(--tw-avero-radius-lg);
+    padding: clamp(28px, 3vw, 44px);
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    position: relative;
+    transition: border-color 200ms ease, transform 200ms ease, box-shadow 200ms ease;
+}
+
+.tw-avero-pricing__tier:hover {
+    border-color: var(--tw-avero-border-strong);
+    box-shadow: var(--tw-avero-shadow-md);
+}
+
+.tw-avero-pricing__tier--featured {
+    border-color: var(--tw-avero-accent);
+    box-shadow: 0 0 0 4px var(--tw-avero-accent-soft, rgba(33,77,71,0.06));
+    transform: translateY(-6px);
+}
+
+.tw-avero-pricing__badge {
+    position: absolute;
+    top: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 6px 14px;
+    background: var(--tw-avero-accent);
+    color: var(--tw-avero-bg);
+    border-radius: var(--tw-avero-radius-pill);
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.tw-avero-pricing__tier-name {
+    font-size: 14px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--tw-avero-text-muted);
+    margin: 0;
+}
+
+.tw-avero-pricing__price {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+.tw-avero-pricing__price-amount {
+    font-family: var(--tw-avero-font-heading);
+    font-size: clamp(2.5rem, 4.5vw, 3.5rem);
+    line-height: 1;
+    letter-spacing: -0.03em;
+    color: var(--tw-avero-text);
+}
+.tw-avero-pricing__price-suffix {
+    font-size: 13px;
+    color: var(--tw-avero-text-muted);
+}
+
+.tw-avero-pricing__tier-desc {
+    font-size: 14.5px;
+    line-height: 1.55;
+    color: var(--tw-avero-text-soft);
+    margin: 0;
+}
+
+.tw-avero-pricing__features {
+    list-style: none;
+    margin: 0;
+    padding: 16px 0 0;
+    border-top: 1px solid var(--tw-avero-border);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex: 1;
+}
+.tw-avero-pricing__features li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 14px;
+    color: var(--tw-avero-text);
+    line-height: 1.5;
+}
+.tw-avero-pricing__features svg {
+    flex-shrink: 0;
+    color: var(--tw-avero-accent);
+    margin-top: 3px;
+}
+
+.tw-avero-pricing__cta {
+    margin-top: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 48px;
+    padding: 0 22px;
+    border-radius: var(--tw-avero-radius-pill);
+    background: var(--tw-avero-cta-secondary);
+    border: 1px solid var(--tw-avero-border-strong);
+    color: var(--tw-avero-cta-secondary-text);
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: background 180ms ease, color 180ms ease, border-color 180ms ease, transform 180ms ease;
+}
+.tw-avero-pricing__tier--featured .tw-avero-pricing__cta {
+    background: var(--tw-avero-cta-primary);
+    color: var(--tw-avero-cta-primary-text);
+    border-color: var(--tw-avero-cta-primary);
+}
+.tw-avero-pricing__cta:hover,
+.tw-avero-pricing__cta:focus {
+    transform: translateY(-1px);
+    border-color: var(--tw-avero-text);
+    color: var(--tw-avero-cta-secondary-text);
+}
+.tw-avero-pricing__tier--featured .tw-avero-pricing__cta:hover,
+.tw-avero-pricing__tier--featured .tw-avero-pricing__cta:focus {
+    color: var(--tw-avero-cta-primary-text);
+    border-color: var(--tw-avero-cta-primary);
+}
+
+@media (max-width: 1024px) {
+    .tw-avero-pricing__grid { grid-template-columns: 1fr; max-width: 480px; margin: 0 auto; }
+    .tw-avero-pricing__tier--featured { transform: none; }
+}
+
+/* ============================================================
+ * Widget: tw-avero-testimonials
+ * ============================================================ */
+
+.tw-avero-testimonials {
+    background: var(--tw-avero-bg);
+    padding: clamp(80px, 11vw, 160px) clamp(20px, 5vw, 56px);
+    font-family: var(--tw-avero-font-body);
+}
+
+.tw-avero-testimonials__container {
+    max-width: 980px;
+    margin: 0 auto;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 28px;
+}
+
+.tw-avero-testimonials__stage {
+    position: relative;
+    width: 100%;
+    min-height: 280px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tw-avero-testimonials__quote {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    opacity: 0;
+    pointer-events: none;
+    padding: 0 12px;
+}
+.tw-avero-testimonials__quote.is-active {
+    opacity: 1;
+    pointer-events: auto;
+    position: relative;
+    inset: auto;
+}
+
+.tw-avero-testimonials__mark {
+    width: 36px;
+    height: 28px;
+    color: var(--tw-avero-accent);
+    opacity: 0.55;
+}
+
+.tw-avero-testimonials__text {
+    font-family: var(--tw-avero-font-heading);
+    font-style: italic;
+    font-size: clamp(1.5rem, 2.8vw, 2.25rem);
+    line-height: 1.3;
+    letter-spacing: -0.015em;
+    color: var(--tw-avero-text);
+    margin: 0;
+    max-width: 760px;
+    text-wrap: balance;
+}
+
+.tw-avero-testimonials__cite {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.tw-avero-testimonials__photo {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--tw-avero-bg-soft);
+    color: var(--tw-avero-accent);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--tw-avero-font-heading);
+    font-size: 18px;
+    flex-shrink: 0;
+}
+
+.tw-avero-testimonials__cite-text {
+    display: flex;
+    flex-direction: column;
+    text-align: left;
+    line-height: 1.3;
+}
+.tw-avero-testimonials__name { font-weight: 600; font-size: 14px; color: var(--tw-avero-text); }
+.tw-avero-testimonials__role { font-size: 12.5px; color: var(--tw-avero-text-muted); }
+
+.tw-avero-testimonials__dots {
+    display: flex;
+    gap: 8px;
+}
+.tw-avero-testimonials__dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    border: none;
+    background: var(--tw-avero-border-strong);
+    cursor: pointer;
+    transition: background 200ms ease, width 200ms ease;
+    padding: 0;
+}
+.tw-avero-testimonials__dot:hover,
+.tw-avero-testimonials__dot:focus {
+    background: var(--tw-avero-text-muted);
+    outline: none;
+}
+.tw-avero-testimonials__dot.is-active {
+    width: 28px;
+    border-radius: var(--tw-avero-radius-pill);
+    background: var(--tw-avero-accent);
+}
+.tw-avero-testimonials__dot.is-active:hover,
+.tw-avero-testimonials__dot.is-active:focus {
+    background: var(--tw-avero-accent-hover);
+}
+
+/* ============================================================
+ * Widget: tw-avero-faq
+ * ============================================================ */
+
+.tw-avero-faq {
+    background: var(--tw-avero-bg);
+    padding: clamp(80px, 11vw, 160px) clamp(20px, 5vw, 56px);
+    font-family: var(--tw-avero-font-body);
+}
+
+.tw-avero-faq__container {
+    max-width: 880px;
+    margin: 0 auto;
+}
+
+.tw-avero-faq__intro {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+    margin-bottom: clamp(40px, 5vw, 72px);
+}
+.tw-avero-faq__intro .tw-avero-faq__title { text-align: center; }
+
+.tw-avero-faq__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--tw-avero-border);
+}
+
+.tw-avero-faq__item {
+    border-bottom: 1px solid var(--tw-avero-border);
+}
+
+.tw-avero-faq__q {
+    width: 100%;
+    background: transparent;
+    border: none;
+    padding: 24px 0;
+    text-align: left;
+    font-family: inherit;
+    font-size: 1.0625rem;
+    font-weight: 500;
+    color: var(--tw-avero-text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    letter-spacing: -0.01em;
+    transition: color 160ms ease;
+}
+.tw-avero-faq__q:hover,
+.tw-avero-faq__q:focus,
+.tw-avero-faq__q:active {
+    background: transparent;
+    color: var(--tw-avero-text);
+    outline: none;
+}
+.tw-avero-faq__q:hover { color: var(--tw-avero-accent); }
+.tw-avero-faq__q:hover .tw-avero-faq__chevron { color: var(--tw-avero-accent); }
+
+.tw-avero-faq__chevron {
+    color: var(--tw-avero-text-muted);
+    transition: transform 240ms ease, color 240ms ease;
+    flex-shrink: 0;
+}
+.tw-avero-faq__item.is-open .tw-avero-faq__chevron {
+    transform: rotate(180deg);
+    color: var(--tw-avero-accent);
+}
+
+.tw-avero-faq__a-wrap {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 320ms ease;
+}
+.tw-avero-faq__item.is-open .tw-avero-faq__a-wrap {
+    grid-template-rows: 1fr;
+}
+.tw-avero-faq__a {
+    overflow: hidden;
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--tw-avero-text-soft);
+    padding-bottom: 0;
+    transition: padding-bottom 320ms ease;
+}
+.tw-avero-faq__item.is-open .tw-avero-faq__a {
+    padding-bottom: 24px;
+}
+
+/* ============================================================
+ * Widget: tw-avero-cta
+ * ============================================================ */
+
+.tw-avero-cta {
+    background: var(--tw-avero-bg-soft);
+    padding: clamp(96px, 12vw, 180px) clamp(20px, 5vw, 56px);
+    font-family: var(--tw-avero-font-body);
+    overflow: hidden;
+}
+
+.tw-avero-cta__container {
+    max-width: 880px;
+    margin: 0 auto;
+    text-align: center;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 22px;
+}
+.tw-avero-cta__container .tw-avero-cta__title { text-align: center; max-width: 760px; }
+.tw-avero-cta__container .tw-avero-cta__lead  { text-align: center; }
+
+.tw-avero-cta__halo {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 720px;
+    height: 720px;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(circle, color-mix(in srgb, var(--tw-avero-accent) 16%, transparent), transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+    filter: blur(20px);
+}
+
+.tw-avero-cta__container > *:not(.tw-avero-cta__halo) { position: relative; z-index: 1; }
+
+.tw-avero-cta__row {
+    margin-top: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.tw-avero-cta__btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 52px;
+    padding: 0 26px;
+    border-radius: var(--tw-avero-radius-pill);
+    font-size: 15px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: background 200ms ease, color 200ms ease, transform 200ms ease;
+    letter-spacing: -0.005em;
+}
+
+.tw-avero-cta__btn--primary {
+    background: var(--tw-avero-btn-primary-bg);
+    color: var(--tw-avero-btn-primary-text);
+    border: 1px solid var(--tw-avero-btn-primary-border);
+}
+.tw-avero-cta__btn--primary:hover,
+.tw-avero-cta__btn--primary:focus {
+    background: var(--tw-avero-btn-primary-bg-hover);
+    color: var(--tw-avero-btn-primary-text-hover);
+    border-color: var(--tw-avero-btn-primary-border-hover);
+    transform: translateY(-1px);
+}
+
+.tw-avero-cta__btn--ghost {
+    background: var(--tw-avero-btn-ghost-bg);
+    color: var(--tw-avero-btn-ghost-text);
+    text-decoration: underline;
+    text-decoration-color: var(--tw-avero-border-strong);
+    text-underline-offset: 4px;
+    height: auto;
+    padding: 8px 0;
+}
+.tw-avero-cta__btn--ghost:hover,
+.tw-avero-cta__btn--ghost:focus {
+    background: var(--tw-avero-btn-ghost-bg-hover);
+    color: var(--tw-avero-btn-ghost-text-hover);
+    text-decoration: underline;
+    text-decoration-color: var(--tw-avero-accent);
+}
+
+/* ============================================================
+ * Widget: tw-avero-footer
+ * ============================================================ */
+
+.tw-avero-footer {
+    background: var(--tw-avero-bg);
+    color: var(--tw-avero-text);
+    padding: clamp(64px, 8vw, 120px) clamp(20px, 5vw, 56px) 32px;
+    border-top: 1px solid var(--tw-avero-border);
+    font-family: var(--tw-avero-font-body);
+}
+
+.tw-avero-footer__container { max-width: 1240px; margin: 0 auto; }
+
+.tw-avero-footer__top {
+    display: grid;
+    grid-template-columns: 1.4fr 2fr;
+    gap: clamp(40px, 6vw, 80px);
+    padding-bottom: 48px;
+}
+
+.tw-avero-footer__brand-block { max-width: 320px; }
+
+.tw-avero-footer__brand {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    font-family: var(--tw-avero-font-heading);
+    font-style: italic;
+    font-size: 28px;
+    color: var(--tw-avero-text);
+    letter-spacing: -0.02em;
+    margin-bottom: 16px;
+}
+.tw-avero-footer__brand-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--tw-avero-accent); display: inline-block;
+}
+
+.tw-avero-footer__tagline {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--tw-avero-text-soft);
+    margin: 0;
+    max-width: 36ch;
+}
+
+.tw-avero-footer__cols {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 32px;
+}
+
+.tw-avero-footer__col-title {
+    display: block;
+    font-size: 11.5px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--tw-avero-text-muted);
+    margin-bottom: 14px;
+}
+
+.tw-avero-footer__col ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.tw-avero-footer__col a {
+    color: var(--tw-avero-text-soft);
+    text-decoration: none;
+    font-size: 14px;
+    transition: color 160ms ease;
+}
+.tw-avero-footer__col a:hover { color: var(--tw-avero-accent); }
+
+.tw-avero-footer__bottom {
+    border-top: 1px solid var(--tw-avero-border);
+    padding-top: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    font-size: 12.5px;
+    color: var(--tw-avero-text-muted);
+    flex-wrap: wrap;
+}
+.tw-avero-footer__powered { font-style: italic; }
+
+@media (max-width: 1024px) {
+    .tw-avero-footer__top { grid-template-columns: 1fr; }
+    .tw-avero-footer__cols { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 640px) {
+    .tw-avero-footer__cols { grid-template-columns: 1fr 1fr; gap: 24px; }
+}

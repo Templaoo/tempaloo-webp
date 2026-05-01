@@ -1,0 +1,138 @@
+[
+  {
+    "id": "avhd001",
+    "elType": "section",
+    "settings": {},
+    "elements": [
+      {
+        "id": "avhd002",
+        "elType": "column",
+        "settings": { "_column_size": 100 },
+        "elements": [
+          { "id": "avhd003", "elType": "widget", "widgetType": "header", "settings": {} }
+        ],
+        "isInner": false
+      }
+    ],
+    "isInner": false
+  },
+  {
+    "id": "avhe001",
+    "elType": "section",
+    "settings": {},
+    "elements": [
+      {
+        "id": "avhe002",
+        "elType": "column",
+        "settings": { "_column_size": 100 },
+        "elements": [
+          { "id": "avhe003", "elType": "widget", "widgetType": "hero", "settings": {} }
+        ],
+        "isInner": false
+      }
+    ],
+    "isInner": false
+  },
+  {
+    "id": "avsv001",
+    "elType": "section",
+    "settings": {},
+    "elements": [
+      {
+        "id": "avsv002",
+        "elType": "column",
+        "settings": { "_column_size": 100 },
+        "elements": [
+          { "id": "avsv003", "elType": "widget", "widgetType": "services", "settings": {} }
+        ],
+        "isInner": false
+      }
+    ],
+    "isInner": false
+  },
+  {
+    "id": "avpr001",
+    "elType": "section",
+    "settings": {},
+    "elements": [
+      {
+        "id": "avpr002",
+        "elType": "column",
+        "settings": { "_column_size": 100 },
+        "elements": [
+          { "id": "avpr003", "elType": "widget", "widgetType": "pricing", "settings": {} }
+        ],
+        "isInner": false
+      }
+    ],
+    "isInner": false
+  },
+  {
+    "id": "avts001",
+    "elType": "section",
+    "settings": {},
+    "elements": [
+      {
+        "id": "avts002",
+        "elType": "column",
+        "settings": { "_column_size": 100 },
+        "elements": [
+          { "id": "avts003", "elType": "widget", "widgetType": "testimonials", "settings": {} }
+        ],
+        "isInner": false
+      }
+    ],
+    "isInner": false
+  },
+  {
+    "id": "avfq001",
+    "elType": "section",
+    "settings": {},
+    "elements": [
+      {
+        "id": "avfq002",
+        "elType": "column",
+        "settings": { "_column_size": 100 },
+        "elements": [
+          { "id": "avfq003", "elType": "widget", "widgetType": "faq", "settings": {} }
+        ],
+        "isInner": false
+      }
+    ],
+    "isInner": false
+  },
+  {
+    "id": "avct001",
+    "elType": "section",
+    "settings": {},
+    "elements": [
+      {
+        "id": "avct002",
+        "elType": "column",
+        "settings": { "_column_size": 100 },
+        "elements": [
+          { "id": "avct003", "elType": "widget", "widgetType": "cta", "settings": {} }
+        ],
+        "isInner": false
+      }
+    ],
+    "isInner": false
+  },
+  {
+    "id": "avft001",
+    "elType": "section",
+    "settings": {},
+    "elements": [
+      {
+        "id": "avft002",
+        "elType": "column",
+        "settings": { "_column_size": 100 },
+        "elements": [
+          { "id": "avft003", "elType": "widget", "widgetType": "footer", "settings": {} }
+        ],
+        "isInner": false
+      }
+    ],
+    "isInner": false
+  }
+]
