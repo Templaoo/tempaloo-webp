@@ -115,9 +115,12 @@
         },
 
         'scale-in': function (targets, opts) {
+            // scale: 0.92 at lvlFactor=1 (medium); 1.0 at subtle (no scale);
+            // 0.888 at bold. Lerp around 1 with intensity.
+            var f = opts.lvlFactor != null ? opts.lvlFactor : 1;
             gsap().from(targets, Object.assign({
                 opacity: 0,
-                scale: 0.92,
+                scale: 1 - 0.08 * f,
                 duration: opts.duration || 0.7,
                 ease: 'back.out(1.4)',
                 stagger: opts.stagger || 0,
@@ -126,10 +129,10 @@
         },
 
         'blur-in': function (targets, opts) {
-            // Editorial premium — uses CSS filter; no GSAP plugin needed.
+            var f = opts.lvlFactor != null ? opts.lvlFactor : 1;
             gsap().from(targets, Object.assign({
                 opacity: 0,
-                filter: 'blur(20px)',
+                filter: 'blur(' + (20 * f) + 'px)',
                 duration: opts.duration || 0.85,
                 ease: 'power3.out',
                 stagger: opts.stagger || 0,
@@ -138,7 +141,16 @@
         },
 
         'mask-reveal': function (targets, opts) {
-            // Reveal via clip-path — works for headlines and image cards alike.
+            // mask-reveal at subtle (lvlFactor 0) collapses to a soft fade
+            // so the user never gets a jarring visual at "subtle" setting.
+            var f = opts.lvlFactor != null ? opts.lvlFactor : 1;
+            if (f === 0) {
+                gsap().from(targets, Object.assign({
+                    opacity: 0, duration: opts.duration || 0.4, ease: 'power1.out',
+                    stagger: opts.stagger || 0, clearProps: 'opacity',
+                }, opts.scrollTrigger ? { scrollTrigger: opts.scrollTrigger } : {}));
+                return;
+            }
             gsap().from(targets, Object.assign({
                 clipPath: 'inset(0 100% 0 0)',
                 duration: opts.duration || 0.8,
@@ -477,8 +489,12 @@
         var cfg = (window.tempaloo && window.tempaloo.studio && window.tempaloo.studio.anims) || {};
         var widgetCfg = cfg[scope] || {};
 
+        // Per-widget preset is ALWAYS respected — intensity only modulates
+        // transform size via lvlFactor (subtle = 0, medium = 1, bold = 1.4).
+        // At subtle the y/x translates collapse to 0 → effectively opacity-
+        // only, but the preset's character (scale, blur, mask) is preserved.
+        // Off bails out entirely above.
         var preset = widgetCfg.entrance || 'fade-up';
-        if (lvl === 'subtle' && preset !== 'none' && !TEXT_PRESETS[preset]) preset = 'fade';
 
         var stMs   = parseInt(widgetCfg.stagger || 80, 10);
         var dur    = parseFloat(widgetCfg.duration || 0.7);
@@ -501,10 +517,10 @@
 
         // Per-target text-reveals — any `[data-tw-anim-text]` element
         // gets its own preset and is excluded from the main entrance.
+        // Choice is respected at every intensity (lvlFactor handles size).
         var textTargets = Array.prototype.slice.call(rootEl.querySelectorAll('[data-tw-anim-text]'));
         textTargets.forEach(function (t) {
             var name = t.getAttribute('data-tw-anim-text');
-            if (lvl === 'subtle') name = 'word-fade-up'; // downgrade text reveals
             var fn = TEXT_PRESETS[name];
             if (fn) {
                 try { fn(t, opts); } catch (e) {}
@@ -540,7 +556,6 @@
         var lvl = level();
         if (lvl === 'off') return;
         var name = el.getAttribute('data-tw-anim-text');
-        if (lvl === 'subtle') name = 'word-fade-up';
         var fn = TEXT_PRESETS[name];
         if (!fn) return;
         var opts = {

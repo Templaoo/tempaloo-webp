@@ -1106,11 +1106,30 @@
   flex-shrink: 0;
   min-width: 110px;
 }
+.tsa-anim-row__current {
+  font-family: var(--tsa-font-mono);
+  font-size: 10.5px;
+  color: var(--tsa-text-muted);
+  margin-left: 8px;
+}
+.tsa-anim-row__current strong { color: var(--tsa-accent); font-weight: 600; }
+
 .tsa-anim-row__saving {
   margin-left: auto;
   font-size: 10.5px;
   color: var(--tsa-accent);
   font-style: italic;
+}
+.tsa-anim-row__saved {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--tsa-success);
+  font-weight: 500;
+  animation: tsa-saved-pulse 0.4s ease;
+}
+@keyframes tsa-saved-pulse {
+  0%   { opacity: 0; transform: scale(0.8); }
+  100% { opacity: 1; transform: scale(1); }
 }
 
 .tsa-anim-row__controls {

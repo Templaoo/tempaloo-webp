@@ -45,6 +45,7 @@ export function AnimationPage() {
   const [state,   setState]   = useState<AnimationState | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingScope, setSavingScope] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<Record<string, number>>({});
   const debounce = useRef<Record<string, number>>({});
 
   useEffect(() => {
@@ -77,15 +78,19 @@ export function AnimationPage() {
 
     // Debounce save so dragging a slider doesn't fire 60 requests/sec.
     if (debounce.current[widget]) window.clearTimeout(debounce.current[widget]);
+    const slugAtCallTime = state.template_slug;
     debounce.current[widget] = window.setTimeout(async () => {
-      if (!state) return;
       setSavingScope(widget);
       try {
         const updated = await api.setAnimation({
-          template_slug: state.template_slug,
+          template_slug: slugAtCallTime,
           presets: { [widget]: nextPreset },
         });
         setState(updated);
+        setSavedAt((m) => ({ ...m, [widget]: Date.now() }));
+        toast.info(
+          `${widget}: ${nextPreset.entrance ?? 'saved'}. Reload your pages to see the change.`,
+        );
       } catch (e) {
         toast.error(`Save failed: ${(e as Error).message}`);
       } finally {
@@ -155,6 +160,7 @@ export function AnimationPage() {
                     preset={state.presets[w] ?? {}}
                     grouped={state.presets_grouped}
                     saving={savingScope === w}
+                    savedAt={savedAt[w]}
                     onChange={(p) => patchWidget(w, p)}
                   />
                 ))}
@@ -178,12 +184,13 @@ export function AnimationPage() {
 }
 
 function WidgetRow({
-  widget, preset, grouped, saving, onChange,
+  widget, preset, grouped, saving, savedAt, onChange,
 }: {
-  widget:  string;
-  preset:  AnimationPreset;
-  grouped: { element: string[]; text: string[] };
-  saving:  boolean;
+  widget:   string;
+  preset:   AnimationPreset;
+  grouped:  { element: string[]; text: string[] };
+  saving:   boolean;
+  savedAt?: number;
   onChange: (p: Partial<AnimationPreset>) => void;
 }) {
   const entrance = preset.entrance || 'fade-up';
@@ -200,7 +207,13 @@ function WidgetRow({
       <div className="tsa-anim-row__head">
         <span className="tsa-anim-row__name">{widget}</span>
         <DemoStrip preset={entrance} key={demoKey} />
+        <span className="tsa-anim-row__current" title="Currently applied preset">
+          → <strong>{entrance}</strong>
+        </span>
         {saving && <span className="tsa-anim-row__saving">saving…</span>}
+        {!saving && savedAt && Date.now() - savedAt < 4000 && (
+          <span className="tsa-anim-row__saved">✓ saved</span>
+        )}
       </div>
 
       <div className="tsa-anim-row__controls">
