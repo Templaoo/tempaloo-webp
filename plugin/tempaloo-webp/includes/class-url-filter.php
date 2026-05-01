@@ -481,7 +481,7 @@ class Tempaloo_WebP_URL_Filter {
 
         printf(
             '<div class="tempaloo-media-cell" data-id="%d" data-convert-nonce="%s" data-restore-nonce="%s">',
-            $post_id,
+            (int) $post_id,
             esc_attr( $convert_nonce ),
             esc_attr( $restore_nonce )
         );
@@ -493,7 +493,7 @@ class Tempaloo_WebP_URL_Filter {
             }
             printf(
                 '<button type="button" class="button button-small tempaloo-convert-now" data-id="%d" data-nonce="%s">%s</button></div>',
-                $post_id,
+                (int) $post_id,
                 esc_attr( $convert_nonce ),
                 esc_html__( 'Convert now', 'tempaloo-webp' )
             );
@@ -639,11 +639,14 @@ class Tempaloo_WebP_URL_Filter {
             esc_html__( 'Detail', 'tempaloo-webp' ),
             esc_html( size_format( $s['bytes_in'] ) ),
             esc_html( size_format( $s['bytes_out'] ) ),
-            $post_id, esc_attr( $restore_nonce ),
+            (int) $post_id, esc_attr( $restore_nonce ),
             esc_attr__( 'Delete the .webp / .avif siblings and revert this image to its uploaded state.', 'tempaloo-webp' ),
             esc_html__( 'Restore', 'tempaloo-webp' ),
-            // .tempaloo-cell-detail
-            $rows_html, // already escaped above
+            // .tempaloo-cell-detail — $rows_html is built above with
+            // esc_html() on every interpolated value (size label,
+            // bytes, percent), so it's safe to inject as-is here.
+            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+            $rows_html,
             esc_html( $when_label ),
             (int) $s['sizes'],
             esc_html( _n( 'size', 'sizes', (int) $s['sizes'], 'tempaloo-webp' ) ),
@@ -652,7 +655,7 @@ class Tempaloo_WebP_URL_Filter {
             esc_html__( 'Restore this image?', 'tempaloo-webp' ),
             esc_html__( 'This deletes the .webp / .avif siblings and clears the conversion record. Your original image stays untouched.', 'tempaloo-webp' ),
             esc_html__( 'Cancel', 'tempaloo-webp' ),
-            $post_id, esc_attr( $restore_nonce ),
+            (int) $post_id, esc_attr( $restore_nonce ),
             esc_html__( 'Yes, restore', 'tempaloo-webp' )
         );
     }
@@ -787,18 +790,22 @@ class Tempaloo_WebP_URL_Filter {
      * notice-warning) so it blends with the surrounding UI.
      */
     public function render_bulk_notice() {
-        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        // phpcs:disable WordPress.Security.NonceVerification.Recommended
+        // -- These $_GET reads are display-only on the page WordPress
+        // redirects to AFTER its bulk-actions handler ran — that handler
+        // already verified the bulk nonce inside handle_bulk_actions().
+        // Adding a second nonce check here would force WP to add yet
+        // another query param round-trip, with no security benefit.
         if ( empty( $_GET['tempaloo_bulk'] ) ) return;
-        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
         $kind = sanitize_key( wp_unslash( $_GET['tempaloo_bulk'] ) );
         $screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
         if ( $screen && 'upload' !== $screen->base ) return;
 
         if ( 'optimize' === $kind ) {
-            $reason   = isset( $_GET['tempaloo_reason'] )    ? sanitize_key( wp_unslash( $_GET['tempaloo_reason'] ) ) : '';
-            $converted = isset( $_GET['tempaloo_converted'] ) ? (int) $_GET['tempaloo_converted'] : 0;
-            $failed    = isset( $_GET['tempaloo_failed'] )    ? (int) $_GET['tempaloo_failed']    : 0;
-            $skipped   = isset( $_GET['tempaloo_skipped'] )   ? (int) $_GET['tempaloo_skipped']   : 0;
+            $reason    = isset( $_GET['tempaloo_reason'] )    ? sanitize_key( wp_unslash( $_GET['tempaloo_reason'] ) ) : '';
+            $converted = isset( $_GET['tempaloo_converted'] ) ? absint( wp_unslash( $_GET['tempaloo_converted'] ) ) : 0;
+            $failed    = isset( $_GET['tempaloo_failed'] )    ? absint( wp_unslash( $_GET['tempaloo_failed'] ) )    : 0;
+            $skipped   = isset( $_GET['tempaloo_skipped'] )   ? absint( wp_unslash( $_GET['tempaloo_skipped'] ) )   : 0;
 
             if ( 'no_license' === $reason ) {
                 printf(
@@ -822,9 +829,9 @@ class Tempaloo_WebP_URL_Filter {
         }
 
         if ( 'restore' === $kind ) {
-            $restored = isset( $_GET['tempaloo_restored'] ) ? (int) $_GET['tempaloo_restored'] : 0;
-            $removed  = isset( $_GET['tempaloo_removed'] )  ? (int) $_GET['tempaloo_removed']  : 0;
-            $failures = isset( $_GET['tempaloo_failures'] ) ? (int) $_GET['tempaloo_failures'] : 0;
+            $restored = isset( $_GET['tempaloo_restored'] ) ? absint( wp_unslash( $_GET['tempaloo_restored'] ) ) : 0;
+            $removed  = isset( $_GET['tempaloo_removed'] )  ? absint( wp_unslash( $_GET['tempaloo_removed'] ) )  : 0;
+            $failures = isset( $_GET['tempaloo_failures'] ) ? absint( wp_unslash( $_GET['tempaloo_failures'] ) ) : 0;
 
             $class = $failures > 0 ? 'notice-warning' : 'notice-success';
             printf(
@@ -837,6 +844,7 @@ class Tempaloo_WebP_URL_Filter {
                 ) )
             );
         }
+        // phpcs:enable WordPress.Security.NonceVerification.Recommended
     }
 
     public function maybe_replace_url( $url, $attachment_id ) {

@@ -94,7 +94,14 @@ final class Tempaloo_WebP_Plugin {
      * so this is safe to call unconditionally on every settings change.
      */
     public static function purge_page_caches() {
+        // Each do_action() below targets a third-party plugin's PUBLIC
+        // hook contract — those plugins listen on these names. We can't
+        // (and shouldn't) prefix them with `tempaloo_webp_*`. The
+        // phpcs:ignore on each line silences PrefixAllGlobals for these
+        // intentional cross-plugin hand-offs.
+
         // LiteSpeed Cache (most common on Hostinger / managed-WP hosts).
+        // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
         do_action( 'litespeed_purge_all' );
         // WP Rocket
         if ( function_exists( 'rocket_clean_domain' ) ) {
@@ -113,8 +120,10 @@ final class Tempaloo_WebP_Plugin {
             sg_cachepress_purge_cache();
         }
         // Cache Enabler
+        // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
         do_action( 'cache_enabler_clear_complete_cache' );
         // Hummingbird
+        // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
         do_action( 'wphb_clear_page_cache' );
         // Autoptimize
         if ( class_exists( 'autoptimizeCache' ) ) {

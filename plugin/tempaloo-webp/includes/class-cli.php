@@ -304,7 +304,11 @@ class Tempaloo_WebP_CLI {
         }
         $s = Tempaloo_WebP_Plugin::get_settings();
         if ( 'get' === $action ) {
-            WP_CLI::log( var_export( $s[ $key ] ?? null, true ) );
+            $cur = $s[ $key ] ?? null;
+            // wp_json_encode is the WP-recommended formatter; gives a
+            // stable scalar representation without var_export's debug
+            // baggage (which Plugin Check flags as production code smell).
+            WP_CLI::log( null === $cur ? '(unset)' : (string) wp_json_encode( $cur ) );
             return;
         }
         $value = isset( $args[2] ) ? $args[2] : null;
@@ -329,7 +333,7 @@ class Tempaloo_WebP_CLI {
                 break;
         }
         Tempaloo_WebP_Plugin::update_settings( [ $key => $value ] );
-        WP_CLI::success( "Set {$key} = " . var_export( $value, true ) );
+        WP_CLI::success( "Set {$key} = " . (string) wp_json_encode( $value ) );
     }
 
     /**

@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name:       Tempaloo WebP – Image Optimizer & AVIF Converter
+ * Plugin Name:       Tempaloo WebP
  * Plugin URI:        https://tempaloo.com/webp
  * Description:       Convert images to WebP & AVIF automatically. Faster sites, no setup.
  * Version:           1.0.0
@@ -56,12 +56,10 @@ register_deactivation_hook( __FILE__, static function () {
 } );
 
 add_action( 'plugins_loaded', static function () {
-    // Translations. WordPress.org will auto-generate .po/.mo files from the
-    // plugin's text domain once it's published on the directory.
-    load_plugin_textdomain(
-        'tempaloo-webp',
-        false,
-        dirname( plugin_basename( __FILE__ ) ) . '/languages'
-    );
+    // Translations are auto-loaded by WordPress core (since WP 4.6) for
+    // any plugin hosted on wordpress.org/plugins under its text domain.
+    // No manual load_plugin_textdomain() call needed — Plugin Check
+    // even discourages it. Bundled .pot file lives at /languages/ for
+    // any translator who wants a starting point.
     Tempaloo_WebP_Plugin::instance()->boot();
 } );

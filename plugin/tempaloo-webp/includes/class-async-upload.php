@@ -231,8 +231,15 @@ class Tempaloo_WebP_Async_Upload {
      * outcome easy to diff.
      */
     public static function handle_loopback() {
-        $aid   = isset( $_POST['attachment_id'] ) ? (int) $_POST['attachment_id'] : 0;
-        $nonce = isset( $_POST['_nonce'] ) ? (string) $_POST['_nonce'] : '';
+        $aid   = isset( $_POST['attachment_id'] ) ? absint( wp_unslash( $_POST['attachment_id'] ) ) : 0;
+        // Nonce: unslash + sanitize before passing to wp_verify_nonce.
+        // wp_verify_nonce hashes the value internally, so even a malicious
+        // string is harmless — but Plugin Check expects sanitization on
+        // every $_POST read regardless. sanitize_text_field strips control
+        // chars / tags without touching the alphanumeric nonce content.
+        $nonce = isset( $_POST['_nonce'] )
+            ? sanitize_text_field( wp_unslash( $_POST['_nonce'] ) )
+            : '';
         if ( $aid <= 0 || ! wp_verify_nonce( $nonce, self::NONCE_ACTION . '_' . $aid ) ) {
             wp_die( 'invalid', 'invalid', [ 'response' => 403 ] );
         }
@@ -245,7 +252,7 @@ class Tempaloo_WebP_Async_Upload {
         list( $ok, $reason ) = Tempaloo_WebP_Converter::should_run_for_upload( $aid, $s );
         if ( ! $ok ) {
             self::mark_done( $aid );
-            wp_die( 'skipped:' . $reason, '', [ 'response' => 200 ] );
+            wp_die( esc_html( 'skipped:' . $reason ), '', [ 'response' => 200 ] );
         }
         if ( ! empty( Tempaloo_WebP_Plugin::get_conversion_meta( $aid ) ) ) {
             self::mark_done( $aid );
@@ -268,7 +275,8 @@ class Tempaloo_WebP_Async_Upload {
         }
 
         self::mark_done( $aid );
-        wp_die( $result['converted'] > 0 ? 'ok' : 'failed:' . ( $result['error_code'] ?? 'unknown' ), '', [ 'response' => 200 ] );
+        $status = $result['converted'] > 0 ? 'ok' : 'failed:' . ( $result['error_code'] ?? 'unknown' );
+        wp_die( esc_html( $status ), '', [ 'response' => 200 ] );
     }
 
     /**

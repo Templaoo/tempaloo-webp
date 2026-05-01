@@ -227,17 +227,22 @@ class Tempaloo_WebP_Converter {
             $temp = $target . '.tmp';
             $bytes_written = ( false === $binary ) ? false : @file_put_contents( $temp, $binary );
             if ( false === $bytes_written || $bytes_written === 0 ) {
-                @unlink( $temp ); // best-effort cleanup if we wrote 0 bytes
+                wp_delete_file( $temp ); // best-effort cleanup if we wrote 0 bytes
                 $failed++;
                 continue;
             }
-            // Atomic rename. Falls back to copy+unlink if rename across
-            // filesystem boundaries fails (e.g., uploads on a separate
-            // mount on some hosts).
+            // Atomic rename. WP_Filesystem::move() does NOT guarantee
+            // atomicity across all FS backends — direct rename() is the
+            // ONLY way to make sure scanners can never see a half-written
+            // .webp at the final path. This is the entire point of the
+            // temp+rename pattern (Smush uses identical code). Falls back
+            // to copy+delete when rename crosses a filesystem boundary
+            // (e.g., uploads on a separate mount on some hosts).
+            // phpcs:ignore WordPress.WP.AlternativeFunctions.rename_rename
             $renamed = @rename( $temp, $target );
             if ( ! $renamed ) {
                 $copied = @copy( $temp, $target );
-                @unlink( $temp );
+                wp_delete_file( $temp );
                 if ( ! $copied ) {
                     $failed++;
                     continue;

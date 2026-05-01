@@ -67,18 +67,23 @@ class Tempaloo_WebP_REST {
         nocache_headers();
 
         // Defence-in-depth: every common page-cache plugin checks
-        // these constants in its should-cache decision. Defining them
-        // here is a no-op when the constants don't exist; on hosts
-        // that DO check them (LiteSpeed, WP Rocket, W3TC, WP Super
-        // Cache, Hummingbird, Hostinger LSCache stack), they
-        // immediately bail out of caching this request.
+        // these UNIVERSAL constants in its should-cache decision. They
+        // are public-API names defined by the WP cache ecosystem (not
+        // by us), so they can't be prefixed with tempaloo_webp_*. The
+        // phpcs:ignore lines below silence PrefixAllGlobals for these
+        // intentional cross-plugin contracts.
+        // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound
         if ( ! defined( 'DONOTCACHEPAGE' ) )    define( 'DONOTCACHEPAGE',    true );
+        // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound
         if ( ! defined( 'DONOTCACHEOBJECT' ) )  define( 'DONOTCACHEOBJECT',  true );
+        // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound
         if ( ! defined( 'DONOTCACHEDB' ) )      define( 'DONOTCACHEDB',      true );
 
         // Explicit LiteSpeed Cache opt-out — fires on every request,
         // LiteSpeed is hooked on this action and will skip the response.
-        // No-op on sites without LSCache.
+        // No-op on sites without LSCache. Hook name belongs to
+        // LiteSpeed's public API, not ours.
+        // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
         do_action( 'litespeed_control_set_nocache', 'tempaloo-webp REST endpoint — per-user data' );
 
         return $result;

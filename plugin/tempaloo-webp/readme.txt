@@ -1,8 +1,8 @@
-=== Tempaloo WebP – Image Optimizer & AVIF Converter ===
+=== Tempaloo WebP ===
 Contributors: tempaloo
 Tags: webp, avif, image-optimization, images, performance
 Requires at least: 6.0
-Tested up to: 6.8
+Tested up to: 6.9
 Requires PHP: 7.4
 Stable tag: 1.0.0
 License: GPLv2 or later
