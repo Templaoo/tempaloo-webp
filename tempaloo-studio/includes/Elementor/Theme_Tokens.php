@@ -179,12 +179,8 @@ final class Theme_Tokens {
             $decls .= '--e-global-typography-' . $key . '-font-family:var(' . $var . ');';
         }
 
-        // Sensible default sizes / weights / line-heights so authors
-        // don't have to set them manually for the bridge to look good.
-        // These can be overridden in Site Settings → Design System
-        // (those values land in :root via Elementor's kit CSS at lower
-        // priority and lose to our :root here — but the user can still
-        // opt out of the whole bridge via the filter above).
+        // Sensible default weights / line-heights so authors don't
+        // have to set them manually for the bridge to look good.
         $decls .= '--e-global-typography-primary-font-weight:600;';
         $decls .= '--e-global-typography-primary-line-height:1.15;';
         $decls .= '--e-global-typography-secondary-font-weight:500;';
@@ -195,7 +191,25 @@ final class Theme_Tokens {
         $decls .= '--e-global-typography-accent-line-height:1.45;';
 
         $body_class = 'body.tempaloo-studio-' . $slug;
-        $css  = ':root{' . $decls . '}';
+
+        // CRITICAL — emit the var redirection on `body.tempaloo-studio-{slug}`
+        // and NOT on `:root`. Elementor compiles each Active Kit's CSS
+        // under `body.elementor-kit-{ID}{ ... }` (e.g. `.elementor-kit-5`),
+        // which means the kit's `--e-global-color-primary` lives on the
+        // <body> element. CSS-variable inheritance walks UP the DOM and
+        // takes the value from the NEAREST ancestor that defines it —
+        // `<body>` is closer to widgets than `<html>`, so a `:root` (html)
+        // definition is silently overridden by the kit's body-level one
+        // for every descendant.
+        //
+        // Putting our redirection on the SAME element (the body) at the
+        // same specificity (0,0,1,1) wins by source order — our <style>
+        // tag is at wp_head priority 100, after Elementor's kit stylesheet
+        // (which loads via wp_print_styles around priority 8).
+        //
+        // Keep a `:root` copy too — harmless, and it covers the rare
+        // case where a kit puts vars on html instead of body.
+        $css  = ':root,' . $body_class . '{' . $decls . '}';
 
         // Belt-and-suspenders: also force the font-family on native
         // Elementor widgets that DON'T use Global Typography (their
