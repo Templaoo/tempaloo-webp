@@ -203,6 +203,14 @@ export function FloatingPanel() {
   const [bindToken,     setBindToken]     = useState<string>('');
   const [bindProperty,  setBindProperty]  = useState<string>('background');
 
+  // Snapshot of bindings at last "save acknowledgement". Used by the
+  // dirty calc so the footer Save button lights up when the user
+  // creates / removes a binding, even though bindings are auto-persisted
+  // to localStorage. Without this, Apply Token had no UI feedback in
+  // the Save area and users thought "nothing was saved".
+  const bindingsSnapshotRef = useRef<string>(JSON.stringify(readStored<Binding[]>(STORAGE_BINDINGS, [])));
+  const [, forceBindingsTick] = useState(0); // re-render trigger for snapshot updates
+
   // Save / hint
   const [saving,      setSaving]      = useState(false);
   const [hint,        setHint]        = useState<string>('');
@@ -826,9 +834,20 @@ export function FloatingPanel() {
       // History snapshot — saved successfully, mark this point so
       // undo/redo doesn't cross over saved boundaries silently.
       historyMark();
+      // Bindings are auto-persisted to localStorage on every change,
+      // but we update the in-memory snapshot here so the dirty count
+      // resets to 0 in the UI and the Save button shows "✓ Saved".
+      bindingsSnapshotRef.current = JSON.stringify(bindings);
+      forceBindingsTick((t) => t + 1);
       flog('save: ok');
       setSaveSuccess(Date.now());
-      setHintFlash(`Saved ✓ — ${Object.keys(deltaL).length + Object.keys(deltaD).length} value(s) persisted`, 2800);
+      const tokenCount  = Object.keys(deltaL).length + Object.keys(deltaD).length;
+      const bindCount   = dirty.bindings;
+      const summary     = [
+        tokenCount > 0 ? `${tokenCount} token value(s)` : null,
+        bindCount  > 0 ? `${bindCount} binding(s)`      : null,
+      ].filter(Boolean).join(' + ') || 'state';
+      setHintFlash(`Saved ✓ — ${summary} persisted`, 2800);
     } catch (e) {
       fwarn('save: failed', e);
       setHintFlash(`Save failed: ${(e as Error).message}`, 5000);
@@ -846,22 +865,35 @@ export function FloatingPanel() {
   // edits again. Previously we compared vs template defaults forever,
   // so the "X unsaved" badge stayed lit even immediately after save.
   const dirty = useMemo(() => {
-    if (!tpl) return { light: 0, dark: 0, total: 0 };
+    if (!tpl) return { light: 0, dark: 0, bindings: 0, total: 0 };
     const slug    = state?.active_slug ?? '';
     const savedL  = state?.overrides?.[slug]?.light ?? {};
     const savedD  = state?.overrides?.[slug]?.dark  ?? {};
     const effL    = { ...(tpl.tokens?.light ?? {}), ...savedL };
     const effD    = { ...(tpl.tokens?.dark  ?? {}), ...savedD };
     let l = 0, d = 0;
-    // Edits + new keys that don't match saved state.
     Object.keys(drafts.light).forEach((k) => { if (drafts.light[k] !== effL[k]) l++; });
     Object.keys(drafts.dark).forEach((k)  => { if (drafts.dark[k]  !== effD[k]) d++; });
-    // Deletions — keys that EXIST in saved state but were removed from
-    // drafts (custom token deletion case). Each missing key is "dirty".
     Object.keys(savedL).forEach((k) => { if (drafts.light[k] === undefined) l++; });
     Object.keys(savedD).forEach((k) => { if (drafts.dark[k]  === undefined) d++; });
-    return { light: l, dark: d, total: l + d };
-  }, [drafts, tpl, state]);
+    // Bindings dirty — count number of (added + removed + modified)
+    // bindings since last save acknowledgement.
+    const currentSig  = JSON.stringify(bindings);
+    const snapshotSig = bindingsSnapshotRef.current;
+    let bindingsDelta = 0;
+    if (currentSig !== snapshotSig) {
+      try {
+        const snap = JSON.parse(snapshotSig) as Binding[];
+        const snapMap: Record<string, string> = {};
+        snap.forEach((b) => { snapMap[b.id] = JSON.stringify(b); });
+        const curMap: Record<string, string>  = {};
+        bindings.forEach((b) => { curMap[b.id] = JSON.stringify(b); });
+        Object.keys(curMap).forEach((id) => { if (snapMap[id] !== curMap[id]) bindingsDelta++; });
+        Object.keys(snapMap).forEach((id) => { if (curMap[id] === undefined) bindingsDelta++; });
+      } catch { bindingsDelta = 1; }
+    }
+    return { light: l, dark: d, bindings: bindingsDelta, total: l + d + bindingsDelta };
+  }, [drafts, tpl, state, bindings]);
 
   /* ── Token grouping for the active mode ──────────────────── */
 

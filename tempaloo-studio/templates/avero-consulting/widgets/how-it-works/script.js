@@ -100,6 +100,15 @@
             return;
         }
 
+        // Pairs (timeline, ScrollTrigger) so we can sync each timeline
+        // to its trigger's initial progress AFTER refresh. Without this,
+        // a page reload at the bottom of the page leaves all per-item
+        // timelines at progress=0 (hidden) while ScrollTrigger reports
+        // the user is past end → onEnterBack only fires once the user
+        // scrolls UP across "end", but at that moment items are HIDDEN
+        // (timeline never played). The user sees nothing reveal.
+        var pairs = [];
+
         /* ── Build everything inside a gsap.context() so revert()
          *    cleans the slate atomically on next init. */
         var ctx = gsap.context(function () {
@@ -172,7 +181,7 @@
                 //   - refreshPriority: idx → guarantees top-to-bottom
                 //     refresh order so item 1's geometry is computed
                 //     against an already-finalized item 0.
-                ST.create({
+                var st = ST.create({
                     trigger:             item,
                     start:               'top 85%',
                     invalidateOnRefresh: true,
@@ -181,6 +190,7 @@
                     onEnterBack:         function () { dlog('item ' + idx + ' onEnterBack'); tl.play(); },
                     onLeaveBack:         function () { dlog('item ' + idx + ' onLeaveBack'); tl.reverse(); },
                 });
+                pairs.push({ tl: tl, st: st, idx: idx });
             });
 
             /* PROGRESS LINE — scrub-tied to the whole timeline
@@ -221,10 +231,52 @@
          * ScrollTrigger.refresh() is debounced internally (200ms)
          * so calling it many times back-to-back is cheap.
          */
+        // After every refresh, sync each per-item timeline to the
+        // CURRENT trigger progress. This is the fix for "page reloaded
+        // at the bottom — animation never fires when scrolling up":
+        //
+        //   Without sync: timeline stays at progress=0 (hidden) even
+        //   though the user is past end. Scrolling UP across `end` is
+        //   supposed to fire onEnterBack which calls tl.play() — but
+        //   ScrollTrigger sometimes misses that boundary on the first
+        //   user-initiated scroll after browser scroll-restoration.
+        //   Even when it does fire, the user briefly sees a "snap"
+        //   from hidden to revealed which feels wrong.
+        //
+        //   With sync: at refresh time, if the trigger reports the
+        //   user is PAST the start (we're scrolled below the item),
+        //   we jump the timeline to progress(1) — items are visible
+        //   from frame 1. Scrolling UP past start → onLeaveBack
+        //   fires normally → tl.reverse() animates them out as
+        //   expected. Scrolling DOWN past start again → onEnter →
+        //   tl.play() animates them back in.
+        function syncPairs(reason) {
+            pairs.forEach(function (p) {
+                try {
+                    var stProgress = (typeof p.st.progress === 'function') ? p.st.progress() : 0;
+                    // Threshold 0.01 — anything > 0 means user has scrolled
+                    // past start. Below that, treat as "before start" and
+                    // keep the timeline at its initial state.
+                    if (stProgress > 0.01) {
+                        if (p.tl.progress() < 0.99) {
+                            p.tl.progress(1).pause();
+                            dlog('sync item ' + p.idx + ': st.progress=' + stProgress.toFixed(2) + ' → tl.progress(1) [' + reason + ']');
+                        }
+                    } else {
+                        if (p.tl.progress() > 0.01) {
+                            p.tl.progress(0).pause();
+                            dlog('sync item ' + p.idx + ': st.progress=0 → tl.progress(0) [' + reason + ']');
+                        }
+                    }
+                } catch (e) { dwarn('sync item ' + p.idx + ' threw', e); }
+            });
+        }
+
         var doRefresh = function (why) {
             try {
                 ST.refresh();
                 dlog('refresh:', why, '— total triggers on page:', ST.getAll().length);
+                syncPairs(why);
             } catch (e) { dwarn('refresh threw', e); }
         };
 
