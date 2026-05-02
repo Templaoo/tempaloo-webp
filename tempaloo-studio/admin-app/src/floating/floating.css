@@ -23,6 +23,43 @@
   cursor: pointer;
 }
 
+/* ── Theme-isolation guard (low-specificity) ───────────────
+ *
+ * The active WP theme's `button:hover { background: ... }` rules
+ * can repaint our buttons invisible. We can't use a high-specificity
+ * reset (e.g. `#root button { all: revert }`) — that wins over our
+ * own `.tsa-fp__btn` class rules and blanks the entire panel.
+ *
+ * Trick: wrap the root in `:where()` so the selector contributes
+ * ZERO specificity. The compound becomes just `button` (0,0,0,1) /
+ * `input` (0,0,0,1), which our class rules (0,0,1,0) still beat.
+ * The neutral defaults below only apply to UNCLASSED descendants
+ * (none in our markup) or as a baseline below the cascade for
+ * classed elements that don't override the property themselves. */
+:where(#tempaloo-studio-floating-root) button,
+:where(#tempaloo-studio-floating-root) input,
+:where(#tempaloo-studio-floating-root) select,
+:where(#tempaloo-studio-floating-root) textarea {
+  background: transparent;
+  color: inherit;
+  border: 1px solid transparent;
+  box-shadow: none;
+  text-decoration: none;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  margin: 0;
+}
+:where(#tempaloo-studio-floating-root) button:hover,
+:where(#tempaloo-studio-floating-root) button:focus,
+:where(#tempaloo-studio-floating-root) button:active {
+  /* Neutralize theme hover only — our class hovers (.tsa-fp__btn:hover
+   * etc.) have higher specificity and override these. */
+  background: transparent;
+  color: inherit;
+  outline: none;
+}
+
 /* ── Toggle button (collapsed) ─────────────────────────── */
 
 .tsa-fp-toggle {
@@ -42,6 +79,15 @@
   transition: transform 200ms ease, background 200ms ease;
   z-index: 2147483646;
   padding: 0;
+  cursor: pointer;
+}
+/* Pill variant — labelled "Colors" so first-time users see what it is. */
+.tsa-fp-toggle--pill {
+  width: auto;
+  height: 38px;
+  padding: 0 16px 0 12px;
+  border-radius: 999px;
+  gap: 6px;
 }
 .tsa-fp-toggle:hover {
   transform: translateY(-2px) scale(1.04);
@@ -53,11 +99,18 @@
   align-items: center;
   justify-content: center;
   color: var(--tsa-accent);
+  gap: 8px;
+}
+.tsa-fp-toggle__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tsa-text);
+  letter-spacing: 0.01em;
 }
 .tsa-fp-toggle__badge {
   position: absolute;
-  top: -16px;
-  right: -16px;
+  top: -10px;
+  right: -10px;
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
@@ -69,6 +122,23 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Header close (X) button — bright yellow X on transparent so it's
+ * always visible against the dark header. Hover paints the whole
+ * button red with a white X to signal destructive intent.
+ * (Earlier attempts used a yellow background tint, but some WP themes
+ * render `color-mix()` differently or override the bg outright,
+ * which made the X disappear against a near-yellow background.) */
+.tsa-fp__icon--close {
+  color: #facc15;
+  background: transparent;
+  border: 1px solid #facc15;
+}
+.tsa-fp__icon--close:hover {
+  color: #ffffff;
+  background: #ef4444;
+  border-color: #ef4444;
 }
 
 /* ── Panel ─────────────────────────────────────────────── */
@@ -446,6 +516,490 @@
   z-index: 1;
 }
 .tsa-fp__resize:hover { opacity: 1; }
+
+/* ── Dual-mode row — light + dark side-by-side ─────────── */
+
+.tsa-fp__row--dual {
+  display: grid;
+  grid-template-columns: minmax(72px, 1fr) 1.4fr 14px 1.4fr;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--tsa-border);
+}
+.tsa-fp__row--dual:last-child { border-bottom: 0; }
+.tsa-fp__row--dual.is-synced {
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--tsa-accent) 6%, transparent), transparent);
+}
+.tsa-fp__name--dual {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--tsa-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tsa-fp__dual-side {
+  display: grid;
+  grid-template-columns: 26px 1fr 22px;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.tsa-fp__dual-side--dark {
+  /* visual hint = dark side has a slightly darker swatch background */
+}
+.tsa-fp__swatch--dual {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--tsa-border-strong);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.tsa-fp__dual-icon {
+  position: absolute;
+  bottom: -3px;
+  right: -3px;
+  font-size: 9px;
+  background: var(--tsa-bg-strong);
+  color: var(--tsa-text-muted);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  pointer-events: none;
+}
+.tsa-fp__input--dual {
+  font-family: var(--tsa-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  padding: 4px 6px;
+  min-width: 0;
+  width: 100%;
+  background: var(--tsa-bg-soft);
+  border: 1px solid var(--tsa-border);
+  border-radius: 4px;
+  color: var(--tsa-text);
+}
+.tsa-fp__input--dual:focus {
+  outline: none;
+  border-color: var(--tsa-accent);
+  background: var(--tsa-bg);
+}
+.tsa-fp__dual-copy {
+  width: 22px;
+  height: 22px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--tsa-text-muted);
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.tsa-fp__dual-copy:hover {
+  background: var(--tsa-bg);
+  color: var(--tsa-accent);
+  border-color: var(--tsa-border-strong);
+}
+.tsa-fp__dual-link {
+  font-size: 13px;
+  color: var(--tsa-text-muted);
+  text-align: center;
+  user-select: none;
+}
+.tsa-fp__dual-link.is-synced {
+  color: var(--tsa-accent);
+  font-weight: 700;
+}
+
+/* ── Add-color inline form ─────────────────────────────── */
+
+.tsa-fp__addform {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--tsa-border);
+  background: color-mix(in srgb, var(--tsa-accent) 5%, var(--tsa-bg-soft));
+  flex-shrink: 0;
+}
+.tsa-fp__addform-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tsa-fp__addform-prefix {
+  font-family: var(--tsa-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--tsa-text-muted);
+  white-space: nowrap;
+  user-select: none;
+}
+.tsa-fp__addform-side {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.tsa-fp__addform-side > span {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tsa-text-muted);
+  width: 50px;
+  flex-shrink: 0;
+}
+.tsa-fp__addform-side > input[type="color"] {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--tsa-border-strong);
+  border-radius: 5px;
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.tsa-fp__addform-side > .tsa-fp__input {
+  font-family: var(--tsa-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  flex: 1;
+  min-width: 0;
+}
+.tsa-fp__addform-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* ── Bindings — element ↔ token mappings ──────────────── */
+
+.tsa-fp__bindform {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--tsa-border);
+  background: color-mix(in srgb, #818cf8 6%, var(--tsa-bg-soft));
+  flex-shrink: 0;
+}
+.tsa-fp__bindform-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tsa-fp__bindform-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tsa-text-muted);
+  width: 60px;
+  flex-shrink: 0;
+}
+.tsa-fp__bindform-selector {
+  font-family: var(--tsa-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--tsa-accent);
+  padding: 2px 6px;
+  background: var(--tsa-bg);
+  border-radius: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.tsa-fp__select {
+  flex: 1;
+  font-family: inherit;
+  font-size: 12px;
+  padding: 4px 6px;
+  background: var(--tsa-bg-soft);
+  border: 1px solid var(--tsa-border);
+  border-radius: 4px;
+  color: var(--tsa-text);
+}
+.tsa-fp__bindform-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.tsa-fp__bindings {
+  border-bottom: 1px solid var(--tsa-border);
+  background: var(--tsa-bg-soft);
+  flex-shrink: 0;
+  max-height: 140px;
+  overflow-y: auto;
+}
+.tsa-fp__bindings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tsa-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.tsa-fp__bindings-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.tsa-fp__binding {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-top: 1px solid var(--tsa-border);
+}
+.tsa-fp__binding-label {
+  flex: 1;
+  font-size: 11px;
+  color: var(--tsa-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tsa-fp__binding-label strong {
+  color: var(--tsa-accent);
+}
+.tsa-fp__btn--small {
+  font-size: 11px;
+  padding: 3px 8px;
+}
+
+/* Inspect banner — already exists; ensure flex layout for the new
+ * "Apply token" button. */
+.tsa-fp__inspect-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * THEME-ISOLATION OVERRIDES (must stay last in the file)
+ *
+ * The active WordPress theme can ship rules like
+ *   `.elementor-widget button`         (0,0,2,0)
+ *   `.entry-content button`            (0,0,1,1)
+ *   `body button:hover`                (0,0,1,2)
+ * which beat our plain `.tsa-fp__btn` (0,0,1,0). Result:
+ * theme paints our Discard button hot pink, hides the close X,
+ * etc. (the user's screenshot).
+ *
+ * Fix: re-declare every visual property with the panel's ID
+ * prefix (#tempaloo-studio-floating-root) added. The compound
+ * selector becomes (0,1,1,0) — beats any class-only theme rule
+ * without needing !important. Same approach the avero template
+ * relies on through its scoped `[class^="tw-avero-"]` patterns.
+ * ═══════════════════════════════════════════════════════════ */
+
+#tempaloo-studio-floating-root .tsa-fp__btn {
+  background: var(--tsa-bg);
+  color: var(--tsa-text-soft);
+  border: 1px solid var(--tsa-border);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 500;
+  text-shadow: none;
+  text-transform: none;
+  letter-spacing: normal;
+  box-shadow: none;
+}
+#tempaloo-studio-floating-root .tsa-fp__btn:hover:not(:disabled),
+#tempaloo-studio-floating-root .tsa-fp__btn:focus:not(:disabled) {
+  background: var(--tsa-bg-soft);
+  color: var(--tsa-text);
+  border-color: var(--tsa-border-strong);
+  outline: none;
+  box-shadow: none;
+}
+#tempaloo-studio-floating-root .tsa-fp__btn.is-active {
+  background: var(--tsa-accent-soft);
+  color: var(--tsa-accent);
+  border-color: var(--tsa-accent);
+}
+#tempaloo-studio-floating-root .tsa-fp__btn--primary {
+  background: var(--tsa-accent);
+  color: var(--tsa-accent-text);
+  border-color: var(--tsa-accent);
+}
+#tempaloo-studio-floating-root .tsa-fp__btn--primary:hover:not(:disabled) {
+  background: var(--tsa-accent-hover);
+  color: var(--tsa-accent-text);
+  border-color: var(--tsa-accent-hover);
+}
+#tempaloo-studio-floating-root .tsa-fp__btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--tsa-text-muted);
+}
+#tempaloo-studio-floating-root .tsa-fp__btn--ghost:hover:not(:disabled) {
+  background: var(--tsa-bg-soft);
+  color: var(--tsa-text);
+  border-color: var(--tsa-border);
+}
+
+/* Header icon buttons — !important on every visual property because
+ * some WP themes ship `button { color: !important }` rules that beat
+ * even (0,1,1,0) specificity. !important is the nuclear option but
+ * it's the only way to guarantee these stay visible against any
+ * theme that user might have active. */
+#tempaloo-studio-floating-root .tsa-fp__icon {
+  background: transparent !important;
+  color: #e5e7eb !important;          /* near-white — visible on any header bg */
+  border: 1px solid transparent !important;
+  text-shadow: none !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  display: inline-flex !important;
+  width: 26px !important;
+  height: 26px !important;
+  font-size: 16px !important;          /* bumped so unicode glyphs (◰ ❐) are clearly visible */
+  font-family: inherit !important;
+  line-height: 1 !important;
+  letter-spacing: normal !important;
+  text-transform: none !important;
+  padding: 0 !important;
+}
+#tempaloo-studio-floating-root .tsa-fp__icon:hover,
+#tempaloo-studio-floating-root .tsa-fp__icon:focus {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  outline: none !important;
+}
+#tempaloo-studio-floating-root .tsa-fp__icon--close {
+  background: transparent !important;
+  color: #facc15 !important;
+  border: 1px solid #facc15 !important;
+}
+#tempaloo-studio-floating-root .tsa-fp__icon--close:hover,
+#tempaloo-studio-floating-root .tsa-fp__icon--close:focus {
+  background: #ef4444 !important;
+  color: #ffffff !important;
+  border-color: #ef4444 !important;
+}
+
+/* SVG stroke fix — themes often re-skin `button svg` / `svg path` and
+ * blank out our `stroke="currentColor"` icons. Force stroke + fill
+ * on the SVG and its paths with high specificity so the X (and any
+ * other inline-SVG icon) always renders in its intended color. */
+#tempaloo-studio-floating-root .tsa-fp__icon svg,
+#tempaloo-studio-floating-root .tsa-fp__btn svg,
+#tempaloo-studio-floating-root .tsa-fp-toggle svg {
+  fill: none;
+  stroke: currentColor;
+  color: inherit;
+}
+#tempaloo-studio-floating-root .tsa-fp__icon svg path,
+#tempaloo-studio-floating-root .tsa-fp__icon svg circle,
+#tempaloo-studio-floating-root .tsa-fp__btn svg path,
+#tempaloo-studio-floating-root .tsa-fp__btn svg circle,
+#tempaloo-studio-floating-root .tsa-fp-toggle svg path,
+#tempaloo-studio-floating-root .tsa-fp-toggle svg circle {
+  stroke: currentColor;
+  fill: none;
+}
+#tempaloo-studio-floating-root .tsa-fp__grip svg circle {
+  /* Grip dots use fill="currentColor", not stroke. Restore that. */
+  fill: currentColor;
+  stroke: none;
+}
+#tempaloo-studio-floating-root .tsa-fp__icon--close svg,
+#tempaloo-studio-floating-root .tsa-fp__icon--close svg path {
+  stroke: #facc15;
+}
+#tempaloo-studio-floating-root .tsa-fp__icon--close:hover svg,
+#tempaloo-studio-floating-root .tsa-fp__icon--close:hover svg path {
+  stroke: #ffffff;
+}
+
+#tempaloo-studio-floating-root .tsa-fp__modebtn {
+  background: transparent;
+  color: var(--tsa-text-muted);
+  border: 0;
+  box-shadow: none;
+  text-shadow: none;
+}
+#tempaloo-studio-floating-root .tsa-fp__modebtn.is-active {
+  background: var(--tsa-bg-strong);
+  color: var(--tsa-text);
+}
+
+#tempaloo-studio-floating-root .tsa-fp__input,
+#tempaloo-studio-floating-root .tsa-fp__select {
+  background: var(--tsa-bg-soft);
+  color: var(--tsa-text);
+  border: 1px solid var(--tsa-border);
+  box-shadow: none;
+  text-shadow: none;
+}
+#tempaloo-studio-floating-root .tsa-fp__input:focus,
+#tempaloo-studio-floating-root .tsa-fp__select:focus {
+  background: var(--tsa-bg);
+  border-color: var(--tsa-accent);
+  outline: none;
+  box-shadow: none;
+}
+
+/* ── Custom-token row badge + delete button ────────────── */
+
+#tempaloo-studio-floating-root .tsa-fp__row--custom {
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--tsa-accent) 5%, transparent),
+    transparent 60%);
+}
+#tempaloo-studio-floating-root .tsa-fp__custom-badge {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--tsa-accent);
+  margin-right: 6px;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+#tempaloo-studio-floating-root .tsa-fp__row-delete {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--tsa-text-muted);
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+#tempaloo-studio-floating-root .tsa-fp__row-delete:hover {
+  background: #ef4444;
+  color: #ffffff;
+  border-color: #ef4444;
+}
+#tempaloo-studio-floating-root .tsa-fp__row-delete--inline {
+  width: 18px;
+  height: 18px;
+  font-size: 10px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
 
 /* Mobile fallback */
 @media (max-width: 767px) {

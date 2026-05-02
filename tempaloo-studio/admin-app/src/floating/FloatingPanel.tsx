@@ -2,16 +2,59 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AppState, TemplateFull } from '../types';
 import { api } from '../api';
 
-type Mode = 'light' | 'dark';
+type Mode     = 'light' | 'dark';
+type ViewMode = Mode | 'dual';   // 'dual' = edit both modes side-by-side
 
 const HIDDEN_BELOW   = 768;
 const STORAGE_POS    = 'tempaloo-fp-pos';
 const STORAGE_SIZE   = 'tempaloo-fp-size';
+const STORAGE_OPEN    = 'tempaloo-fp-open';
 const STORAGE_OPEN_CATS = 'tempaloo-fp-open-cats';
-const STYLE_ID       = 'tempaloo-studio-floating-preview';
+const STYLE_ID         = 'tempaloo-studio-floating-preview';
+const STYLE_ID_BIND    = 'tempaloo-studio-floating-bindings';
+const STORAGE_BINDINGS = 'tempaloo-fp-bindings';
+
+/** A binding rebinds an existing CSS property of an inspected element
+ *  to a different token (typically a custom one). It generates a CSS
+ *  rule that overrides the widget's rule and is injected into a
+ *  separate <style> tag at panel mount. */
+interface Binding {
+  id:       string;
+  selector: string;   // e.g. ".tw-avero-services__card"
+  property: string;   // "background" | "color" | "border-color" | ...
+  token:    string;   // e.g. "--tw-avero-brand-orange"
+  label:    string;   // human-friendly: "services · card"
+}
 
 const DEFAULT_SIZE = { w: 380, h: 620 };
 const MIN_SIZE     = { w: 320, h: 380 };
+
+/* ─── Logger — `?fp_debug=1` URL flag or localStorage(`fp_debug`)
+ *
+ * Logs every user action through the panel so we can diagnose UX
+ * complaints ("the color leaks across modes", "save did nothing",
+ * etc.) without screen-sharing. Activate via:
+ *   - URL: append ?fp_debug=1 (sticks for the session)
+ *   - DevTools: localStorage.setItem('fp_debug','1')
+ *   - Disable: ?fp_debug=0 OR localStorage.removeItem('fp_debug')
+ */
+const FP_DEBUG: boolean = (() => {
+  try {
+    const qs = location.search.match(/[?&]fp_debug=([^&]*)/);
+    if (qs) {
+      if (qs[1] === '1' || qs[1] === 'true')  { localStorage.setItem('fp_debug', '1'); return true; }
+      if (qs[1] === '0' || qs[1] === 'false') { localStorage.removeItem('fp_debug');   return false; }
+    }
+    return localStorage.getItem('fp_debug') === '1';
+  } catch { return false; }
+})();
+function flog(action: string, ...payload: unknown[]) {
+  if (!FP_DEBUG) return;
+  try { console.log('%c[FP]%c ' + action, 'color:#3fb2a2;font-weight:bold', 'color:inherit', ...payload); } catch {}
+}
+function fwarn(action: string, ...payload: unknown[]) {
+  try { console.warn('[FP] ' + action, ...payload); } catch {}
+}
 
 /* ─── Token categorization (colors only — Phase 3.0 scope) ────── */
 
@@ -43,13 +86,23 @@ function isColorValue(v: string): boolean {
 
 /* ─── Live preview via injected <style> — mode-scoped ──────────
  *
- * Inline style.setProperty on <html> applies GLOBALLY, ignoring
- * data-theme. So overriding --tw-avero-bg from the panel in light
- * mode would also win in dark mode → both modes show the same color.
+ * The CRITICAL bit: light overrides MUST use a selector that does
+ * NOT match in dark mode. `:root` and `[data-theme="dark"]` have
+ * the SAME specificity (0,0,1,0 — both = 1 pseudo/attr). When two
+ * rules tie on specificity, the LATER one in DOM order wins.
  *
- * The fix: inject a single <style id="…-floating-preview"> with
- * `:root{}` for light overrides and `[data-theme="dark"]{}` for
- * dark overrides. Cascade respects the mode swap.
+ * Theme_Tokens.php emits both :root and [data-theme="dark"]. Our
+ * preview <style> is appended AFTER it. So a naive `:root { ... }`
+ * here silently wins over the original `[data-theme="dark"] { ... }`
+ * in BOTH modes — exactly the leak the user reported (edit bg-strong
+ * in light, dark cards turn red too).
+ *
+ * Fix: scope light overrides to `:root:not([data-theme="dark"])`
+ * (specificity 0,0,2,0 — beats [data-theme="dark"] in light mode,
+ * doesn't match in dark mode at all). Dark overrides stay on the
+ * plain `[data-theme="dark"]` selector — they're later in source
+ * order than the original Theme_Tokens dark block, so they win on
+ * source order alone in dark mode.
  */
 function applyPreview(drafts: Record<Mode, Record<string, string>>, tpl: TemplateFull | null) {
   let el = document.getElementById(STYLE_ID) as HTMLStyleElement | null;
@@ -57,19 +110,23 @@ function applyPreview(drafts: Record<Mode, Record<string, string>>, tpl: Templat
     el = document.createElement('style');
     el.id = STYLE_ID;
     document.head.appendChild(el);
+    flog('applyPreview: created <style> tag');
   }
   const baseL = tpl?.tokens?.light ?? {};
   const baseD = tpl?.tokens?.dark  ?? {};
-  const lightDecls = Object.entries(drafts.light)
-    .filter(([k, v]) => k.startsWith('--tw-') && v !== baseL[k])
-    .map(([k, v]) => `${k}:${v}`).join(';');
-  const darkDecls = Object.entries(drafts.dark)
-    .filter(([k, v]) => k.startsWith('--tw-') && v !== baseD[k])
-    .map(([k, v]) => `${k}:${v}`).join(';');
+  const lightPairs = Object.entries(drafts.light)
+    .filter(([k, v]) => k.startsWith('--tw-') && v !== baseL[k]);
+  const darkPairs = Object.entries(drafts.dark)
+    .filter(([k, v]) => k.startsWith('--tw-') && v !== baseD[k]);
+  const lightDecls = lightPairs.map(([k, v]) => `${k}:${v}`).join(';');
+  const darkDecls  = darkPairs.map(([k, v]) => `${k}:${v}`).join(';');
   let css = '';
-  if (lightDecls) css += `:root{${lightDecls}}\n`;
+  // Light scope: matches when html has no data-theme OR data-theme is
+  // anything other than "dark" (so explicit data-theme="light" works).
+  if (lightDecls) css += `:root:not([data-theme="dark"]){${lightDecls}}\n`;
   if (darkDecls)  css += `[data-theme="dark"]{${darkDecls}}\n`;
   el.textContent = css;
+  flog('applyPreview: emitted', { lightCount: lightPairs.length, darkCount: darkPairs.length, bytes: css.length });
 }
 
 /* ─── Element role detection (for inspect tooltip) ────────────── */
@@ -115,12 +172,13 @@ export function FloatingPanel() {
   const [state,      setState]      = useState<AppState | null>(null);
   const [tpl,        setTpl]        = useState<TemplateFull | null>(null);
   const [drafts,     setDrafts]     = useState<Record<Mode, Record<string, string>>>({ light: {}, dark: {} });
-  const [activeMode, setActiveMode] = useState<Mode>('light');
+  const [activeMode, setActiveMode] = useState<ViewMode>('light');
   const [followPage, setFollowPage] = useState(true);
   const [tooSmall,   setTooSmall]   = useState(false);
 
-  // Panel UI state
-  const [open,       setOpen]       = useState(false);
+  // Panel UI state — `open` is persisted so the user's last choice
+  // survives a page refresh (default: open on first visit).
+  const [open,       setOpen]       = useState<boolean>(() => readStored<boolean>(STORAGE_OPEN, true));
   const [maximized,  setMaximized]  = useState(false);
   const [pos,        setPos]        = useState(() => readStored(STORAGE_POS, { x: -1, y: -1 }));
   const [size,       setSize]       = useState(() => readStored(STORAGE_SIZE, DEFAULT_SIZE));
@@ -130,6 +188,19 @@ export function FloatingPanel() {
   const [inspectMode,   setInspectMode]   = useState(false);
   const [inspectFilter, setInspectFilter] = useState<string[] | null>(null);
   const [inspectLabel,  setInspectLabel]  = useState<string>('');
+
+  // Add-token form state
+  const [addOpen,    setAddOpen]    = useState(false);
+  const [addName,    setAddName]    = useState('');
+  const [addLight,   setAddLight]   = useState('#ffffff');
+  const [addDark,    setAddDark]    = useState('#000000');
+
+  // Inspect target — captured at click time, used by the bindings UI
+  const [inspectTarget, setInspectTarget] = useState<{ selector: string; label: string } | null>(null);
+  const [bindings,      setBindings]      = useState<Binding[]>(() => readStored<Binding[]>(STORAGE_BINDINGS, []));
+  const [bindOpen,      setBindOpen]      = useState(false);
+  const [bindToken,     setBindToken]     = useState<string>('');
+  const [bindProperty,  setBindProperty]  = useState<string>('background');
 
   // Save / hint
   const [saving, setSaving] = useState(false);
@@ -143,18 +214,40 @@ export function FloatingPanel() {
     return () => window.removeEventListener('resize', check);
   }, []);
 
-  /* ── Sync with page data-theme (one-way unless user opts out) */
+  /* ── Sync with page data-theme (one-way unless user opts out)
+   *    NOTE: skip the sync when activeMode === 'dual' so that the
+   *    user can scroll through the page in either theme without the
+   *    dual-edit view collapsing back to a single-mode view. */
   useEffect(() => {
     const html = document.documentElement;
     const sync = () => {
       const t = html.getAttribute('data-theme');
-      if (followPage && (t === 'light' || t === 'dark')) setActiveMode(t);
+      if (followPage && (t === 'light' || t === 'dark')) {
+        setActiveMode((prev) => {
+          if (prev === 'dual') return prev;
+          if (prev !== t) flog('sync: html data-theme changed', { from: prev, to: t });
+          return t;
+        });
+      }
     };
     sync();
     const observer = new MutationObserver(sync);
     observer.observe(html, { attributes: true, attributeFilter: ['data-theme'] });
     return () => observer.disconnect();
   }, [followPage]);
+
+  /* ── Keyboard shortcut Ctrl/Cmd + Shift + C → toggle open ──── */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'C' || e.key === 'c')) {
+        e.preventDefault();
+        flog('shortcut: toggle open', { wasOpen: open });
+        setOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Boot data ─────────────────────────────────────────── */
   useEffect(() => {
@@ -180,10 +273,58 @@ export function FloatingPanel() {
   /* ── Live preview — re-inject <style> on every draft change */
   useEffect(() => { if (tpl) applyPreview(drafts, tpl); }, [drafts, tpl]);
 
+  /* ── Bindings preview — separate <style> tag so the rules survive
+   *    independent of token edits. Each binding emits one rule:
+   *      .selector { property: var(--token) !important; }
+   *    The !important is required to beat the widget's own rule for
+   *    that property (which has the same or higher specificity). */
+  useEffect(() => {
+    let el = document.getElementById(STYLE_ID_BIND) as HTMLStyleElement | null;
+    if (!el) {
+      el = document.createElement('style');
+      el.id = STYLE_ID_BIND;
+      document.head.appendChild(el);
+    }
+    el.textContent = bindings.map(
+      (b) => `${b.selector}{${b.property}:var(${b.token}) !important}`
+    ).join('\n');
+    writeStored(STORAGE_BINDINGS, bindings);
+    flog('bindings: applied', { count: bindings.length });
+  }, [bindings]);
+
   /* ── Persist UI state to localStorage ───────────────────── */
   useEffect(() => { writeStored(STORAGE_POS,  pos);  }, [pos]);
   useEffect(() => { writeStored(STORAGE_SIZE, size); }, [size]);
+  useEffect(() => { writeStored(STORAGE_OPEN, open); flog('panel: ' + (open ? 'opened' : 'closed')); }, [open]);
   useEffect(() => { writeStored(STORAGE_OPEN_CATS, Array.from(openCats)); }, [openCats]);
+
+  /* ── Debug API exposed on window — `window.tsaFP.dump()` etc.
+   *
+   * Lets us reproduce + diagnose user reports without screen-share:
+   * the user runs window.tsaFP.dump() in DevTools, copy-pastes the
+   * output, and we can see the entire panel state at that instant.
+   */
+  useEffect(() => {
+    const w = window as unknown as { tsaFP?: Record<string, unknown> };
+    w.tsaFP = {
+      dump:   () => ({ activeMode, followPage, drafts, dirty, inspectFilter, inspectLabel, open }),
+      drafts: () => drafts,
+      diff:   () => {
+        if (!tpl) return null;
+        const baseL = tpl.tokens?.light ?? {};
+        const baseD = tpl.tokens?.dark  ?? {};
+        const dl: Record<string, [string, string]> = {};
+        const dd: Record<string, [string, string]> = {};
+        Object.keys(drafts.light).forEach((k) => { if (drafts.light[k] !== baseL[k]) dl[k] = [baseL[k] ?? '', drafts.light[k]]; });
+        Object.keys(drafts.dark).forEach((k)  => { if (drafts.dark[k]  !== baseD[k]) dd[k] = [baseD[k] ?? '', drafts.dark[k]]; });
+        return { light: dl, dark: dd };
+      },
+      previewCss: () => document.getElementById(STYLE_ID)?.textContent ?? '',
+      htmlTheme:  () => document.documentElement.getAttribute('data-theme'),
+      enableDebug:  () => { localStorage.setItem('fp_debug', '1'); location.reload(); },
+      disableDebug: () => { localStorage.removeItem('fp_debug');   location.reload(); },
+    };
+  }, [activeMode, followPage, drafts, tpl, inspectFilter, inspectLabel, open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Drag (from header) ─────────────────────────────────── */
   const dragRef = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
@@ -235,18 +376,43 @@ export function FloatingPanel() {
 
   /* ── Edit / discard / save ─────────────────────────────── */
 
+  // Editable in 'light' / 'dark' single-mode. In 'dual' the row uses
+  // setValByMode directly (one input per mode), so this fallback only
+  // fires for legacy callers / single-mode tabs.
   function setVal(name: string, value: string) {
-    setDrafts((d) => ({ ...d, [activeMode]: { ...d[activeMode], [name]: value } }));
+    if (activeMode === 'dual') return; // dual rows call setValByMode
+    setValByMode(activeMode, name, value);
   }
 
-  function switchMode(next: Mode) {
+  function setValByMode(mode: Mode, name: string, value: string) {
+    setDrafts((d) => {
+      const prev = d[mode][name];
+      if (prev === value) return d;
+      flog('setVal', { mode, token: name, from: prev, to: value });
+      return { ...d, [mode]: { ...d[mode], [name]: value } };
+    });
+  }
+
+  function switchMode(next: ViewMode) {
+    flog('switchMode', { from: activeMode, to: next, followPage, willClearInspect: !!inspectFilter });
     setActiveMode(next);
-    if (followPage) document.documentElement.setAttribute('data-theme', next);
+    // Inspect filter is mode-specific (it was computed from one mode's
+    // computed colors). Keeping it across mode changes is misleading.
+    if (inspectFilter) {
+      setInspectFilter(null);
+      setInspectLabel('');
+      setHintFlash(`Switched to ${next} — inspect filter cleared (re-inspect to find this element's colors).`, 3500);
+    }
+    // Only flip page theme for single modes — dual leaves the page as-is.
+    if (followPage && (next === 'light' || next === 'dark')) {
+      document.documentElement.setAttribute('data-theme', next);
+    }
   }
 
   function resetMode(mode: Mode) {
     if (!tpl) return;
     if (!window.confirm(`Reset all ${mode} mode colors to template defaults? Unsaved drafts in ${mode} will be lost.`)) return;
+    flog('resetMode', { mode });
     setDrafts((d) => ({ ...d, [mode]: { ...(tpl.tokens?.[mode] ?? {}) } }));
     setHintFlash(`Reset ${mode} mode (drafts only — click Save to persist).`);
   }
@@ -254,6 +420,7 @@ export function FloatingPanel() {
   function resetAll() {
     if (!tpl) return;
     if (!window.confirm('Reset BOTH light and dark to template defaults? Unsaved drafts will be lost.')) return;
+    flog('resetAll');
     setDrafts({
       light: { ...(tpl.tokens?.light ?? {}) },
       dark:  { ...(tpl.tokens?.dark  ?? {}) },
@@ -263,12 +430,105 @@ export function FloatingPanel() {
 
   function discard() {
     if (!tpl || !state) return;
+    flog('discard');
     const o = state.overrides?.[state.active_slug ?? ''] ?? {};
     setDrafts({
       light: { ...(tpl.tokens?.light ?? {}), ...(o.light ?? {}) },
       dark:  { ...(tpl.tokens?.dark  ?? {}), ...(o.dark  ?? {}) },
     });
     setHintFlash('Draft discarded.');
+  }
+
+  /* ── Add a brand-new color token (light + dark in one go) ──
+   *
+   * Token name = the suffix the user types; we auto-prepend
+   * `--tw-{shortSlug}-` so the new var lives in the same namespace
+   * as the template. The full var is added to BOTH drafts.light
+   * and drafts.dark; saving will persist it as an override on the
+   * active template. The user can then reference it from any custom
+   * CSS / widget that consumes `var(--tw-{slug}-{newName})`. */
+  function shortSlug(): string {
+    const slug = state?.active_slug ?? '';
+    return slug.split('-')[0] || slug;
+  }
+
+  /* A token is "custom" when the active template doesn't declare it
+   * in either tokens.light or tokens.dark — i.e. the user added it
+   * via "+ Add color". Custom tokens get a delete button on their
+   * row. Built-in template tokens cannot be deleted (only reset). */
+  function isCustomToken(name: string): boolean {
+    if (!tpl) return false;
+    const inLight = (tpl.tokens?.light ?? {})[name] !== undefined;
+    const inDark  = (tpl.tokens?.dark  ?? {})[name] !== undefined;
+    return !inLight && !inDark;
+  }
+
+  function removeToken(name: string) {
+    if (!isCustomToken(name)) {
+      setHintFlash('Built-in tokens can only be reset, not deleted.', 3000);
+      return;
+    }
+    if (!window.confirm(`Delete custom token ${name}? This will also remove any binding using it.`)) return;
+    flog('removeToken', { name });
+    setDrafts((d) => {
+      const nextL = { ...d.light }; delete nextL[name];
+      const nextD = { ...d.dark  }; delete nextD[name];
+      return { light: nextL, dark: nextD };
+    });
+    // Drop any binding that references this token — otherwise it
+    // becomes a stale CSS rule pointing at a non-existent var.
+    setBindings((arr) => arr.filter((b) => b.token !== name));
+    setHintFlash(`Removed ${name} (Save to persist)`, 3500);
+  }
+  function applyBinding() {
+    if (!inspectTarget || !bindToken) return;
+    const id = `${inspectTarget.selector}__${bindProperty}`;
+    const next: Binding = {
+      id,
+      selector: inspectTarget.selector,
+      property: bindProperty,
+      token:    bindToken,
+      label:    inspectTarget.label,
+    };
+    flog('bindings: add', next);
+    setBindings((arr) => {
+      const without = arr.filter((b) => b.id !== id); // replace if same selector+property
+      return [...without, next];
+    });
+    setBindOpen(false);
+    setHintFlash(`Bound ${bindProperty} of ${inspectTarget.label} → ${bindToken.replace(/^--tw-[^-]+-/, '')}`, 4000);
+  }
+
+  function removeBinding(id: string) {
+    flog('bindings: remove', id);
+    setBindings((arr) => arr.filter((b) => b.id !== id));
+  }
+
+  function clearBindings() {
+    if (!bindings.length) return;
+    if (!window.confirm(`Remove all ${bindings.length} element-token binding(s)?`)) return;
+    flog('bindings: clear all');
+    setBindings([]);
+  }
+
+  function addToken() {
+    const raw = addName.trim().toLowerCase().replace(/^-+|-+$/g, '');
+    if (!raw) { setHintFlash('Name required.', 2200); return; }
+    if (!/^[a-z0-9-]+$/.test(raw)) { setHintFlash('Name: a-z 0-9 - only.', 2800); return; }
+    const fullName = `--tw-${shortSlug()}-${raw}`;
+    if (drafts.light[fullName] !== undefined || drafts.dark[fullName] !== undefined) {
+      setHintFlash(`Token "${fullName}" already exists.`, 3000);
+      return;
+    }
+    flog('addToken', { fullName, light: addLight, dark: addDark });
+    setDrafts((d) => ({
+      light: { ...d.light, [fullName]: addLight },
+      dark:  { ...d.dark,  [fullName]: addDark  },
+    }));
+    setOpenCats((prev) => new Set([...prev, categoryOf(fullName)]));
+    setAddOpen(false);
+    setAddName('');
+    setHintFlash(`Added ${fullName} (Save to persist)`, 3500);
   }
 
   function setHintFlash(msg: string, ms = 2400) {
@@ -286,11 +546,14 @@ export function FloatingPanel() {
       const deltaD: Record<string, string> = {};
       Object.keys(drafts.light).forEach((k) => { if (drafts.light[k] !== baseL[k]) deltaL[k] = drafts.light[k]; });
       Object.keys(drafts.dark).forEach((k)  => { if (drafts.dark[k]  !== baseD[k]) deltaD[k] = drafts.dark[k]; });
+      flog('save: posting', { slug: state.active_slug, lightCount: Object.keys(deltaL).length, darkCount: Object.keys(deltaD).length });
       let next = await api.saveTokens(state.active_slug, 'light', deltaL);
       next     = await api.saveTokens(state.active_slug, 'dark',  deltaD);
       setState(next);
+      flog('save: ok');
       setHintFlash('Saved ✓');
     } catch (e) {
+      fwarn('save: failed', e);
       setHintFlash(`Save failed: ${(e as Error).message}`, 5000);
     } finally {
       setSaving(false);
@@ -314,8 +577,18 @@ export function FloatingPanel() {
   const grouped = useMemo(() => {
     if (!tpl) return {} as Record<string, string[]>;
     const out: Record<string, string[]> = {};
-    Object.keys(drafts[activeMode])
-      .filter((k) => isColorValue(drafts[activeMode][k] || ''))
+    // Dual = union of all token names from light + dark (so a token
+    // declared only in dark still shows up). Single mode = just that mode.
+    const keys = activeMode === 'dual'
+      ? Array.from(new Set([...Object.keys(drafts.light), ...Object.keys(drafts.dark)]))
+      : Object.keys(drafts[activeMode]);
+    keys
+      .filter((k) => {
+        // A token is shown if EITHER mode has a color value for it.
+        const lv = drafts.light[k] || '';
+        const dv = drafts.dark[k]  || '';
+        return isColorValue(lv) || isColorValue(dv);
+      })
       .filter((k) => !inspectFilter || inspectFilter.includes(k))
       .sort()
       .forEach((k) => {
@@ -342,16 +615,17 @@ export function FloatingPanel() {
     return (
       <button
         type="button"
-        className="tsa-fp-toggle"
-        onClick={() => setOpen(true)}
-        title="Open color editor"
+        className="tsa-fp-toggle tsa-fp-toggle--pill"
+        onClick={() => { flog('toggle: open'); setOpen(true); }}
+        title="Open Tempaloo color editor (Ctrl+Shift+C)"
         aria-label="Open Tempaloo color editor"
       >
         <span className="tsa-fp-toggle__inner">
-          <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <circle cx="8" cy="8" r="6" />
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="8" cy="8" r="5.5" />
             <path d="M5 8a3 3 0 0 0 3 3M11 8a3 3 0 0 0-3-3" />
           </svg>
+          <span className="tsa-fp-toggle__label">Colors</span>
           {dirty.total > 0 && <span className="tsa-fp-toggle__badge">{dirty.total}</span>}
         </span>
       </button>
@@ -388,17 +662,29 @@ export function FloatingPanel() {
         </span>
         <span className="tsa-fp__title">{tpl.name}</span>
         {dirty.total > 0 && <span className="tsa-fp__dirty">● {dirty.total} unsaved</span>}
-        <button type="button" className="tsa-fp__icon" onClick={(e) => { e.stopPropagation(); setMaximized((v) => !v); }} title={maximized ? 'Restore' : 'Maximize'}>
+        <button
+          type="button"
+          className="tsa-fp__icon"
+          onClick={(e) => { e.stopPropagation(); flog('toggle: ' + (maximized ? 'restore' : 'maximize')); setMaximized((v) => !v); }}
+          title={maximized ? 'Restore' : 'Maximize'}
+          aria-label={maximized ? 'Restore size' : 'Maximize'}
+        >
           {maximized ? '❐' : '◰'}
         </button>
-        <button type="button" className="tsa-fp__icon" onClick={(e) => { e.stopPropagation(); setOpen(false); }} title="Minimize" aria-label="Minimize">
-          <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true">
-            <path d="M3 11h10" />
+        <button
+          type="button"
+          className="tsa-fp__icon tsa-fp__icon--close"
+          onClick={(e) => { e.stopPropagation(); flog('toggle: close'); setOpen(false); }}
+          title="Close panel (Ctrl+Shift+C to toggle, or click the Colors button to re-open)"
+          aria-label="Close panel"
+        >
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+            <path d="M4 4l8 8M12 4l-8 8" />
           </svg>
         </button>
       </header>
 
-      {/* ── Mode switcher row ────────────────────────────── */}
+      {/* ── Mode switcher row — Light · Dark · Dual ─────── */}
       <div className="tsa-fp__moderow">
         <div className="tsa-fp__modeswitch" role="tablist">
           <button
@@ -407,6 +693,7 @@ export function FloatingPanel() {
             aria-selected={activeMode === 'light'}
             className={'tsa-fp__modebtn' + (activeMode === 'light' ? ' is-active' : '')}
             onClick={() => switchMode('light')}
+            title="Edit light-mode colors only"
           >
             ☀ Light {dirty.light > 0 && <span className="tsa-fp__modebadge">{dirty.light}</span>}
           </button>
@@ -416,17 +703,36 @@ export function FloatingPanel() {
             aria-selected={activeMode === 'dark'}
             className={'tsa-fp__modebtn' + (activeMode === 'dark' ? ' is-active' : '')}
             onClick={() => switchMode('dark')}
+            title="Edit dark-mode colors only"
           >
             ☾ Dark {dirty.dark > 0 && <span className="tsa-fp__modebadge">{dirty.dark}</span>}
           </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeMode === 'dual'}
+            className={'tsa-fp__modebtn' + (activeMode === 'dual' ? ' is-active' : '')}
+            onClick={() => switchMode('dual')}
+            title="Edit BOTH light and dark side-by-side in the same row"
+          >
+            ⚌ Dual {dirty.total > 0 && <span className="tsa-fp__modebadge">{dirty.total}</span>}
+          </button>
         </div>
-        <label className="tsa-fp__follow" title="When on, switching modes also flips the page's data-theme so you see what you're editing.">
-          <input type="checkbox" checked={followPage} onChange={(e) => setFollowPage(e.target.checked)} />
+        <label
+          className="tsa-fp__follow"
+          title={activeMode === 'dual' ? 'Disabled in Dual mode — both modes are visible at once.' : "When on, switching modes also flips the page's data-theme so you see what you're editing."}
+        >
+          <input
+            type="checkbox"
+            checked={followPage}
+            disabled={activeMode === 'dual'}
+            onChange={(e) => setFollowPage(e.target.checked)}
+          />
           <span>Sync page</span>
         </label>
       </div>
 
-      {/* ── Toolbar: Inspect + Reset ──────────────────────── */}
+      {/* ── Toolbar: Inspect + Add + Reset ────────────────── */}
       <div className="tsa-fp__toolbar">
         <button
           type="button"
@@ -437,6 +743,14 @@ export function FloatingPanel() {
             <path d="M2 2h6v6H2z" /><path d="M8 8l6 6M11 14h3v-3" />
           </svg>
           {inspectMode ? 'Click any element…' : 'Inspect'}
+        </button>
+        <button
+          type="button"
+          className={'tsa-fp__btn' + (addOpen ? ' is-active' : '')}
+          onClick={() => setAddOpen((v) => !v)}
+          title="Add a new color token (light + dark)"
+        >
+          + Add color
         </button>
         {inspectFilter && (
           <button type="button" className="tsa-fp__btn" onClick={() => { setInspectFilter(null); setInspectLabel(''); }}>
@@ -451,26 +765,146 @@ export function FloatingPanel() {
         </div>
       </div>
 
+      {/* ── Add color form (collapsible) ─────────────────── */}
+      {addOpen && (
+        <div className="tsa-fp__addform">
+          <div className="tsa-fp__addform-row">
+            <span className="tsa-fp__addform-prefix">{`--tw-${shortSlug()}-`}</span>
+            <input
+              type="text"
+              className="tsa-fp__input"
+              value={addName}
+              onChange={(e) => setAddName(e.target.value)}
+              placeholder="my-color"
+              autoFocus
+              spellCheck={false}
+              onKeyDown={(e) => { if (e.key === 'Enter') addToken(); if (e.key === 'Escape') setAddOpen(false); }}
+            />
+          </div>
+          <div className="tsa-fp__addform-row">
+            <label className="tsa-fp__addform-side">
+              <span>☀ Light</span>
+              <input type="color" value={addLight.startsWith('#') ? addLight.slice(0,7) : '#ffffff'} onChange={(e) => setAddLight(e.target.value)} />
+              <input type="text" className="tsa-fp__input" value={addLight} onChange={(e) => setAddLight(e.target.value)} spellCheck={false} />
+            </label>
+            <label className="tsa-fp__addform-side">
+              <span>☾ Dark</span>
+              <input type="color" value={addDark.startsWith('#') ? addDark.slice(0,7) : '#000000'} onChange={(e) => setAddDark(e.target.value)} />
+              <input type="text" className="tsa-fp__input" value={addDark} onChange={(e) => setAddDark(e.target.value)} spellCheck={false} />
+            </label>
+          </div>
+          <div className="tsa-fp__addform-actions">
+            <button type="button" className="tsa-fp__btn" onClick={() => setAddOpen(false)}>Cancel</button>
+            <button type="button" className="tsa-fp__btn tsa-fp__btn--primary" onClick={addToken} disabled={!addName.trim()}>Add</button>
+          </div>
+        </div>
+      )}
+
       {inspectMode && (
         <InspectOverlay
-          tokens={drafts[activeMode]}
-          onPick={(matched, label) => {
+          // In dual mode, search the union of both palettes so we surface
+          // every token the element ties to in either theme. The UI then
+          // shows a Dual row where the user can edit both at once.
+          tokens={
+            activeMode === 'dual'
+              ? { ...drafts.light, ...drafts.dark }
+              : drafts[activeMode]
+          }
+          onPick={(matched, label, selector) => {
+            flog('inspect: picked', { mode: activeMode, label, selector, matched });
             setInspectMode(false);
             setInspectFilter(matched);
-            setInspectLabel(label);
-            // Auto-open the categories that contain matched tokens.
+            setInspectLabel(label + ' (' + activeMode + ')');
+            setInspectTarget({ selector, label });
             const cats = new Set<string>();
             matched.forEach((t) => cats.add(categoryOf(t)));
             setOpenCats((prev) => new Set([...prev, ...Array.from(cats)]));
-            setHintFlash(`${matched.length} colors used by ${label}`, 3500);
+            const where = activeMode === 'dual' ? 'both modes' : `${activeMode}-mode`;
+            setHintFlash(`${matched.length} ${where} colors for ${label} — click "Apply token" to bind a custom color`, 4500);
           }}
-          onCancel={() => setInspectMode(false)}
+          onCancel={() => { flog('inspect: cancelled'); setInspectMode(false); }}
         />
       )}
 
       {inspectFilter && inspectLabel && (
         <div className="tsa-fp__inspect-banner">
-          📍 <strong>{inspectLabel}</strong> — {inspectFilter.length} colors
+          <span>📍 <strong>{inspectLabel}</strong> — {inspectFilter.length} colors</span>
+          {inspectTarget && (
+            <button
+              type="button"
+              className="tsa-fp__btn tsa-fp__btn--small"
+              onClick={() => setBindOpen((v) => !v)}
+              title="Apply a custom token to this element's background, color, or border"
+            >
+              🔗 Apply token
+            </button>
+          )}
+        </div>
+      )}
+
+      {bindOpen && inspectTarget && (
+        <div className="tsa-fp__bindform">
+          <div className="tsa-fp__bindform-row">
+            <span className="tsa-fp__bindform-label">Selector</span>
+            <code className="tsa-fp__bindform-selector" title={inspectTarget.selector}>{inspectTarget.selector}</code>
+          </div>
+          <div className="tsa-fp__bindform-row">
+            <span className="tsa-fp__bindform-label">Property</span>
+            <select
+              className="tsa-fp__select"
+              value={bindProperty}
+              onChange={(e) => setBindProperty(e.target.value)}
+            >
+              <option value="background">background</option>
+              <option value="background-color">background-color</option>
+              <option value="color">color (text)</option>
+              <option value="border-color">border-color</option>
+              <option value="border-top-color">border-top-color</option>
+              <option value="border-bottom-color">border-bottom-color</option>
+              <option value="outline-color">outline-color</option>
+              <option value="fill">fill (SVG)</option>
+              <option value="stroke">stroke (SVG)</option>
+            </select>
+          </div>
+          <div className="tsa-fp__bindform-row">
+            <span className="tsa-fp__bindform-label">Token</span>
+            <select
+              className="tsa-fp__select"
+              value={bindToken}
+              onChange={(e) => setBindToken(e.target.value)}
+            >
+              <option value="">— choose a token —</option>
+              {Array.from(new Set([...Object.keys(drafts.light), ...Object.keys(drafts.dark)]))
+                .filter((k) => k.startsWith('--tw-'))
+                .sort()
+                .map((k) => (
+                  <option key={k} value={k}>{k.replace(/^--tw-[^-]+-/, '')}</option>
+                ))}
+            </select>
+          </div>
+          <div className="tsa-fp__bindform-actions">
+            <button type="button" className="tsa-fp__btn" onClick={() => setBindOpen(false)}>Cancel</button>
+            <button type="button" className="tsa-fp__btn tsa-fp__btn--primary" onClick={applyBinding} disabled={!bindToken}>Apply</button>
+          </div>
+        </div>
+      )}
+
+      {bindings.length > 0 && (
+        <div className="tsa-fp__bindings">
+          <div className="tsa-fp__bindings-head">
+            <span>🔗 {bindings.length} active binding{bindings.length === 1 ? '' : 's'}</span>
+            <button type="button" className="tsa-fp__btn tsa-fp__btn--small tsa-fp__btn--ghost" onClick={clearBindings}>Clear all</button>
+          </div>
+          <ul className="tsa-fp__bindings-list">
+            {bindings.map((b) => (
+              <li key={b.id} className="tsa-fp__binding">
+                <span className="tsa-fp__binding-label" title={`${b.selector} { ${b.property}: var(${b.token}) }`}>
+                  <strong>{b.label}</strong> · {b.property} → {b.token.replace(/^--tw-[^-]+-/, '')}
+                </span>
+                <button type="button" className="tsa-fp__icon" onClick={() => removeBinding(b.id)} title="Remove this binding" aria-label="Remove binding">✕</button>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
@@ -493,14 +927,29 @@ export function FloatingPanel() {
               {isOpen && (
                 <div className="tsa-fp__group-body">
                   {items.map((name) => (
-                    <ColorRow
-                      key={name + '-' + activeMode}
-                      name={name}
-                      value={drafts[activeMode][name]}
-                      otherValue={drafts[activeMode === 'light' ? 'dark' : 'light'][name]}
-                      otherMode={activeMode === 'light' ? 'dark' : 'light'}
-                      onChange={(v) => setVal(name, v)}
-                    />
+                    activeMode === 'dual' ? (
+                      <DualColorRow
+                        key={name + '-dual'}
+                        name={name}
+                        lightValue={drafts.light[name] ?? ''}
+                        darkValue={drafts.dark[name]   ?? ''}
+                        isCustom={isCustomToken(name)}
+                        onChangeLight={(v) => setValByMode('light', name, v)}
+                        onChangeDark={(v)  => setValByMode('dark',  name, v)}
+                        onDelete={() => removeToken(name)}
+                      />
+                    ) : (
+                      <ColorRow
+                        key={name + '-' + activeMode}
+                        name={name}
+                        value={drafts[activeMode][name]}
+                        otherValue={drafts[activeMode === 'light' ? 'dark' : 'light'][name]}
+                        otherMode={activeMode === 'light' ? 'dark' : 'light'}
+                        isCustom={isCustomToken(name)}
+                        onChange={(v) => setVal(name, v)}
+                        onDelete={() => removeToken(name)}
+                      />
+                    )
                   ))}
                 </div>
               )}
@@ -538,20 +987,22 @@ export function FloatingPanel() {
  *     readonly preview of the OTHER mode for context. */
 
 function ColorRow({
-  name, value, otherValue, otherMode, onChange,
+  name, value, otherValue, otherMode, isCustom, onChange, onDelete,
 }: {
   name:       string;
   value:      string;
   otherValue: string;
   otherMode:  Mode;
+  isCustom:   boolean;
   onChange:   (v: string) => void;
+  onDelete:   () => void;
 }) {
   const isHex   = /^#[0-9a-f]{3,8}$/i.test(value);
   const display = name.replace(/^--tw-[^-]+-/, '');
   const synced  = value === otherValue;
 
   return (
-    <div className="tsa-fp__row">
+    <div className={'tsa-fp__row' + (isCustom ? ' tsa-fp__row--custom' : '')}>
       <label className="tsa-fp__swatch" title={isHex ? 'Pick a color' : 'Edit value below'}>
         <span className="tsa-fp__swatch-bg" />
         <span className="tsa-fp__swatch-fill" style={{ background: value }} />
@@ -563,7 +1014,10 @@ function ColorRow({
         />
       </label>
       <div className="tsa-fp__row-main">
-        <span className="tsa-fp__name" title={name}>{display}</span>
+        <span className="tsa-fp__name" title={name}>
+          {isCustom && <span className="tsa-fp__custom-badge" title="Custom token (added via + Add color)">●</span>}
+          {display}
+        </span>
         <input
           type="text"
           className="tsa-fp__input"
@@ -579,6 +1033,123 @@ function ColorRow({
         <span className="tsa-fp__other-mode">{otherMode === 'light' ? '☀' : '☾'}</span>
         <span className="tsa-fp__other-fill" style={{ background: otherValue }} />
       </span>
+      {isCustom && (
+        <button
+          type="button"
+          className="tsa-fp__row-delete"
+          onClick={onDelete}
+          title={`Delete custom token ${name}`}
+          aria-label={`Delete ${name}`}
+        >🗑</button>
+      )}
+    </div>
+  );
+}
+
+/* ─── Dual color row — edit BOTH light + dark in one row ────
+ *
+ * Two color pickers + two text inputs, side-by-side. Each side
+ * commits ONLY to its own mode's drafts (no auto-sync). A "link"
+ * indicator turns green when both modes share the same value, so
+ * the author can see at-a-glance which tokens are mode-agnostic.
+ *
+ * Each side has a "copy →" / "← copy" button to push the current
+ * value to the OTHER mode — handy when the user wants the same
+ * color in both modes. */
+
+function DualColorRow({
+  name, lightValue, darkValue, isCustom, onChangeLight, onChangeDark, onDelete,
+}: {
+  name:          string;
+  lightValue:    string;
+  darkValue:     string;
+  isCustom:      boolean;
+  onChangeLight: (v: string) => void;
+  onChangeDark:  (v: string) => void;
+  onDelete:      () => void;
+}) {
+  const display = name.replace(/^--tw-[^-]+-/, '');
+  const synced  = lightValue === darkValue && lightValue !== '';
+
+  return (
+    <div className={'tsa-fp__row tsa-fp__row--dual' + (synced ? ' is-synced' : '') + (isCustom ? ' tsa-fp__row--custom' : '')}>
+      <span className="tsa-fp__name tsa-fp__name--dual" title={name}>
+        {isCustom && <span className="tsa-fp__custom-badge" title="Custom token">●</span>}
+        {display}
+        {isCustom && (
+          <button type="button" className="tsa-fp__row-delete tsa-fp__row-delete--inline" onClick={onDelete} title={`Delete ${name}`} aria-label={`Delete ${name}`}>🗑</button>
+        )}
+      </span>
+
+      <DualSide
+        mode="light"
+        icon="☀"
+        value={lightValue}
+        onChange={onChangeLight}
+        onCopyToOther={() => onChangeDark(lightValue)}
+        copyDirection="→"
+        copyTitle="Copy this light value to dark"
+      />
+
+      <span className={'tsa-fp__dual-link' + (synced ? ' is-synced' : '')} title={synced ? 'Both modes share the same value' : 'Light and dark differ'}>
+        {synced ? '⇌' : '⇿'}
+      </span>
+
+      <DualSide
+        mode="dark"
+        icon="☾"
+        value={darkValue}
+        onChange={onChangeDark}
+        onCopyToOther={() => onChangeLight(darkValue)}
+        copyDirection="←"
+        copyTitle="Copy this dark value to light"
+      />
+    </div>
+  );
+}
+
+function DualSide({
+  mode, icon, value, onChange, onCopyToOther, copyDirection, copyTitle,
+}: {
+  mode:          Mode;
+  icon:          string;
+  value:         string;
+  onChange:      (v: string) => void;
+  onCopyToOther: () => void;
+  copyDirection: '→' | '←';
+  copyTitle:     string;
+}) {
+  const isHex = /^#[0-9a-f]{3,8}$/i.test(value);
+  return (
+    <div className={'tsa-fp__dual-side tsa-fp__dual-side--' + mode}>
+      <label className="tsa-fp__swatch tsa-fp__swatch--dual" title={`${mode} mode`}>
+        <span className="tsa-fp__swatch-bg" />
+        <span className="tsa-fp__swatch-fill" style={{ background: value || 'transparent' }} />
+        <input
+          type="color"
+          value={isHex ? value.slice(0, 7) : '#000000'}
+          onChange={(e) => onChange(e.target.value)}
+          aria-label={`Pick ${mode}-mode color`}
+        />
+        <span className="tsa-fp__dual-icon" aria-hidden="true">{icon}</span>
+      </label>
+      <input
+        type="text"
+        className="tsa-fp__input tsa-fp__input--dual"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        spellCheck={false}
+        placeholder={mode}
+      />
+      <button
+        type="button"
+        className="tsa-fp__dual-copy"
+        onClick={onCopyToOther}
+        title={copyTitle}
+        aria-label={copyTitle}
+      >
+        {copyDirection}
+      </button>
     </div>
   );
 }
@@ -590,7 +1161,7 @@ function InspectOverlay({
   tokens, onPick, onCancel,
 }: {
   tokens: Record<string, string>;
-  onPick: (matched: string[], label: string) => void;
+  onPick: (matched: string[], label: string, selector: string) => void;
   onCancel: () => void;
 }) {
   const tooltipRef = useRef<HTMLDivElement | null>(null);
@@ -642,18 +1213,37 @@ function InspectOverlay({
       tip.style.opacity = '1';
     };
 
+    const buildSelector = (el: HTMLElement): string => {
+      // Prefer the most specific BEM class (tw-{template}-{widget}__elem),
+      // then the widget root class, then tag. Avoid auto-generated
+      // Elementor classes (.elementor-xxx) since those are unstable.
+      const cls = (el.className && typeof el.className === 'string') ? el.className : '';
+      const classes = cls.split(/\s+/).filter(Boolean);
+      const bem = classes.filter((c) => /^tw-/.test(c) && c.includes('__'));
+      if (bem.length) return '.' + bem[0];
+      const tw  = classes.filter((c) => /^tw-/.test(c));
+      if (tw.length)  return '.' + tw[0];
+      const scopeEl = el.closest('[data-tw-anim-scope]') as HTMLElement | null;
+      if (scopeEl) {
+        const scope = scopeEl.getAttribute('data-tw-anim-scope');
+        return `[data-tw-anim-scope="${scope}"] ${el.tagName.toLowerCase()}`;
+      }
+      return el.tagName.toLowerCase();
+    };
+
     const onClick = (e: MouseEvent) => {
       const el = e.target as HTMLElement;
       if (!el || isPanel(el)) return;
       e.preventDefault();
       e.stopPropagation();
-      const matched = matchTokens(el);
-      const scopeEl = el.closest('[data-tw-anim-scope]') as HTMLElement | null;
-      const widget  = scopeEl ? scopeEl.getAttribute('data-tw-anim-scope') : null;
-      const role    = elementRole(el);
-      const label   = widget ? `${widget} · ${role}` : role;
+      const matched  = matchTokens(el);
+      const scopeEl  = el.closest('[data-tw-anim-scope]') as HTMLElement | null;
+      const widget   = scopeEl ? scopeEl.getAttribute('data-tw-anim-scope') : null;
+      const role     = elementRole(el);
+      const label    = widget ? `${widget} · ${role}` : role;
+      const selector = buildSelector(el);
       if (lastHover) lastHover.style.outline = prevOutline;
-      onPick(matched, label);
+      onPick(matched, label, selector);
     };
 
     const onKey = (e: KeyboardEvent) => {
