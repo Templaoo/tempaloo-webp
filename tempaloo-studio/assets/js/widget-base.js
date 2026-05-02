@@ -108,8 +108,28 @@
         return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
     };
 
-    /** Are we inside Elementor's editor preview iframe? */
+    /**
+     * Are we inside Elementor's editor preview iframe?
+     *
+     * Two signals checked, EITHER returns true:
+     *
+     *   1. PHP-set body class `tempaloo-studio-edit-mode` — added by
+     *      Frontend\Assets::body_class() based on Elementor's PHP-side
+     *      `Plugin::$instance->preview->is_preview_mode()`. Available
+     *      from the very first byte of HTML the browser parses, so
+     *      every script (including ours, including animations.js) sees
+     *      it on initial execution.
+     *
+     *   2. JS-side `elementorFrontend.isEditMode()` — only becomes
+     *      true after Elementor's frontend.js has loaded and booted,
+     *      which can happen AFTER our scripts. Kept as a fallback so
+     *      we still detect edit mode if the PHP path fails for any
+     *      reason (very old Elementor, custom preview render, etc.).
+     */
     ts.isEditMode = function () {
+        if (document.body && document.body.classList && document.body.classList.contains('tempaloo-studio-edit-mode')) {
+            return true;
+        }
         return !!(window.elementorFrontend && window.elementorFrontend.isEditMode && window.elementorFrontend.isEditMode());
     };
 

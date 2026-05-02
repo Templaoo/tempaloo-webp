@@ -6,11 +6,12 @@
  * Version:           0.1.0-alpha
  * Requires at least: 6.0
  * Requires PHP:      7.4
+ * Requires Plugins:  elementor
  * Author:            Tempaloo
  * Author URI:        https://tempaloo.com
  * License:           Proprietary — see LICENSE.txt
  * Text Domain:       tempaloo-studio
- * Elementor tested up to: 3.25.0
+ * Elementor tested up to: 3.27.0
  *
  * @package Tempaloo\Studio
  */

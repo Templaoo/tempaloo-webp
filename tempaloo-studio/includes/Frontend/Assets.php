@@ -48,7 +48,38 @@ final class Assets {
         if ( ! $template ) return $classes;
         $classes[] = 'tempaloo-studio-active';
         $classes[] = 'tempaloo-studio-' . $template['slug'];
+
+        // ── Editor preview detection — PHP-side, before any JS runs.
+        //
+        // The recurring "live preview is blank" bug came from a JS
+        // timing race: widget-base.js detected edit mode via
+        // `elementorFrontend.isEditMode()`, but elementorFrontend.js
+        // loads AFTER our runtime, so on first DOMContentLoaded the
+        // body class was never added → CSS safety net inactive →
+        // widgets stuck at opacity:0 from gsap.set().
+        //
+        // Detecting edit mode in PHP via Elementor's preview API runs
+        // BEFORE any JS executes, so the body class is on the markup
+        // the browser parses. Zero timing race possible.
+        if ( $this->is_elementor_preview() ) {
+            $classes[] = 'tempaloo-edit-mode';            // matches the JS-set class for parity
+            $classes[] = 'tempaloo-studio-edit-mode';     // PHP-prefixed twin so debug audits can tell them apart
+        }
         return $classes;
+    }
+
+    /**
+     * Are we currently rendering inside Elementor's editor preview
+     * iframe? Defensively guarded so a missing/old Elementor version
+     * (or running on the public frontend) returns false safely.
+     */
+    private function is_elementor_preview(): bool {
+        if ( ! did_action( 'elementor/loaded' ) ) return false;
+        if ( ! class_exists( '\\Elementor\\Plugin' ) ) return false;
+        $instance = \Elementor\Plugin::$instance ?? null;
+        if ( ! $instance || empty( $instance->preview ) ) return false;
+        if ( ! method_exists( $instance->preview, 'is_preview_mode' ) ) return false;
+        return (bool) $instance->preview->is_preview_mode();
     }
 
     public function admin_body_class( $classes ) {

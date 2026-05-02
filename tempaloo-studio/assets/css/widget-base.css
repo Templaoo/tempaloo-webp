@@ -186,12 +186,30 @@ body.tempaloo-studio-active {
  * below and the rule will pick it up automatically.
  * ============================================================ */
 
+/* The body carries TWO twin classes when the page renders inside the
+ * Elementor editor preview iframe:
+ *   - `tempaloo-edit-mode`        — added by widget-base.js as soon
+ *                                    as elementorFrontend.isEditMode()
+ *                                    becomes true.
+ *   - `tempaloo-studio-edit-mode` — added by PHP via the body_class
+ *                                    filter (Frontend\Assets.php),
+ *                                    BEFORE any JS runs. This is the
+ *                                    primary signal — it eliminates
+ *                                    the timing race that previously
+ *                                    left the JS-only class missing
+ *                                    on first paint.
+ * Every rule below targets BOTH so the safety net works whether
+ * detection happened in PHP, JS, or both. */
+
 /* Generic patterns — anything tagged with these data attributes
  * counts as an "animation target" and gets forced visible. Future
  * widgets that follow the data-tw-anim-* convention work for free. */
 .tempaloo-edit-mode [data-tw-anim-target],
 .tempaloo-edit-mode [data-tw-anim-text],
-.tempaloo-edit-mode [data-tw-anim-scope] [data-tw-anim-target] {
+.tempaloo-edit-mode [data-tw-anim-scope] [data-tw-anim-target],
+.tempaloo-studio-edit-mode [data-tw-anim-target],
+.tempaloo-studio-edit-mode [data-tw-anim-text],
+.tempaloo-studio-edit-mode [data-tw-anim-scope] [data-tw-anim-target] {
     opacity: 1 !important;
     transform: none !important;
     filter: none !important;
@@ -202,11 +220,15 @@ body.tempaloo-studio-active {
  * directly on the BEM class (no data-tw-anim-target wrapping). */
 .tempaloo-edit-mode .tw-avero-how-it-works__item-media,
 .tempaloo-edit-mode .tw-avero-how-it-works__item-content,
-.tempaloo-edit-mode .tw-avero-how-it-works__item-marker {
+.tempaloo-edit-mode .tw-avero-how-it-works__item-marker,
+.tempaloo-studio-edit-mode .tw-avero-how-it-works__item-media,
+.tempaloo-studio-edit-mode .tw-avero-how-it-works__item-content,
+.tempaloo-studio-edit-mode .tw-avero-how-it-works__item-marker {
     opacity: 1 !important;
     transform: none !important;
 }
-.tempaloo-edit-mode .tw-avero-how-it-works__line-active {
+.tempaloo-edit-mode .tw-avero-how-it-works__line-active,
+.tempaloo-studio-edit-mode .tw-avero-how-it-works__line-active {
     transform: translateX(-50%) scaleY(1) !important;
 }
 
@@ -218,7 +240,11 @@ body.tempaloo-studio-active {
 .tempaloo-edit-mode .tw-word,
 .tempaloo-edit-mode .tw-word__inner,
 .tempaloo-edit-mode .tw-char,
-.tempaloo-edit-mode .tw-line__inner {
+.tempaloo-edit-mode .tw-line__inner,
+.tempaloo-studio-edit-mode .tw-word,
+.tempaloo-studio-edit-mode .tw-word__inner,
+.tempaloo-studio-edit-mode .tw-char,
+.tempaloo-studio-edit-mode .tw-line__inner {
     opacity: 1 !important;
     transform: none !important;
     filter: none !important;
