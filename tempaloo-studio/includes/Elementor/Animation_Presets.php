@@ -43,7 +43,7 @@ final class Animation_Presets {
     }
 
     public static function path(): string {
-        return \TEMPALOO_STUDIO_PATH . 'assets/data/anim-presets.json';
+        return \TEMPALOO_STUDIO_DIR . 'assets/data/anim-presets.json';
     }
 
     public static function url(): string {
