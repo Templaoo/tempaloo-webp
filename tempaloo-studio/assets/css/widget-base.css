@@ -216,21 +216,17 @@ body.tempaloo-studio-active {
     clip-path: none !important;
 }
 
-/* Per-widget explicit list — for widgets whose initial-state lives
- * directly on the BEM class (no data-tw-anim-target wrapping). */
-.tempaloo-edit-mode .tw-avero-how-it-works__item-media,
-.tempaloo-edit-mode .tw-avero-how-it-works__item-content,
-.tempaloo-edit-mode .tw-avero-how-it-works__item-marker,
-.tempaloo-studio-edit-mode .tw-avero-how-it-works__item-media,
-.tempaloo-studio-edit-mode .tw-avero-how-it-works__item-content,
-.tempaloo-studio-edit-mode .tw-avero-how-it-works__item-marker {
-    opacity: 1 !important;
-    transform: none !important;
-}
-.tempaloo-edit-mode .tw-avero-how-it-works__line-active,
-.tempaloo-studio-edit-mode .tw-avero-how-it-works__line-active {
-    transform: translateX(-50%) scaleY(1) !important;
-}
+/* NOTE: how-it-works no longer needs explicit safety-net rules.
+ * Initial hidden states (opacity:0, transform: scale(0) / translate)
+ * are applied via gsap.set() at script init time — CSS defaults
+ * are visible (opacity:1, no transform). If the script doesn't run,
+ * content is shown statically. If it does run, ScrollTrigger
+ * reveals on scroll in BOTH frontend and editor preview.
+ *
+ * The per-widget block is kept here as an anchor for FUTURE widgets
+ * whose CSS initial-state can't be moved to JS for layout reasons.
+ * If you add such a widget, append its selector(s) below — under
+ * BOTH .tempaloo-edit-mode and .tempaloo-studio-edit-mode. */
 
 /* Word/char/line splitters used by the central animation runtime —
  * the spans get opacity:0 / yPercent:110 inline via gsap.set. In edit

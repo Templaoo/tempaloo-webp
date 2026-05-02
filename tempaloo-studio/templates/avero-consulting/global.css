@@ -1684,44 +1684,26 @@
     transform: scale(1.05);
 }
 
-/* ── Initial states for the JS reveal ────────────────────── */
-
+/* ── Initial states for the JS reveal ──────────────────────
+ *
+ * IMPORTANT: only `will-change` hints live here. The actual
+ * hidden states (opacity:0, transform: scale(0) / translate(...))
+ * are applied via gsap.set() at script init — moving them out of
+ * CSS means:
+ *
+ *   1. CSS default = opacity:1, so if the script never runs the
+ *      widget is fully visible (self-recovering).
+ *   2. The .tempaloo-studio-edit-mode safety net !important rules
+ *      no longer fight against gsap.set's inline opacity:0 in the
+ *      editor preview, so the scroll-reveal animation actually
+ *      plays as the user scrolls the iframe.
+ */
 .tw-avero-how-it-works__item-media,
 .tw-avero-how-it-works__item-content {
-    opacity: 0;
     will-change: transform, opacity;
 }
-
 .tw-avero-how-it-works__item-marker {
-    transform: scale(0);
     will-change: transform;
-}
-
-.tw-avero-how-it-works__item-content {
-    transform: translateX(30px);
-}
-.tw-avero-how-it-works__item--reverse .tw-avero-how-it-works__item-content {
-    transform: translateX(-30px);
-}
-.tw-avero-how-it-works__item-media {
-    transform: translateY(20px);
-}
-
-/* Reduced motion / GSAP-off fallback — show content immediately.
- * The runtime also clears these with gsap.set when reduced is on,
- * but this guards the case where the script never loads at all. */
-@media (prefers-reduced-motion: reduce) {
-    .tw-avero-how-it-works__item-media,
-    .tw-avero-how-it-works__item-content {
-        opacity: 1;
-        transform: none;
-    }
-    .tw-avero-how-it-works__item-marker {
-        transform: none;
-    }
-    .tw-avero-how-it-works__line-active {
-        transform: translateX(-50%) scaleY(1);
-    }
 }
 
 /* ── Responsive ──────────────────────────────────────────── */

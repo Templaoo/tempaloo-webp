@@ -17,6 +17,17 @@
  *      crash for the multi-target reveal (marker pop +
  *      content/media slide) on filter/transform combos.
  *
+ * Live-preview strategy
+ *   Initial states are SET BY JS (gsap.set) instead of CSS, so
+ *   the CSS default is opacity:1 — if the script never runs at
+ *   all (GSAP fails to load, syntax error, intensity = off), the
+ *   widget is fully visible by default. ScrollTrigger then runs
+ *   normally in BOTH frontend AND editor preview, so the author
+ *   sees the actual scroll-driven reveal as they scroll the
+ *   iframe. Earlier versions short-circuited in editor mode and
+ *   played all animations on mount, which prevented the user
+ *   from seeing the choreography in live preview.
+ *
  * Idempotent: prior ScrollTriggers and timelines tied to this
  * root are killed before re-init, so editor re-renders don't
  * stack up zombie animations.
@@ -34,7 +45,6 @@
         if (!gsap || !ST) return;
 
         // ── Idempotent reset ──────────────────────────────────
-        // Clean prior animations + their triggers before rebuilding.
         if (rootEl.__tw_hiw_cleanup) {
             try { rootEl.__tw_hiw_cleanup(); } catch (e) {}
             rootEl.__tw_hiw_cleanup = null;
@@ -46,123 +56,116 @@
         if (!timeline || !items.length) return;
 
         // ── Reduced motion / off → static reveal ──────────────
-        var ns       = (window.tempaloo && window.tempaloo.avero) || {};
-        var level    = ns.animationLevel ? ns.animationLevel() : 'medium';
-        var reduced  = level === 'subtle' || level === 'off'
-                       || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+        var ns      = (window.tempaloo && window.tempaloo.avero) || {};
+        var level   = ns.animationLevel ? ns.animationLevel() : 'medium';
+        var reduced = level === 'subtle' || level === 'off'
+                      || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
         if (reduced) {
-            // Wipe the from-states so content renders normally.
-            gsap.set(activeLine, { scaleY: 1 });
-            items.forEach(function (item) {
-                var marker  = item.querySelector('.tw-avero-how-it-works__item-marker');
-                var content = item.querySelector('.tw-avero-how-it-works__item-content');
-                var media   = item.querySelector('.tw-avero-how-it-works__item-media');
-                gsap.set([marker, content, media], { clearProps: 'opacity,transform' });
-            });
+            // CSS default opacity:1 already shows everything; just snap
+            // the progress line to its end state for a complete look.
+            if (activeLine) gsap.set(activeLine, { scaleY: 1 });
             return;
         }
 
-        var triggers   = [];
-        var tweens     = [];
-        // editAware: in the Elementor editor preview, ts.editAware()
-        // returns null so we skip ScrollTrigger entirely and play
-        // animations on mount. This is the central live-preview fix
-        // — see widget-base.js for the helper definition.
-        var inEditor   = ts.isEditMode && ts.isEditMode();
+        var triggers = [];
+        var tweens   = [];
 
-        // ── 1. Progress line (scrub) ──────────────────────────
-        // §1.15.4 exception: scrub requires the tween↔trigger link.
-        // In editor mode, scrub doesn't make sense (no scroll happens
-        // inside a non-resized iframe), so we just snap the line to
-        // its final state and skip the trigger.
-        if (activeLine) {
-            if (inEditor) {
-                gsap.set(activeLine, { scaleY: 1 });
-            } else {
-                try {
-                    var lineTween = gsap.to(activeLine, {
-                        scaleY: 1,
-                        ease: 'none',
-                        scrollTrigger: {
-                            trigger: timeline,
-                            start: 'top 70%',
-                            end: 'bottom 70%',
-                            scrub: true,
-                        },
-                    });
-                    tweens.push(lineTween);
-                    if (lineTween.scrollTrigger) triggers.push(lineTween.scrollTrigger);
-                } catch (e) {
-                    // Fallback — show the line at full scale so users
-                    // still see the visual structure of the timeline.
-                    gsap.set(activeLine, { scaleY: 1 });
-                }
-            }
-        }
+        // ── Apply initial hidden states via gsap.set (NOT CSS) ─
+        // CSS default for these elements is opacity:1, so if anything
+        // below this point throws, the widget stays visible. The set()
+        // calls hide each element just before its tween is wired up.
+        if (activeLine) gsap.set(activeLine, { scaleY: 0 });
 
-        // ── 2. Per-step reveal — standalone trigger or play-on-mount
         items.forEach(function (item) {
             var marker  = item.querySelector('.tw-avero-how-it-works__item-marker');
             var content = item.querySelector('.tw-avero-how-it-works__item-content');
             var media   = item.querySelector('.tw-avero-how-it-works__item-media');
-            if (!marker && !content && !media) return;
+            var reverse = item.classList.contains('tw-avero-how-it-works__item--reverse');
 
+            if (marker)  gsap.set(marker,  { scale: 0 });
+            if (content) gsap.set(content, { opacity: 0, x: reverse ? -30 : 30 });
+            if (media)   gsap.set(media,   { opacity: 0, y: 20 });
+
+            // Build a paused timeline that animates each piece into
+            // its final state. We don't use animation:tween linkage on
+            // ScrollTrigger.create — onEnter/onLeaveBack callbacks
+            // play/reverse the timeline (§1.15 standalone pattern).
             var tl = gsap.timeline({ paused: true });
             if (marker) {
                 tl.to(marker, {
-                    scale:    1,
-                    duration: 0.6,
-                    ease:     'back.out(1.7)',
+                    scale:     1,
+                    duration:  0.6,
+                    ease:      'back.out(1.7)',
                     overwrite: 'auto',
                 });
             }
             if (content || media) {
                 var targets = [content, media].filter(Boolean);
                 tl.to(targets, {
-                    opacity:  1,
-                    x:        0,
-                    y:        0,
-                    duration: 1,
-                    stagger:  0.1,
-                    ease:     'power4.out',
+                    opacity:   1,
+                    x:         0,
+                    y:         0,
+                    duration:  1,
+                    stagger:   0.1,
+                    ease:      'power4.out',
                     overwrite: 'auto',
                 }, '-=0.4');
             }
             tweens.push(tl);
 
-            // ts.editAware returns null in the editor → skip the
-            // ScrollTrigger wiring and play the timeline immediately
-            // so the user sees the final state in live preview.
-            var stCfg = ts.editAware ? ts.editAware({ trigger: item, start: 'top 85%' }) : { trigger: item, start: 'top 85%' };
-            if (!stCfg) {
-                tl.play();
-                return;
-            }
+            // Use ScrollTrigger normally — including in the editor —
+            // so the author sees the scroll-driven reveal as they
+            // scroll through the preview iframe. If create() throws
+            // for any reason, fall back to playing the tween so the
+            // content still becomes visible.
             try {
                 var trig = ST.create({
-                    trigger: stCfg.trigger,
-                    start:   stCfg.start,
+                    trigger:     item,
+                    start:       'top 85%',
                     onEnter:     function () { tl.play(); },
                     onEnterBack: function () { tl.play(); },
                     onLeaveBack: function () { tl.reverse(); },
                 });
                 triggers.push(trig);
             } catch (e) {
-                // Fallback — play immediately so content is visible.
                 tl.play();
             }
         });
 
-        // ── Refresh now that we've added new triggers, so positions
-        //    are accurate on first paint (matches the central runtime
-        //    pattern). Safe to call multiple times.
+        // ── Progress line scrub (frontend AND editor) ─────────
+        // Same reasoning as the per-item triggers — keep ScrollTrigger
+        // active in editor so the user can see the line fill as they
+        // scroll. try/catch fallback ensures the line still ends in
+        // its full state if create() fails.
+        if (activeLine) {
+            try {
+                var lineTween = gsap.to(activeLine, {
+                    scaleY: 1,
+                    ease:   'none',
+                    scrollTrigger: {
+                        trigger: timeline,
+                        start:   'top 70%',
+                        end:     'bottom 70%',
+                        scrub:   true,
+                    },
+                });
+                tweens.push(lineTween);
+                if (lineTween.scrollTrigger) triggers.push(lineTween.scrollTrigger);
+            } catch (e) {
+                gsap.set(activeLine, { scaleY: 1 });
+            }
+        }
+
+        // ── Refresh — recalculates positions for the newly-created
+        //    triggers. ScrollTrigger queues this debounced internally
+        //    so calling it multiple times in quick succession is fine.
         try { ST.refresh(); } catch (e) {}
 
         // ── Cleanup hook for idempotent re-init ──────────────
         rootEl.__tw_hiw_cleanup = function () {
-            triggers.forEach(function (t) { try { t.kill(); } catch (e) {} });
-            tweens.forEach(function (tw)  { try { tw.kill(); } catch (e) {} });
+            triggers.forEach(function (t)  { try { t.kill();  } catch (e) {} });
+            tweens.forEach(function (tw)   { try { tw.kill(); } catch (e) {} });
         };
     }
 
