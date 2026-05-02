@@ -67,6 +67,15 @@
      * frontend renders a NEW instance of that selector (editor preview).
      * Use this for per-instance setup that NEEDS the rootEl (scroll
      * listeners, GSAP timelines).
+     *
+     * Why the deferred hook registration:
+     *   `window.elementorFrontend` is loaded by Elementor's frontend.js,
+     *   which can boot AFTER our widget scripts inside the editor preview
+     *   iframe. A naive `if (window.elementorFrontend) { addAction(...) }`
+     *   silently no-ops in that case → widgets never get their per-instance
+     *   init when Elementor mounts them dynamically. We detect that case
+     *   and defer the registration until the `elementor/frontend/init`
+     *   jQuery event fires (which Elementor guarantees when it's ready).
      */
     ts.onReady = function (selector, fn) {
         if (typeof selector !== 'string' || typeof fn !== 'function') return;
@@ -85,10 +94,12 @@
             bootAll();
         }
 
-        // Also re-run after Elementor's editor mounts a new instance.
-        // The widget-name segment of the hook matches the element's
-        // data-widget_type — best we can do here is intersect by selector.
-        if (window.elementorFrontend && window.elementorFrontend.hooks) {
+        // Hook registration on Elementor's per-widget mount event. The
+        // hook fires for EVERY widget mount (existing instances at boot
+        // + newly dragged-in widgets in the editor) — we filter to ours
+        // by selector match.
+        function registerElementorHook() {
+            if (!window.elementorFrontend || !window.elementorFrontend.hooks) return false;
             window.elementorFrontend.hooks.addAction('frontend/element_ready/global', function ($el) {
                 if (!$el || !$el[0]) return;
                 if ($el[0].matches && $el[0].matches(selector)) {
@@ -100,6 +111,24 @@
                     if (inner) run(inner);
                 }
             });
+            return true;
+        }
+
+        if (!registerElementorHook()) {
+            // elementorFrontend not ready yet — defer until it is. Elementor
+            // fires `elementor/frontend/init` on jQuery(window) when its
+            // frontend.js bootstrap completes; that's the canonical signal.
+            var attempt = function () { registerElementorHook(); };
+            if (window.jQuery) {
+                window.jQuery(window).on('elementor/frontend/init', attempt);
+            }
+            // Fallback: poll every 100ms for up to 10s in case jQuery isn't
+            // ready either, OR the event fires before our handler binds.
+            // 10s is plenty — Elementor frontend.js is loaded with the iframe.
+            var tries = 0;
+            var poll  = setInterval(function () {
+                if (registerElementorHook() || ++tries > 100) clearInterval(poll);
+            }, 100);
         }
     };
 
