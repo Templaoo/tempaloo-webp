@@ -253,6 +253,62 @@
         return 1;                              // medium = 1
     }
 
+    /* ── scheduleAnim — GSAP-recommended pattern for animations
+     *    that must wait for ScrollTrigger.
+     *
+     * Why a helper instead of inlining `gsap.to(targets, { ...,
+     * scrollTrigger })`: when the scrollTrigger option is attached
+     * INSIDE the tween config, GSAP's CSSPlugin tries to interpret
+     * the tween's property values during ScrollTrigger.refresh — and
+     * crashes on certain combos (e.g. filter:blur, complex transforms)
+     * with "Cannot read properties of undefined (reading 'end')".
+     *
+     * The fix recommended in GSAP's docs: create the tween PAUSED, then
+     * create ScrollTrigger with `animation: tween` so the trigger
+     * controls play/pause without interpreting the tween internally.
+     *
+     * Lifecycle:
+     *   1. gsap.set(targets, fromState) — apply start values immediately
+     *   2. gsap.to(targets, toState, paused:true) — schedule end values
+     *   3. ScrollTrigger.create({ ..., animation: tween }) — wires it up
+     *   4. If no scrollTrigger config → play now (still controllable)
+     *   5. If ScrollTrigger.create itself fails → play tween immediately
+     *      so the widget still animates instead of staying invisible
+     */
+    function scheduleAnim(targets, fromState, toState, scrollTriggerCfg) {
+        var g = gsap();
+        if (!g) return null;
+
+        // Always set the start state explicitly so even if everything below
+        // fails, we know the element's "from" state vs "to" state.
+        try { g.set(targets, fromState); } catch (e) { warn('gsap.set failed', e); }
+
+        // Pause the tween — ScrollTrigger (or our manual play) will run it.
+        var tween;
+        try {
+            tween = g.to(targets, Object.assign({ paused: true }, toState));
+        } catch (e) {
+            warn('gsap.to failed', e);
+            return null;
+        }
+
+        if (scrollTriggerCfg && window.ScrollTrigger) {
+            try {
+                window.ScrollTrigger.create(Object.assign({}, scrollTriggerCfg, {
+                    animation: tween,
+                }));
+                return tween;
+            } catch (e) {
+                warn('ScrollTrigger.create failed — playing tween immediately to avoid invisibility', e);
+                tween.play();
+                return tween;
+            }
+        }
+        // No scroll trigger — play now.
+        tween.play();
+        return tween;
+    }
+
     /* ── Entrance presets ────────────────────────────────────── */
 
     /**
@@ -264,115 +320,73 @@
         'none': function () { /* no-op */ },
 
         'fade': function (targets, opts) {
-            gsap().set(targets, { opacity: 0 });
-            gsap().to(targets, Object.assign({
-                opacity: 1,
-                duration: opts.duration || 0.45,
-                ease: 'power1.out',
-                stagger: opts.stagger || 0,
-                clearProps: 'opacity',
-            }, opts.scrollTrigger ? { scrollTrigger: opts.scrollTrigger } : {}));
+            scheduleAnim(targets,
+                { opacity: 0 },
+                { opacity: 1, duration: opts.duration || 0.45, ease: 'power1.out', stagger: opts.stagger || 0, clearProps: 'opacity' },
+                opts.scrollTrigger);
         },
 
         'fade-up': function (targets, opts) {
             var y = 24 * (opts.lvlFactor || 1);
-            gsap().set(targets, { opacity: 0, y: y });
-            gsap().to(targets, Object.assign({
-                opacity: 1, y: 0,
-                duration: opts.duration || 0.7,
-                ease: 'power3.out',
-                stagger: opts.stagger || 0,
-                clearProps: 'opacity,transform',
-            }, opts.scrollTrigger ? { scrollTrigger: opts.scrollTrigger } : {}));
+            scheduleAnim(targets,
+                { opacity: 0, y: y },
+                { opacity: 1, y: 0, duration: opts.duration || 0.7, ease: 'power3.out', stagger: opts.stagger || 0, clearProps: 'opacity,transform' },
+                opts.scrollTrigger);
         },
 
         'fade-down': function (targets, opts) {
             var y = -24 * (opts.lvlFactor || 1);
-            gsap().set(targets, { opacity: 0, y: y });
-            gsap().to(targets, Object.assign({
-                opacity: 1, y: 0,
-                duration: opts.duration || 0.7,
-                ease: 'power3.out',
-                stagger: opts.stagger || 0,
-                clearProps: 'opacity,transform',
-            }, opts.scrollTrigger ? { scrollTrigger: opts.scrollTrigger } : {}));
+            scheduleAnim(targets,
+                { opacity: 0, y: y },
+                { opacity: 1, y: 0, duration: opts.duration || 0.7, ease: 'power3.out', stagger: opts.stagger || 0, clearProps: 'opacity,transform' },
+                opts.scrollTrigger);
         },
 
         'fade-left': function (targets, opts) {
             var x = -32 * (opts.lvlFactor || 1);
-            gsap().set(targets, { opacity: 0, x: x });
-            gsap().to(targets, Object.assign({
-                opacity: 1, x: 0,
-                duration: opts.duration || 0.7,
-                ease: 'power3.out',
-                stagger: opts.stagger || 0,
-                clearProps: 'opacity,transform',
-            }, opts.scrollTrigger ? { scrollTrigger: opts.scrollTrigger } : {}));
+            scheduleAnim(targets,
+                { opacity: 0, x: x },
+                { opacity: 1, x: 0, duration: opts.duration || 0.7, ease: 'power3.out', stagger: opts.stagger || 0, clearProps: 'opacity,transform' },
+                opts.scrollTrigger);
         },
 
         'fade-right': function (targets, opts) {
             var x = 32 * (opts.lvlFactor || 1);
-            gsap().set(targets, { opacity: 0, x: x });
-            gsap().to(targets, Object.assign({
-                opacity: 1, x: 0,
-                duration: opts.duration || 0.7,
-                ease: 'power3.out',
-                stagger: opts.stagger || 0,
-                clearProps: 'opacity,transform',
-            }, opts.scrollTrigger ? { scrollTrigger: opts.scrollTrigger } : {}));
+            scheduleAnim(targets,
+                { opacity: 0, x: x },
+                { opacity: 1, x: 0, duration: opts.duration || 0.7, ease: 'power3.out', stagger: opts.stagger || 0, clearProps: 'opacity,transform' },
+                opts.scrollTrigger);
         },
 
         'scale-in': function (targets, opts) {
             var f = opts.lvlFactor != null ? opts.lvlFactor : 1;
-            // gsap.set + gsap.to (instead of gsap.from) — avoids a known
-            // GSAP edge-case where `from() + scrollTrigger + transform`
-            // throws "Cannot read properties of undefined (reading 'end')"
-            // on some pages. Explicit start state, explicit animation.
-            gsap().set(targets, { opacity: 0, scale: 1 - 0.08 * f });
-            gsap().to(targets, Object.assign({
-                opacity: 1,
-                scale: 1,
-                duration: opts.duration || 0.7,
-                ease: 'back.out(1.4)',
-                stagger: opts.stagger || 0,
-                clearProps: 'opacity,transform',
-            }, opts.scrollTrigger ? { scrollTrigger: opts.scrollTrigger } : {}));
+            scheduleAnim(targets,
+                { opacity: 0, scale: 1 - 0.08 * f },
+                { opacity: 1, scale: 1, duration: opts.duration || 0.7, ease: 'back.out(1.4)', stagger: opts.stagger || 0, clearProps: 'opacity,transform' },
+                opts.scrollTrigger);
         },
 
         'blur-in': function (targets, opts) {
             var f = opts.lvlFactor != null ? opts.lvlFactor : 1;
-            // Same set/to pattern. The from() variant of this preset
-            // crashed inside ScrollTrigger.refresh — confirmed in user's
-            // debug logs ("preset 'blur-in' threw … reading 'end'").
-            gsap().set(targets, { opacity: 0, filter: 'blur(' + (20 * f) + 'px)' });
-            gsap().to(targets, Object.assign({
-                opacity: 1,
-                filter: 'blur(0px)',
-                duration: opts.duration || 0.85,
-                ease: 'power3.out',
-                stagger: opts.stagger || 0,
-                clearProps: 'opacity,filter',
-            }, opts.scrollTrigger ? { scrollTrigger: opts.scrollTrigger } : {}));
+            scheduleAnim(targets,
+                { opacity: 0, filter: 'blur(' + (20 * f) + 'px)', willChange: 'opacity, filter' },
+                { opacity: 1, filter: 'blur(0px)', duration: opts.duration || 0.85, ease: 'power3.out', stagger: opts.stagger || 0, clearProps: 'opacity,filter,willChange' },
+                opts.scrollTrigger);
         },
 
         'mask-reveal': function (targets, opts) {
             var f = opts.lvlFactor != null ? opts.lvlFactor : 1;
             if (f === 0) {
-                gsap().set(targets, { opacity: 0 });
-                gsap().to(targets, Object.assign({
-                    opacity: 1, duration: opts.duration || 0.4, ease: 'power1.out',
-                    stagger: opts.stagger || 0, clearProps: 'opacity',
-                }, opts.scrollTrigger ? { scrollTrigger: opts.scrollTrigger } : {}));
+                scheduleAnim(targets,
+                    { opacity: 0 },
+                    { opacity: 1, duration: opts.duration || 0.4, ease: 'power1.out', stagger: opts.stagger || 0, clearProps: 'opacity' },
+                    opts.scrollTrigger);
                 return;
             }
-            gsap().set(targets, { clipPath: 'inset(0 100% 0 0)' });
-            gsap().to(targets, Object.assign({
-                clipPath: 'inset(0 0% 0 0)',
-                duration: opts.duration || 0.8,
-                ease: 'power3.out',
-                stagger: opts.stagger || 0,
-                clearProps: 'clipPath',
-            }, opts.scrollTrigger ? { scrollTrigger: opts.scrollTrigger } : {}));
+            scheduleAnim(targets,
+                { clipPath: 'inset(0 100% 0 0)' },
+                { clipPath: 'inset(0 0% 0 0)', duration: opts.duration || 0.8, ease: 'power3.out', stagger: opts.stagger || 0, clearProps: 'clipPath' },
+                opts.scrollTrigger);
         },
     };
 
