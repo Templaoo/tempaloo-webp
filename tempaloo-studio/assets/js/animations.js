@@ -121,24 +121,41 @@
      * is non-negotiable.
      */
     function ensureVisible(force) {
+        // CRITICAL: only force visibility on elements CURRENTLY IN VIEWPORT.
+        // Elements below the fold at opacity 0 are INTENTIONAL — they're
+        // waiting for ScrollTrigger to fire when the user scrolls down.
+        // Forcing them visible here breaks the scroll-into-view animation
+        // entirely (they appear instantly with no animation when reached).
+        // The safety net should ONLY catch genuine stuck-at-0 cases:
+        // elements visible in the viewport that should have animated but
+        // didn't.
+        function inViewport(el) {
+            var r = el.getBoundingClientRect();
+            // A bit of margin so elements at the edge are still considered in.
+            return r.bottom > 0 && r.top < window.innerHeight && r.right > 0 && r.left < window.innerWidth;
+        }
+
         var stuckRoots = [];
         var stuckSplits = [];
         document.querySelectorAll('[data-tw-anim-scope], [data-tw-anim-target], [data-tw-anim-text]').forEach(function (el) {
+            if (!inViewport(el)) return;
             var op = parseFloat(getComputedStyle(el).opacity);
             if (op < 0.05) stuckRoots.push(el);
         });
-        // Also check split-text descendants (words / chars / lines) which
-        // are the most common stuck-at-0 case after a failed GSAP timeline.
+        // Split-text descendants (words / chars / lines) — same in-viewport
+        // gate so we don't break scroll-words-fill etc. that are intentionally
+        // dim until scrubbed.
         document.querySelectorAll('.tw-word, .tw-word__inner, .tw-char, .tw-line__inner').forEach(function (el) {
+            if (!inViewport(el)) return;
             var op = parseFloat(getComputedStyle(el).opacity);
             if (op < 0.05) stuckSplits.push(el);
         });
 
         if (!stuckRoots.length && !stuckSplits.length) {
-            log('safety net: all elements visible');
+            log('safety net: all in-viewport elements visible');
             return;
         }
-        warn('safety net: forcing visibility on', stuckRoots.length, 'roots +',
+        warn('safety net: forcing visibility on', stuckRoots.length, 'in-viewport roots +',
              stuckSplits.length, 'split-spans', force ? '(manual)' : '(auto)');
 
         function clean(el) {
@@ -739,15 +756,27 @@
 
         log('applyEntrance', { scope: scope, preset: preset, lvl: lvl, opts: opts });
 
-        // Composite text presets like 'editorial-stack' take the rootEl
-        // and orchestrate their own targets internally.
-        if (TEXT_PRESETS[preset] && (preset === 'editorial-stack')) {
-            try { TEXT_PRESETS[preset](rootEl, opts); }
-            catch (e) {
-                warn('preset "' + preset + '" threw on', rootEl, e);
-                // Failure fallback: don't leave the widget invisible.
-                rootEl.style.opacity = '1';
+        // Text presets selected as the scope-level entrance need routing.
+        // Three cases:
+        //   1. 'editorial-stack' — composite — orchestrates rootEl's children
+        //   2. Word/char/line splitters (word-fade-up, char-up, text-typing,
+        //      text-fill-sweep, scroll-words-fill, etc.) — apply to the
+        //      element that holds the actual text. Heuristic: first
+        //      headline (h1/h2/h3) → first [data-tw-anim-target] →
+        //      rootEl. This avoids splitting every char in a multi-quote
+        //      testimonials section (would create hundreds of spans).
+        if (TEXT_PRESETS[preset]) {
+            if (preset === 'editorial-stack') {
+                try { TEXT_PRESETS[preset](rootEl, opts); }
+                catch (e) { warn('preset "' + preset + '" threw on', rootEl, e); rootEl.style.opacity = '1'; }
+                return;
             }
+            var textRoot = rootEl.querySelector('h1, h2, h3, h4')
+                        || rootEl.querySelector('[data-tw-anim-target]')
+                        || rootEl;
+            log('  text-preset routed to', textRoot.tagName.toLowerCase(), 'in', scope);
+            try { TEXT_PRESETS[preset](textRoot, opts); }
+            catch (e) { warn('text preset "' + preset + '" threw on', textRoot, e); textRoot.style.opacity = '1'; }
             return;
         }
 
