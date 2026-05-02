@@ -55,7 +55,104 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+
+  // ── v2 endpoints (Plan A typed schema) ─────────────────
+  getAnimationLibrary: () => call<AnimationLibrary>('/animation/library'),
+  getAnimationV2:      () => call<AnimationStateV2>('/animation/v2'),
+  setGlobals: (payload: { intensity?: string; direction?: string; reduceMotion?: string }) =>
+    call<AnimationStateV2>('/animation/v2/globals', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  setElementRule: (type_id: string, rule: AnimationRule) =>
+    call<AnimationStateV2>('/animation/v2/element-rule', {
+      method: 'POST',
+      body: JSON.stringify({ type_id, rule }),
+    }),
+  resetElementRule: (type_id: string) =>
+    call<AnimationStateV2>('/animation/v2/element-rule/reset', {
+      method: 'POST',
+      body: JSON.stringify({ type_id }),
+    }),
+  setWidgetOverride: (template_slug: string, widget: string, rule: AnimationRule) =>
+    call<AnimationStateV2>('/animation/v2/widget-override', {
+      method: 'POST',
+      body: JSON.stringify({ template_slug, widget, rule }),
+    }),
 };
+
+/* ── v2 schema types (Plan A) ────────────────────────────── */
+
+export type ParamSpec =
+  | { type: 'number'; value: number; min?: number; max?: number; step?: number; unit?: string; label?: string; tip?: string; locked?: boolean }
+  | { type: 'enum';   value: string; enum: string;  label?: string; tip?: string; locked?: boolean }
+  | { type: 'boolean'; value: boolean; label?: string; tip?: string; locked?: boolean }
+  | { type: 'string'; value: string;  label?: string; tip?: string; locked?: boolean };
+
+export interface PresetSchema {
+  id:           string;
+  label:        string;
+  category:     'element' | 'text';
+  description:  string;
+  requires:     string[];
+  splits?:      'words' | 'chars' | 'lines' | 'auto';
+  scrubOnly?:   boolean;
+  params:       Record<string, ParamSpec>;
+  scrollTrigger?: Record<string, ParamSpec> | null;
+  preview?:     string;
+}
+
+export interface ElementType {
+  id:                string;
+  label:             string;
+  icon?:             string;
+  selectors:         string[];
+  recommendedPreset: string;
+}
+
+export interface BehaviorSchema {
+  id:           string;
+  label:        string;
+  description:  string;
+  requires?:    string[];
+  params?:      Record<string, ParamSpec>;
+}
+
+export interface AnimationLibrary {
+  version:      string;
+  enums:        Record<string, Array<{ id: string; label: string }>>;
+  elementTypes: ElementType[];
+  presets:      PresetSchema[];
+  behaviors:    BehaviorSchema[];
+}
+
+export interface AnimationRule {
+  enabled?:      boolean;
+  preset:        string;
+  params:        Record<string, number | string | boolean>;
+  scrollTrigger: Record<string, number | string | boolean>;
+  direction?:    string;
+}
+
+export interface AnimationStateV2 {
+  version:         string;
+  globals: {
+    intensity:    string;
+    direction:    string;
+    reduceMotion: string;
+  };
+  elementRules:    Record<string, AnimationRule>;
+  widgetOverrides: Record<string, AnimationRule>;
+  templateSlug:    string;
+  widgets:         string[];
+  allowed: {
+    intensity:    string[];
+    direction:    string[];
+    reduceMotion: string[];
+    elementTypes: string[];
+    presets:      string[];
+  };
+}
 
 export interface AnimationPreset {
   entrance?:  string;

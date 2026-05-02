@@ -1,122 +1,104 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
-import type { AnimationPreset, AnimationState } from '../api';
 import { toast } from '../components/Toast';
+import type { AnimationLibrary, AnimationRule, AnimationStateV2 } from './animation/types';
+import { GlobalsTab } from './animation/GlobalsTab';
+import { ElementsTab } from './animation/ElementsTab';
+import { WidgetsTab } from './animation/WidgetsTab';
+import { LibraryTab } from './animation/LibraryTab';
 
-const LEVELS: Array<{ id: string; label: string; desc: string }> = [
-  { id: 'off',    label: 'Off',    desc: 'No motion. Static render. Fastest, most accessible.' },
-  { id: 'subtle', label: 'Subtle', desc: 'Opacity-only fades. ~300ms. Reduced-motion friendly.' },
-  { id: 'medium', label: 'Medium', desc: 'Designed look — translateY, stagger, scroll triggers. (Default)' },
-  { id: 'bold',   label: 'Bold',   desc: 'Bigger transforms, longer durations. More dramatic entrances.' },
+type TabId = 'globals' | 'elements' | 'widgets' | 'library';
+
+const TABS: Array<{ id: TabId; label: string; desc: string }> = [
+  { id: 'globals',  label: 'Globals',  desc: 'Intensité · direction · reduce-motion' },
+  { id: 'elements', label: 'Elements', desc: 'Règles par tag (h1, h2, p, img, button…)' },
+  { id: 'widgets',  label: 'Per-widget', desc: 'Overrides par scope du template actif' },
+  { id: 'library',  label: 'Library',  desc: 'Référence complète des presets GSAP' },
 ];
-
-const TRIGGER_OPTIONS = [
-  { id: 'top 90%',     label: 'Very early (90%)' },
-  { id: 'top 85%',     label: 'Early (85%, default)' },
-  { id: 'top 75%',     label: 'Standard (75%)' },
-  { id: 'top 60%',     label: 'Late (60%)' },
-  { id: 'center 75%',  label: 'Center (75%)' },
-  { id: 'none',        label: 'On page load (no scroll)' },
-];
-
-const DIRECTION_OPTIONS: Array<{ id: string; label: string; desc: string }> = [
-  { id: 'once',          label: 'Once',           desc: 'Plays the FIRST time the user scrolls past, then never again. Lightest on perf.' },
-  { id: 'replay',        label: 'Replay',         desc: 'Plays forward EVERY time the user enters the trigger (down OR up). No reverse.' },
-  { id: 'bidirectional', label: 'Bidirectional',  desc: 'Forward on scroll-down, REVERSE on scroll-up — mirror entrance choreography. Default.' },
-  { id: 'scrub',         label: 'Scrub',          desc: 'Progress tied 1:1 to scroll position. Best for narrative animations.' },
-];
-
-// Pretty preset labels for the dropdown.
-const PRESET_LABELS: Record<string, string> = {
-  'none':                  'None',
-  'fade':                  'Fade',
-  'fade-up':               'Fade up',
-  'fade-down':             'Fade down',
-  'fade-left':             'Fade left',
-  'fade-right':            'Fade right',
-  'scale-in':              'Scale in',
-  'blur-in':               'Blur in',
-  'mask-reveal':           'Mask reveal',
-  'word-fade-up':          'Word — fade up',
-  'word-fade-blur':        'Word — fade blur (premium)',
-  'word-slide-up-overflow':'Word — slide up (cinematic)',
-  'char-up':               'Char — up (short headlines)',
-  'line-fade-up-stagger':  'Line — fade up stagger',
-  'text-typing':           'Typewriter',
-  'text-fill-sweep':       'Color fill sweep',
-  'scroll-words-fill':     'Scroll-linked words fill',
-  'editorial-stack':       'Editorial stack (composite)',
-};
 
 export function AnimationPage() {
-  const [state,   setState]   = useState<AnimationState | null>(null);
+  const [tab,    setTab]    = useState<TabId>('globals');
+  const [lib,    setLib]    = useState<AnimationLibrary | null>(null);
+  const [state,  setState]  = useState<AnimationStateV2 | null>(null);
   const [loading, setLoading] = useState(true);
-  const [savingScope, setSavingScope] = useState<string | null>(null);
-  const [savedAt, setSavedAt] = useState<Record<string, number>>({});
+  const [saving, setSaving]   = useState<string | null>(null);
   const debounce = useRef<Record<string, number>>({});
 
+  // Initial load — library + v2 state in parallel.
   useEffect(() => {
-    api.getAnimation()
-      .then((d) => setState(d))
+    Promise.all([api.getAnimationLibrary(), api.getAnimationV2()])
+      .then(([l, s]) => { setLib(l); setState(s); })
       .catch((e) => toast.error(`Failed to load: ${(e as Error).message}`))
       .finally(() => setLoading(false));
   }, []);
 
-  async function pickIntensity(next: string) {
-    if (!state || next === state.intensity) return;
-    setSavingScope('__intensity');
-    setState({ ...state, intensity: next });
-    try {
-      const updated = await api.setAnimation({ intensity: next });
-      setState(updated);
-      toast.info(`Animation set to "${next}". Reload pages to see the change.`);
-    } catch (e) {
-      toast.error(`Save failed: ${(e as Error).message}`);
-    } finally {
-      setSavingScope(null);
-    }
-  }
-
-  async function pickDirection(next: string) {
-    if (!state || next === state.direction) return;
-    setSavingScope('__direction');
-    setState({ ...state, direction: next });
-    try {
-      const updated = await api.setAnimation({ direction: next });
-      setState(updated);
-      toast.info(`Default replay set to "${next}". Per-widget overrides keep their value. Reload to see the change.`);
-    } catch (e) {
-      toast.error(`Save failed: ${(e as Error).message}`);
-    } finally {
-      setSavingScope(null);
-    }
-  }
-
-  function patchWidget(widget: string, partial: Partial<AnimationPreset>) {
+  // ── Globals ────────────────────────────────────────────
+  async function saveGlobals(patch: { intensity?: string; direction?: string; reduceMotion?: string }) {
     if (!state) return;
-    const nextPreset = { ...(state.presets[widget] ?? {}), ...partial };
-    const nextPresets = { ...state.presets, [widget]: nextPreset };
-    setState({ ...state, presets: nextPresets });
+    setState({ ...state, globals: { ...state.globals, ...patch } as AnimationStateV2['globals'] });
+    setSaving('globals');
+    try {
+      const updated = await api.setGlobals(patch);
+      setState(updated);
+      toast.info('Globals enregistrés. Rechargez vos pages pour voir l\'effet.');
+    } catch (e) {
+      toast.error(`Save failed: ${(e as Error).message}`);
+    } finally {
+      setSaving(null);
+    }
+  }
 
-    // Debounce save so dragging a slider doesn't fire 60 requests/sec.
-    if (debounce.current[widget]) window.clearTimeout(debounce.current[widget]);
-    const slugAtCallTime = state.template_slug;
-    debounce.current[widget] = window.setTimeout(async () => {
-      setSavingScope(widget);
+  // ── Element rules (auto-save with debounce) ────────────
+  function saveElementRule(typeId: string, rule: AnimationRule) {
+    if (!state) return;
+    setState({ ...state, elementRules: { ...state.elementRules, [typeId]: rule } });
+
+    if (debounce.current[`element:${typeId}`]) window.clearTimeout(debounce.current[`element:${typeId}`]);
+    debounce.current[`element:${typeId}`] = window.setTimeout(async () => {
+      setSaving(`element:${typeId}`);
       try {
-        const updated = await api.setAnimation({
-          template_slug: slugAtCallTime,
-          presets: { [widget]: nextPreset },
-        });
+        const updated = await api.setElementRule(typeId, rule);
         setState(updated);
-        setSavedAt((m) => ({ ...m, [widget]: Date.now() }));
-        toast.info(
-          `${widget}: ${nextPreset.entrance ?? 'saved'}. Reload your pages to see the change.`,
-        );
       } catch (e) {
         toast.error(`Save failed: ${(e as Error).message}`);
       } finally {
-        setSavingScope(null);
+        setSaving(null);
+      }
+    }, 350);
+  }
+
+  async function resetElementRule(typeId: string) {
+    if (!state) return;
+    setSaving(`element:${typeId}`);
+    try {
+      const updated = await api.resetElementRule(typeId);
+      setState(updated);
+      toast.info(`${typeId} réinitialisé au défaut du schéma.`);
+    } catch (e) {
+      toast.error(`Reset failed: ${(e as Error).message}`);
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  // ── Widget overrides (auto-save with debounce) ─────────
+  function saveWidgetOverride(widget: string, rule: AnimationRule) {
+    if (!state || !state.templateSlug) return;
+    setState({
+      ...state,
+      widgetOverrides: { ...state.widgetOverrides, [widget]: rule },
+    });
+
+    if (debounce.current[`widget:${widget}`]) window.clearTimeout(debounce.current[`widget:${widget}`]);
+    debounce.current[`widget:${widget}`] = window.setTimeout(async () => {
+      setSaving(`widget:${widget}`);
+      try {
+        const updated = await api.setWidgetOverride(state.templateSlug, widget, rule);
+        setState(updated);
+      } catch (e) {
+        toast.error(`Save failed: ${(e as Error).message}`);
+      } finally {
+        setSaving(null);
       }
     }, 350);
   }
@@ -127,239 +109,46 @@ export function AnimationPage() {
         <div>
           <h1 className="tsa-pagehead__title">Animation</h1>
           <p className="tsa-pagehead__subtitle">
-            Global motion intensity for the whole site, plus per-widget preset selection.
-            Changes apply to every page that contains the widget — no per-page Elementor
-            tinkering required.
+            Modèle hiérarchique GSAP : globals → règles par type d'élément → overrides par widget.
+            Couvre les widgets <code>tw-</code> ET les widgets Elementor natifs (Heading, Image, Button…).
           </p>
         </div>
       </header>
 
       {loading && <div className="tsa-card"><div className="tsa-skel" style={{ height: 24 }} /></div>}
 
-      {!loading && state && (
+      {!loading && lib && state && (
         <>
-          <div className="tsa-anim-grid">
-            {LEVELS.map((lvl) => {
-              const isActive = lvl.id === state.intensity;
-              return (
-                <button
-                  key={lvl.id}
-                  type="button"
-                  onClick={() => pickIntensity(lvl.id)}
-                  disabled={savingScope === '__intensity'}
-                  className={'tsa-anim-card' + (isActive ? ' is-active' : '')}
-                >
-                  <span className="tsa-anim-card__demo" data-level={lvl.id}>
-                    <span className="tsa-anim-card__dot" />
-                    <span className="tsa-anim-card__dot" />
-                    <span className="tsa-anim-card__dot" />
-                  </span>
-                  <span className="tsa-anim-card__label">{lvl.label}</span>
-                  <span className="tsa-anim-card__desc">{lvl.desc}</span>
-                  {isActive && <span className="tsa-pill tsa-pill--accent tsa-anim-card__badge"><span className="tsa-pill__dot" /> Active</span>}
-                </button>
-              );
-            })}
-          </div>
+          <nav className="tsa-anim-tabs" role="tablist">
+            {TABS.map((t) => (
+              <button
+                key={t.id}
+                role="tab"
+                aria-selected={t.id === tab}
+                className={'tsa-anim-tab' + (t.id === tab ? ' is-active' : '')}
+                onClick={() => setTab(t.id)}
+              >
+                <span className="tsa-anim-tab__label">{t.label}</span>
+                <span className="tsa-anim-tab__desc">{t.desc}</span>
+              </button>
+            ))}
+          </nav>
 
-          {/* ── Default replay direction ─────────────────────── */}
-          <div className="tsa-card tsa-mt-5">
-            <header className="tsa-card__header">
-              <div>
-                <div className="tsa-card__title">Default replay direction</div>
-                <div className="tsa-card__subtitle">
-                  How animations behave when the user scrolls back through them. Per-widget overrides below keep their own value.
-                </div>
-              </div>
-            </header>
-            <div className="tsa-anim-grid tsa-anim-grid--compact">
-              {DIRECTION_OPTIONS.map((d) => {
-                const isActive = d.id === state.direction;
-                return (
-                  <button
-                    key={d.id}
-                    type="button"
-                    onClick={() => pickDirection(d.id)}
-                    disabled={savingScope === '__direction'}
-                    className={'tsa-anim-card' + (isActive ? ' is-active' : '')}
-                  >
-                    <span className="tsa-anim-card__label">{d.label}</span>
-                    <span className="tsa-anim-card__desc">{d.desc}</span>
-                    {isActive && <span className="tsa-pill tsa-pill--accent tsa-anim-card__badge"><span className="tsa-pill__dot" /> Active</span>}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {state.template_slug && state.widgets.length > 0 && (
-            <div className="tsa-card tsa-mt-5">
-              <header className="tsa-card__header">
-                <div>
-                  <div className="tsa-card__title">Per-widget animations</div>
-                  <div className="tsa-card__subtitle">
-                    Each widget can override the global direction + pick its own entrance preset, stagger, and scroll trigger. Saves automatically.
-                  </div>
-                </div>
-              </header>
-
-              <div className="tsa-anim-widget-list">
-                {state.widgets.map((w) => (
-                  <WidgetRow
-                    key={w}
-                    widget={w}
-                    preset={state.presets[w] ?? {}}
-                    grouped={state.presets_grouped}
-                    saving={savingScope === w}
-                    savedAt={savedAt[w]}
-                    onChange={(p) => patchWidget(w, p)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
+          {tab === 'globals'  && <GlobalsTab  state={state} saving={saving === 'globals'} onChange={saveGlobals} />}
+          {tab === 'elements' && <ElementsTab state={state} lib={lib} saving={saving} onSave={saveElementRule} onReset={resetElementRule} />}
+          {tab === 'widgets'  && <WidgetsTab  state={state} lib={lib} saving={saving} onSave={saveWidgetOverride} />}
+          {tab === 'library'  && <LibraryTab  lib={lib} />}
 
           <div className="tsa-card tsa-mt-4">
-            <div className="tsa-card__title">Accessibility</div>
+            <div className="tsa-card__title">Accessibilité</div>
             <div className="tsa-card__subtitle tsa-mt-3">
-              The user's <code style={{ fontFamily: 'var(--tsa-font-mono)' }}>prefers-reduced-motion</code> OS
-              setting always wins — when it's enabled, anything above "Subtle" is automatically
-              downgraded to "Subtle". Text-reveal presets fall back to a single word-fade. We
-              don't override accessibility preferences.
+              Le système utilise <code>gsap.matchMedia()</code> pour respecter <code>prefers-reduced-motion</code>.
+              La stratégie est configurée dans l'onglet Globals (par défaut : auto-dégrade vers fade simple).
+              Aucune animation n'est forcée si l'utilisateur préfère réduire le motion.
             </div>
           </div>
         </>
       )}
     </>
-  );
-}
-
-function WidgetRow({
-  widget, preset, grouped, saving, savedAt, onChange,
-}: {
-  widget:   string;
-  preset:   AnimationPreset;
-  grouped:  { element: string[]; text: string[] };
-  saving:   boolean;
-  savedAt?: number;
-  onChange: (p: Partial<AnimationPreset>) => void;
-}) {
-  const entrance  = preset.entrance  || 'fade-up';
-  const stagger   = preset.stagger   ?? 80;
-  const trigger   = preset.trigger   || 'top 85%';
-  const direction = preset.direction || ''; // empty = inherit global
-
-  // Mini live demo — animates a 3-dot row using the chosen preset's
-  // visual character. Triggers when entrance changes so the user sees
-  // the difference immediately. Pure CSS, no GSAP needed in admin.
-  const demoKey = useMemo(() => `${entrance}-${Date.now()}`, [entrance]);
-
-  return (
-    <div className={'tsa-anim-row' + (saving ? ' is-saving' : '')}>
-      <div className="tsa-anim-row__head">
-        <span className="tsa-anim-row__name">{widget}</span>
-        <DemoStrip preset={entrance} key={demoKey} />
-        <span className="tsa-anim-row__current" title="Currently applied preset">
-          → <strong>{entrance}</strong>
-        </span>
-        {saving && <span className="tsa-anim-row__saving">saving…</span>}
-        {!saving && savedAt && Date.now() - savedAt < 4000 && (
-          <span className="tsa-anim-row__saved">✓ saved</span>
-        )}
-      </div>
-
-      <div className="tsa-anim-row__controls">
-        <label className="tsa-anim-row__field">
-          <span className="tsa-anim-row__label">Preset</span>
-          <select
-            className="tsa-tk-select"
-            value={entrance}
-            onChange={(e) => onChange({ entrance: e.target.value })}
-          >
-            <optgroup label="Element entrance">
-              {grouped.element.map((p) => (
-                <option key={p} value={p}>{PRESET_LABELS[p] || p}</option>
-              ))}
-            </optgroup>
-            <optgroup label="Text reveal (Phase 2.1)">
-              {grouped.text.map((p) => (
-                <option key={p} value={p}>{PRESET_LABELS[p] || p}</option>
-              ))}
-            </optgroup>
-          </select>
-        </label>
-
-        <label className="tsa-anim-row__field">
-          <span className="tsa-anim-row__label">Stagger</span>
-          <div className="tsa-anim-row__slider">
-            <input
-              type="range"
-              min={0}
-              max={300}
-              step={10}
-              value={stagger}
-              onChange={(e) => onChange({ stagger: parseInt(e.target.value, 10) })}
-            />
-            <span className="tsa-anim-row__num">{stagger}ms</span>
-          </div>
-        </label>
-
-        <label className="tsa-anim-row__field">
-          <span className="tsa-anim-row__label">Scroll trigger</span>
-          <select
-            className="tsa-tk-select"
-            value={trigger}
-            onChange={(e) => onChange({ trigger: e.target.value })}
-          >
-            {TRIGGER_OPTIONS.map((t) => (
-              <option key={t.id} value={t.id}>{t.label}</option>
-            ))}
-          </select>
-        </label>
-
-        <label className="tsa-anim-row__field">
-          <span className="tsa-anim-row__label">Replay direction</span>
-          <select
-            className="tsa-tk-select"
-            value={direction}
-            onChange={(e) => onChange({ direction: e.target.value })}
-            title="Override the site default for this widget. Empty = use site default."
-          >
-            <option value="">Inherit site default</option>
-            {DIRECTION_OPTIONS.map((d) => (
-              <option key={d.id} value={d.id}>{d.label}</option>
-            ))}
-          </select>
-        </label>
-      </div>
-    </div>
-  );
-}
-
-/**
- * Mini CSS-only demo strip — 3 dots animated to reflect the preset's
- * visual character without loading GSAP in the admin. The animation
- * replays whenever `key` changes (we re-key on preset switch).
- */
-function DemoStrip({ preset }: { preset: string }) {
-  // Map presets to a CSS animation name. Approximations — good enough
-  // to show the user "this preset feels like X".
-  const animClass = useMemo(() => {
-    if (preset.startsWith('word-') || preset === 'editorial-stack') return 'tsa-demo-anim--word';
-    if (preset.startsWith('char-') || preset === 'text-typing')      return 'tsa-demo-anim--char';
-    if (preset === 'fade-up' || preset === 'fade-down')              return 'tsa-demo-anim--up';
-    if (preset === 'scale-in')                                       return 'tsa-demo-anim--scale';
-    if (preset === 'blur-in' || preset === 'word-fade-blur')         return 'tsa-demo-anim--blur';
-    if (preset === 'mask-reveal' || preset === 'text-fill-sweep')    return 'tsa-demo-anim--mask';
-    if (preset === 'fade-left')                                      return 'tsa-demo-anim--left';
-    if (preset === 'fade-right')                                     return 'tsa-demo-anim--right';
-    if (preset === 'none')                                           return 'tsa-demo-anim--none';
-    return 'tsa-demo-anim--fade';
-  }, [preset]);
-
-  return (
-    <span className={'tsa-demo-strip ' + animClass}>
-      <span /><span /><span />
-    </span>
   );
 }
