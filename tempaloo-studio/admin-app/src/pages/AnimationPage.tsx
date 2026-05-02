@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
-import { api } from '../api';
+import { api, type AnimationProfile } from '../api';
 import { toast } from '../components/Toast';
 import type { AnimationLibrary, AnimationRule, AnimationStateV2 } from './animation/types';
 import { GlobalsTab } from './animation/GlobalsTab';
 import { ElementsTab } from './animation/ElementsTab';
 import { WidgetsTab } from './animation/WidgetsTab';
 import { LibraryTab } from './animation/LibraryTab';
+import { ProfilesTab } from './animation/ProfilesTab';
 
-type TabId = 'globals' | 'elements' | 'widgets' | 'library';
+type TabId = 'profiles' | 'globals' | 'elements' | 'widgets' | 'library';
 
 const TABS: Array<{ id: TabId; label: string; desc: string }> = [
+  { id: 'profiles', label: 'Profiles', desc: 'Bundles 1-clic — Editorial · Cinematic · Minimal · Bold' },
   { id: 'globals',  label: 'Globals',  desc: 'Intensité · direction · reduce-motion' },
   { id: 'elements', label: 'Elements', desc: 'Règles par tag (h1, h2, p, img, button…)' },
   { id: 'widgets',  label: 'Per-widget', desc: 'Overrides par scope du template actif' },
@@ -17,20 +19,42 @@ const TABS: Array<{ id: TabId; label: string; desc: string }> = [
 ];
 
 export function AnimationPage() {
-  const [tab,    setTab]    = useState<TabId>('globals');
+  const [tab,    setTab]    = useState<TabId>('profiles');
   const [lib,    setLib]    = useState<AnimationLibrary | null>(null);
   const [state,  setState]  = useState<AnimationStateV2 | null>(null);
+  const [profiles,      setProfiles]      = useState<AnimationProfile[]>([]);
+  const [activeProfile, setActiveProfile] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState<string | null>(null);
   const debounce = useRef<Record<string, number>>({});
 
-  // Initial load — library + v2 state in parallel.
+  // Initial load — library + v2 state + profiles in parallel.
   useEffect(() => {
-    Promise.all([api.getAnimationLibrary(), api.getAnimationV2()])
-      .then(([l, s]) => { setLib(l); setState(s); })
+    Promise.all([
+      api.getAnimationLibrary(),
+      api.getAnimationV2(),
+      api.listProfiles(),
+    ])
+      .then(([l, s, ps]) => {
+        setLib(l);
+        setState(s);
+        setProfiles(ps.profiles);
+        setActiveProfile(ps.active);
+      })
       .catch((e) => toast.error(`Failed to load: ${(e as Error).message}`))
       .finally(() => setLoading(false));
   }, []);
+
+  async function refreshV2AndProfiles() {
+    try {
+      const [s, ps] = await Promise.all([api.getAnimationV2(), api.listProfiles()]);
+      setState(s);
+      setProfiles(ps.profiles);
+      setActiveProfile(ps.active);
+    } catch (e) {
+      toast.error(`Reload failed: ${(e as Error).message}`);
+    }
+  }
 
   // ── Globals ────────────────────────────────────────────
   async function saveGlobals(patch: { intensity?: string; direction?: string; reduceMotion?: string }) {
@@ -134,6 +158,14 @@ export function AnimationPage() {
             ))}
           </nav>
 
+          {tab === 'profiles' && (
+            <ProfilesTab
+              profiles={profiles}
+              active={activeProfile}
+              onApplied={refreshV2AndProfiles}
+              onListChange={(next) => { setProfiles(next.profiles); setActiveProfile(next.active); }}
+            />
+          )}
           {tab === 'globals'  && <GlobalsTab  state={state} saving={saving === 'globals'} onChange={saveGlobals} />}
           {tab === 'elements' && <ElementsTab state={state} lib={lib} saving={saving} onSave={saveElementRule} onReset={resetElementRule} />}
           {tab === 'widgets'  && <WidgetsTab  state={state} lib={lib} saving={saving} onSave={saveWidgetOverride} />}

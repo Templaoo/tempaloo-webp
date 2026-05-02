@@ -21,6 +21,7 @@ use Tempaloo\Studio\Elementor\Template_Manager;
 use Tempaloo\Studio\Elementor\Theme_Tokens;
 use Tempaloo\Studio\Elementor\Animation;
 use Tempaloo\Studio\Elementor\Animation_Presets;
+use Tempaloo\Studio\Elementor\Animation_Profiles;
 use Tempaloo\Studio\Elementor\Page_Importer;
 
 final class Rest {
@@ -210,6 +211,58 @@ final class Rest {
                 'rule' => [
                     'required' => true,
                     'type'     => 'object',
+                ],
+            ],
+        ] );
+
+        // ── Plan B — profiles ───────────────────────────────────
+        register_rest_route( self::NS, '/animation/profiles', [
+            'methods'             => 'GET',
+            'callback'            => [ $this, 'list_profiles' ],
+            'permission_callback' => [ $this, 'can_manage' ],
+        ] );
+        register_rest_route( self::NS, '/animation/profiles/apply', [
+            'methods'             => 'POST',
+            'callback'            => [ $this, 'apply_profile' ],
+            'permission_callback' => [ $this, 'can_manage' ],
+            'args'                => [
+                'id' => [
+                    'required'          => true,
+                    'type'              => 'string',
+                    'sanitize_callback' => 'sanitize_key',
+                ],
+            ],
+        ] );
+        register_rest_route( self::NS, '/animation/profiles/save', [
+            'methods'             => 'POST',
+            'callback'            => [ $this, 'save_user_profile' ],
+            'permission_callback' => [ $this, 'can_manage' ],
+            'args'                => [
+                'profile' => [
+                    'required' => true,
+                    'type'     => 'object',
+                ],
+            ],
+        ] );
+        register_rest_route( self::NS, '/animation/profiles/snapshot', [
+            'methods'             => 'POST',
+            'callback'            => [ $this, 'snapshot_profile' ],
+            'permission_callback' => [ $this, 'can_manage' ],
+            'args'                => [
+                'id'          => [ 'required' => true, 'type' => 'string', 'sanitize_callback' => 'sanitize_key' ],
+                'label'       => [ 'required' => true, 'type' => 'string' ],
+                'description' => [ 'type' => 'string' ],
+            ],
+        ] );
+        register_rest_route( self::NS, '/animation/profiles/delete', [
+            'methods'             => 'POST',
+            'callback'            => [ $this, 'delete_user_profile' ],
+            'permission_callback' => [ $this, 'can_manage' ],
+            'args'                => [
+                'id' => [
+                    'required'          => true,
+                    'type'              => 'string',
+                    'sanitize_callback' => 'sanitize_key',
                 ],
             ],
         ] );
@@ -438,6 +491,7 @@ final class Rest {
             'widgetOverrides' => (object) $widget_overrides_resolved,
             'templateSlug'    => $slug,
             'widgets'         => $widget_list,
+            'activeProfile'   => Animation_Profiles::active_id(),
             'allowed'         => [
                 'intensity'    => Animation::ALLOWED,
                 'direction'    => Animation::DIRECTIONS,
@@ -515,5 +569,54 @@ final class Rest {
             return new \WP_Error( 'bad_widget', 'Invalid template / widget slug', [ 'status' => 400 ] );
         }
         return $this->get_animation_v2();
+    }
+
+    /* ─────────────────────────────────────────────────────────────
+     * Plan B — Animation Profiles
+     * ──────────────────────────────────────────────────────────── */
+
+    public function list_profiles(): \WP_REST_Response {
+        return rest_ensure_response( [
+            'profiles' => Animation_Profiles::all(),
+            'active'   => Animation_Profiles::active_id(),
+        ] );
+    }
+
+    public function apply_profile( \WP_REST_Request $req ) {
+        $id = (string) $req->get_param( 'id' );
+        if ( ! Animation_Profiles::apply( $id ) ) {
+            return new \WP_Error( 'not_found', 'Profile not found', [ 'status' => 404 ] );
+        }
+        return $this->get_animation_v2();
+    }
+
+    public function save_user_profile( \WP_REST_Request $req ) {
+        $profile = $req->get_param( 'profile' );
+        if ( ! is_array( $profile ) || empty( $profile['id'] ) ) {
+            return new \WP_Error( 'bad_profile', 'profile.id required', [ 'status' => 400 ] );
+        }
+        if ( ! Animation_Profiles::save_user_profile( $profile ) ) {
+            return new \WP_Error( 'save_failed', 'Could not save profile', [ 'status' => 400 ] );
+        }
+        return $this->list_profiles();
+    }
+
+    public function snapshot_profile( \WP_REST_Request $req ) {
+        $id    = (string) $req->get_param( 'id' );
+        $label = (string) $req->get_param( 'label' );
+        $desc  = (string) ( $req->get_param( 'description' ) ?? '' );
+        $snap  = Animation_Profiles::snapshot_current( $id, $label, $desc );
+        if ( ! Animation_Profiles::save_user_profile( $snap ) ) {
+            return new \WP_Error( 'save_failed', 'Could not snapshot', [ 'status' => 400 ] );
+        }
+        return $this->list_profiles();
+    }
+
+    public function delete_user_profile( \WP_REST_Request $req ) {
+        $id = (string) $req->get_param( 'id' );
+        if ( ! Animation_Profiles::delete_user_profile( $id ) ) {
+            return new \WP_Error( 'not_found', 'Profile not found', [ 'status' => 404 ] );
+        }
+        return $this->list_profiles();
     }
 }

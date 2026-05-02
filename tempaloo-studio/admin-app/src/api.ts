@@ -79,6 +79,29 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ template_slug, widget, rule }),
     }),
+
+  // ── Plan B — profiles ──────────────────────────────────
+  listProfiles:    () => call<{ profiles: AnimationProfile[]; active: string }>('/animation/profiles'),
+  applyProfile:    (id: string) =>
+    call<AnimationStateV2>('/animation/profiles/apply', {
+      method: 'POST',
+      body: JSON.stringify({ id }),
+    }),
+  saveUserProfile: (profile: AnimationProfile) =>
+    call<{ profiles: AnimationProfile[]; active: string }>('/animation/profiles/save', {
+      method: 'POST',
+      body: JSON.stringify({ profile }),
+    }),
+  snapshotProfile: (id: string, label: string, description = '') =>
+    call<{ profiles: AnimationProfile[]; active: string }>('/animation/profiles/snapshot', {
+      method: 'POST',
+      body: JSON.stringify({ id, label, description }),
+    }),
+  deleteUserProfile: (id: string) =>
+    call<{ profiles: AnimationProfile[]; active: string }>('/animation/profiles/delete', {
+      method: 'POST',
+      body: JSON.stringify({ id }),
+    }),
 };
 
 /* ── v2 schema types (Plan A) ────────────────────────────── */
@@ -145,6 +168,7 @@ export interface AnimationStateV2 {
   widgetOverrides: Record<string, AnimationRule>;
   templateSlug:    string;
   widgets:         string[];
+  activeProfile?:  string;
   allowed: {
     intensity:    string[];
     direction:    string[];
@@ -152,6 +176,20 @@ export interface AnimationStateV2 {
     elementTypes: string[];
     presets:      string[];
   };
+}
+
+export interface AnimationProfile {
+  id:           string;
+  label:        string;
+  description?: string;
+  preview?:     string;
+  source?:      'builtin' | 'user';
+  globals?: {
+    intensity?:    string;
+    direction?:    string;
+    reduceMotion?: string;
+  };
+  elementRules?: Record<string, AnimationRule>;
 }
 
 export interface AnimationPreset {

@@ -92,6 +92,18 @@ final class Template_Manager {
     public function set_active( string $slug ): bool {
         if ( $slug !== '' && ! $this->get( $slug ) ) return false;
         update_option( self::ACTIVE_OPTION, $slug );
+
+        // Auto-apply the template's default animation profile (Plan B),
+        // but only when no profile is currently active — never overwrite
+        // a user's explicit choice. Reads template.json::animations.profile.
+        if ( $slug !== '' && class_exists( __NAMESPACE__ . '\\Animation_Profiles' ) ) {
+            $tpl = $this->get( $slug );
+            $profile_id = is_array( $tpl ) ? (string) ( $tpl['animations']['profile'] ?? '' ) : '';
+            if ( $profile_id !== '' && Animation_Profiles::active_id() === '' ) {
+                Animation_Profiles::apply( $profile_id );
+            }
+        }
+
         return true;
     }
 

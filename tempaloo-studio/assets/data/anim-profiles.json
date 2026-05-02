@@ -1,0 +1,254 @@
+{
+  "version": "1.0.0",
+  "comment": "Animation profiles — bundles complets (globals + element rules) appliquables en 1 clic. Réutilisables entre tous les templates installés. Un template peut référencer un profil par défaut via template.json::animations.profile, ou l'utilisateur peut en appliquer un manuellement depuis l'admin React. Chaque profil partage la même structure que la config v2 — il s'agit littéralement de presets de presets.",
+
+  "profiles": [
+    {
+      "id": "editorial",
+      "label": "Editorial",
+      "description": "Éditorial premium — fade + blur sur titres, fade-up subtil sur le reste. Style éditorial / luxe.",
+      "preview": "editorial",
+      "globals": {
+        "intensity":    "medium",
+        "direction":    "bidirectional",
+        "reduceMotion": "subtle"
+      },
+      "elementRules": {
+        "h1": {
+          "enabled": true,
+          "preset": "word-fade-blur",
+          "params":         { "duration": 0.7, "ease": "power2.out", "stagger": 0.04, "staggerFrom": "start", "blurFrom": 8 },
+          "scrollTrigger":  { "start": "top 85%", "toggleActions": "play none none reverse" }
+        },
+        "h2": {
+          "enabled": true,
+          "preset": "word-fade-up",
+          "params":         { "duration": 0.6, "ease": "power3.out", "stagger": 0.04, "staggerFrom": "start", "y": 16 },
+          "scrollTrigger":  { "start": "top 85%", "toggleActions": "play none none reverse" }
+        },
+        "h3": {
+          "enabled": true,
+          "preset": "fade-up",
+          "params":         { "duration": 0.6, "ease": "power3.out", "stagger": 0.06, "y": 18, "useAutoAlpha": true },
+          "scrollTrigger":  { "start": "top 85%", "toggleActions": "play none none reverse" }
+        },
+        "p": {
+          "enabled": true,
+          "preset": "fade-up",
+          "params":         { "duration": 0.7, "ease": "power3.out", "stagger": 0.08, "y": 20, "useAutoAlpha": true },
+          "scrollTrigger":  { "start": "top 85%", "toggleActions": "play none none reverse" }
+        },
+        "img": {
+          "enabled": true,
+          "preset": "scale-in",
+          "params":         { "duration": 0.85, "ease": "back.out(1.7)", "stagger": 0.1, "scaleFrom": 0.94, "useAutoAlpha": true },
+          "scrollTrigger":  { "start": "top 80%", "toggleActions": "play none none reverse" }
+        },
+        "button": {
+          "enabled": true,
+          "preset": "fade-up",
+          "params":         { "duration": 0.6, "ease": "power2.out", "stagger": 0.05, "y": 12, "useAutoAlpha": true },
+          "scrollTrigger":  { "start": "top 90%", "toggleActions": "play none none reverse" }
+        },
+        "container": {
+          "enabled": false,
+          "preset": "fade-up",
+          "params": { "duration": 0.7, "ease": "power3.out", "y": 24, "useAutoAlpha": true },
+          "scrollTrigger": { "start": "top 90%", "toggleActions": "play none none reverse" }
+        },
+        "link": {
+          "enabled": false,
+          "preset": "fade",
+          "params": { "duration": 0.4, "ease": "power1.out", "useAutoAlpha": true },
+          "scrollTrigger": { "start": "top 95%", "toggleActions": "play none none reverse" }
+        }
+      }
+    },
+
+    {
+      "id": "cinematic",
+      "label": "Cinematic",
+      "description": "Cinématique Stripe/Linear — slide-up overflow sur titres, blur fort sur images. Pour landing pages dramatiques.",
+      "preview": "cinematic",
+      "globals": {
+        "intensity":    "bold",
+        "direction":    "bidirectional",
+        "reduceMotion": "subtle"
+      },
+      "elementRules": {
+        "h1": {
+          "enabled": true,
+          "preset": "word-slide-up-overflow",
+          "params":         { "duration": 0.8, "ease": "power4.out", "stagger": 0.05, "yPercentFrom": 110 },
+          "scrollTrigger":  { "start": "top 85%", "toggleActions": "play none none reverse" }
+        },
+        "h2": {
+          "enabled": true,
+          "preset": "word-slide-up-overflow",
+          "params":         { "duration": 0.7, "ease": "power4.out", "stagger": 0.04, "yPercentFrom": 110 },
+          "scrollTrigger":  { "start": "top 85%", "toggleActions": "play none none reverse" }
+        },
+        "h3": {
+          "enabled": true,
+          "preset": "fade-up",
+          "params":         { "duration": 0.7, "ease": "power3.out", "stagger": 0.08, "y": 32, "useAutoAlpha": true },
+          "scrollTrigger":  { "start": "top 85%", "toggleActions": "play none none reverse" }
+        },
+        "p": {
+          "enabled": true,
+          "preset": "fade-up",
+          "params":         { "duration": 0.8, "ease": "power3.out", "stagger": 0.1, "y": 28, "useAutoAlpha": true },
+          "scrollTrigger":  { "start": "top 80%", "toggleActions": "play none none reverse" }
+        },
+        "img": {
+          "enabled": true,
+          "preset": "blur-in",
+          "params":         { "duration": 1.0, "ease": "power3.out", "stagger": 0.15, "blurFrom": 24, "useAutoAlpha": true },
+          "scrollTrigger":  { "start": "top 80%", "toggleActions": "play none none reverse" }
+        },
+        "button": {
+          "enabled": true,
+          "preset": "scale-in",
+          "params":         { "duration": 0.8, "ease": "back.out(2.5)", "stagger": 0.08, "scaleFrom": 0.85, "useAutoAlpha": true },
+          "scrollTrigger":  { "start": "top 90%", "toggleActions": "play none none reverse" }
+        },
+        "container": {
+          "enabled": true,
+          "preset": "fade-up",
+          "params":         { "duration": 1.0, "ease": "power3.out", "y": 40, "useAutoAlpha": true },
+          "scrollTrigger":  { "start": "top 90%", "toggleActions": "play none none reverse" }
+        },
+        "link": {
+          "enabled": false,
+          "preset": "fade",
+          "params": { "duration": 0.4, "ease": "power1.out", "useAutoAlpha": true },
+          "scrollTrigger": { "start": "top 95%", "toggleActions": "play none none reverse" }
+        }
+      }
+    },
+
+    {
+      "id": "minimal",
+      "label": "Minimal",
+      "description": "Discret et accessible — fades opacité partout, durées courtes. Idéal sites informationnels, blogs, docs.",
+      "preview": "minimal",
+      "globals": {
+        "intensity":    "subtle",
+        "direction":    "once",
+        "reduceMotion": "subtle"
+      },
+      "elementRules": {
+        "h1": {
+          "enabled": true,
+          "preset": "fade",
+          "params":         { "duration": 0.4, "ease": "power1.out", "stagger": 0, "useAutoAlpha": true },
+          "scrollTrigger":  { "start": "top 90%", "toggleActions": "play none none none" }
+        },
+        "h2": {
+          "enabled": true,
+          "preset": "fade",
+          "params":         { "duration": 0.4, "ease": "power1.out", "stagger": 0, "useAutoAlpha": true },
+          "scrollTrigger":  { "start": "top 90%", "toggleActions": "play none none none" }
+        },
+        "h3": {
+          "enabled": false,
+          "preset": "fade",
+          "params": { "duration": 0.3, "ease": "power1.out", "useAutoAlpha": true },
+          "scrollTrigger": { "start": "top 95%", "toggleActions": "play none none none" }
+        },
+        "p": {
+          "enabled": false,
+          "preset": "fade",
+          "params": { "duration": 0.3, "ease": "power1.out", "useAutoAlpha": true },
+          "scrollTrigger": { "start": "top 95%", "toggleActions": "play none none none" }
+        },
+        "img": {
+          "enabled": true,
+          "preset": "fade",
+          "params":         { "duration": 0.5, "ease": "power1.out", "stagger": 0, "useAutoAlpha": true },
+          "scrollTrigger":  { "start": "top 90%", "toggleActions": "play none none none" }
+        },
+        "button": {
+          "enabled": false,
+          "preset": "fade",
+          "params": { "duration": 0.3, "ease": "power1.out", "useAutoAlpha": true },
+          "scrollTrigger": { "start": "top 95%", "toggleActions": "play none none none" }
+        },
+        "container": {
+          "enabled": false,
+          "preset": "none",
+          "params": {},
+          "scrollTrigger": {}
+        },
+        "link": {
+          "enabled": false,
+          "preset": "none",
+          "params": {},
+          "scrollTrigger": {}
+        }
+      }
+    },
+
+    {
+      "id": "bold",
+      "label": "Bold",
+      "description": "Très expressif — char-up titres, mask-reveal sur images, scale-in fort sur CTAs. Pour campagnes marketing.",
+      "preview": "bold",
+      "globals": {
+        "intensity":    "bold",
+        "direction":    "replay",
+        "reduceMotion": "subtle"
+      },
+      "elementRules": {
+        "h1": {
+          "enabled": true,
+          "preset": "char-up",
+          "params":         { "duration": 0.5, "ease": "power3.out", "stagger": 0.018, "y": 14 },
+          "scrollTrigger":  { "start": "top 85%", "toggleActions": "play none none reset" }
+        },
+        "h2": {
+          "enabled": true,
+          "preset": "word-fade-up",
+          "params":         { "duration": 0.55, "ease": "back.out(1.7)", "stagger": 0.05, "staggerFrom": "start", "y": 22 },
+          "scrollTrigger":  { "start": "top 85%", "toggleActions": "play none none reset" }
+        },
+        "h3": {
+          "enabled": true,
+          "preset": "fade-up",
+          "params":         { "duration": 0.6, "ease": "back.out(1.4)", "stagger": 0.08, "y": 24, "useAutoAlpha": true },
+          "scrollTrigger":  { "start": "top 85%", "toggleActions": "play none none reset" }
+        },
+        "p": {
+          "enabled": true,
+          "preset": "fade-up",
+          "params":         { "duration": 0.7, "ease": "power3.out", "stagger": 0.1, "y": 28, "useAutoAlpha": true },
+          "scrollTrigger":  { "start": "top 80%", "toggleActions": "play none none reset" }
+        },
+        "img": {
+          "enabled": true,
+          "preset": "mask-reveal",
+          "params":         { "duration": 1.0, "ease": "power3.out", "stagger": 0.12 },
+          "scrollTrigger":  { "start": "top 80%", "toggleActions": "play none none reset" }
+        },
+        "button": {
+          "enabled": true,
+          "preset": "scale-in",
+          "params":         { "duration": 0.7, "ease": "back.out(2.5)", "stagger": 0.06, "scaleFrom": 0.7, "useAutoAlpha": true },
+          "scrollTrigger":  { "start": "top 90%", "toggleActions": "play none none reset" }
+        },
+        "container": {
+          "enabled": true,
+          "preset": "fade-up",
+          "params":         { "duration": 0.9, "ease": "power3.out", "y": 50, "useAutoAlpha": true },
+          "scrollTrigger":  { "start": "top 90%", "toggleActions": "play none none reset" }
+        },
+        "link": {
+          "enabled": false,
+          "preset": "fade",
+          "params": { "duration": 0.4, "ease": "power1.out", "useAutoAlpha": true },
+          "scrollTrigger": { "start": "top 95%", "toggleActions": "play none none none" }
+        }
+      }
+    }
+  ]
+}

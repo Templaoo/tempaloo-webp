@@ -1554,3 +1554,69 @@
   transition: border-color 140ms ease, color 140ms ease;
 }
 .tsa-btn-ghost:hover { border-color: var(--tsa-accent); color: var(--tsa-accent); }
+
+/* Profiles --------------------------------------------------- */
+.tsa-anim-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--tsa-space-3);
+  margin-top: var(--tsa-space-3);
+}
+.tsa-anim-profile-card {
+  border: 1px solid var(--tsa-border);
+  border-radius: var(--tsa-radius-md);
+  padding: 14px 16px;
+  background: var(--tsa-bg-strong);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+.tsa-anim-profile-card.is-active {
+  border-color: var(--tsa-accent);
+  box-shadow: 0 0 0 3px var(--tsa-accent-soft);
+}
+.tsa-anim-profile-card__head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.tsa-anim-profile-card__head strong { font-size: 16px; font-weight: 600; }
+.tsa-anim-profile-card__id {
+  font-size: 11px; color: var(--tsa-text-muted);
+  background: var(--tsa-bg-soft);
+  padding: 2px 6px;
+  border-radius: 4px;
+  align-self: flex-start;
+}
+.tsa-anim-profile-card__desc { font-size: 13px; color: var(--tsa-text-soft); margin: 0; line-height: 1.45; }
+.tsa-anim-profile-card__rules {
+  font-size: 11px;
+  color: var(--tsa-text-muted);
+  background: var(--tsa-bg-soft);
+  padding: 8px 10px;
+  border-radius: var(--tsa-radius-sm);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.tsa-anim-profile-card__rule code {
+  background: transparent; padding: 0;
+  color: var(--tsa-accent);
+  font-weight: 600;
+}
+.tsa-anim-profile-card__rule--more { font-style: italic; color: var(--tsa-text-muted); }
+.tsa-anim-profile-card__actions {
+  display: flex; gap: 8px; margin-top: auto;
+}
+.tsa-anim-profile-card__actions .tsa-btn-primary { flex: 1; }
+.tsa-anim-profile-card__actions .tsa-btn-primary.is-disabled {
+  background: var(--tsa-bg-soft);
+  color: var(--tsa-text-muted);
+  cursor: default;
+}
+
+.tsa-anim-snapshot-form {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  padding: 12px;
+  background: var(--tsa-bg-soft);
+  border-radius: var(--tsa-radius-sm);
+  margin: var(--tsa-space-3) 0;
+}
+.tsa-anim-snapshot-form input { flex: 1; min-width: 180px; }
