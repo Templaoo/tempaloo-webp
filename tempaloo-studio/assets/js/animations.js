@@ -285,31 +285,37 @@
         return 'bidirectional';
     }
 
-    function syncTimelineToTrigger(tl, st) {
-        if (!tl || !st) return;
-        var sync = function () {
+    /**
+     * Build a sync handler that snaps a paused timeline's progress to a
+     * ScrollTrigger's current progress. Critical for page-reload-past-
+     * trigger cases: without this, the user sees a flash of fromState
+     * (e.g. opacity:0) before ScrollTrigger fires onEnter — looks like
+     * the heading "perd l'éclairage" on reload.
+     *
+     * Wire via the trigger's per-instance onRefresh callback (gsap docs:
+     * "Use refreshPriority and per-trigger onRefresh"), NOT the global
+     * ScrollTrigger.addEventListener('refresh') — the global path leaks
+     * one listener per widget mount and re-fires for every other trigger.
+     */
+    function buildSync(tl, applyFromState) {
+        return function (self) {
+            if (!tl) return;
             try {
-                var p = typeof st.progress === 'function' ? st.progress() : 0;
+                var p = typeof self.progress === 'number'
+                            ? self.progress
+                            : (typeof self.progress === 'function' ? self.progress() : 0);
                 if (p > 0.01) {
+                    // Past start — element should be in its final state.
+                    // Skip applying fromState entirely (anti-flash on reload).
                     if (tl.progress() < 0.99) tl.progress(1).pause();
                 } else {
+                    // Before start — apply fromState so the entrance can
+                    // play when the user scrolls down through start.
+                    if (typeof applyFromState === 'function') applyFromState();
                     if (tl.progress() > 0.01) tl.progress(0).pause();
                 }
-            } catch (e) {}
+            } catch (e) { warn('sync threw', e); }
         };
-        sync();
-        // Re-sync whenever ScrollTrigger refreshes (image load, font
-        // swap, layout shift). Per-trigger onRefresh is the cheapest
-        // way — fires only when this trigger recalculates.
-        if (typeof st.scroll === 'function') {
-            // GSAP 3.12+ — st has built-in event vars at create time;
-            // we register via the create() config. For instances that
-            // already exist (rare in our flow), fall back to a manual
-            // ScrollTrigger.addEventListener.
-            try {
-                window.ScrollTrigger.addEventListener('refresh', sync);
-            } catch (e) {}
-        }
     }
 
     /* ── scheduleAnim — central dispatcher honoring `direction`.
@@ -323,12 +329,17 @@
         if (!g) return null;
         direction = direction || defaultDirection();
 
-        try { g.set(targets, fromState); } catch (e) { warn('gsap.set failed', e); }
+        var applyFromState = function () {
+            try { g.set(targets, fromState); } catch (e) { warn('gsap.set failed', e); }
+        };
 
         // Scrub mode — REQUIRES tween↔trigger link (§1.15.4 exception).
         // We bypass the timeline+callback path and create the tween with
-        // an inline scrollTrigger that has scrub:true.
+        // an inline scrollTrigger that has scrub:true. Scrub computes its
+        // own progress from scroll position, so the flash-of-hidden bug
+        // doesn't apply here — we still gsap.set so initial frame matches.
         if (direction === 'scrub' && scrollTriggerCfg && window.ScrollTrigger) {
+            applyFromState();
             try {
                 return g.to(targets, Object.assign({ overwrite: 'auto' }, toState, {
                     scrollTrigger: {
@@ -358,6 +369,7 @@
         }
 
         if (!scrollTriggerCfg || !window.ScrollTrigger) {
+            applyFromState();
             tl.play();
             return tl;
         }
@@ -367,6 +379,12 @@
             start:               scrollTriggerCfg.start || 'top 85%',
             end:                 scrollTriggerCfg.end,
             invalidateOnRefresh: true,
+            // CRITICAL — onRefresh fires once on create (after positions
+            // computed) and again on every layout change. We use it to
+            // snap timeline progress AND lazily apply fromState only when
+            // scroll is before start. On reload past start, fromState is
+            // never rendered → no flash of opacity:0 ("éclairage perdu").
+            onRefresh: buildSync(tl, applyFromState),
         };
 
         if (direction === 'once') {
@@ -381,16 +399,14 @@
             cfg.onLeaveBack = function () { tl.reverse(); };
         }
 
-        var st;
         try {
-            st = window.ScrollTrigger.create(cfg);
+            window.ScrollTrigger.create(cfg);
         } catch (e) {
             warn('ScrollTrigger.create failed — playing tween immediately', e);
+            applyFromState();
             tl.play();
-            return tl;
         }
 
-        syncTimelineToTrigger(tl, st);
         return tl;
     }
 
@@ -406,33 +422,77 @@
      * If only playFn is provided, bidirectional/replay degrade to
      * once-style behavior (no reverse on scroll up).
      */
-    function withScroll(opts, playFn, reverseFn) {
+    function withScroll(opts, playFn, reverseFn, setFromFn) {
         opts = opts || {};
         var direction = (opts.direction || defaultDirection()).toLowerCase();
 
+        // No trigger — apply fromState then play immediately (parity with
+        // the no-scrolltrigger branch in scheduleAnim).
         if (!opts.scrollTrigger || !window.ScrollTrigger) {
+            if (typeof setFromFn === 'function') { try { setFromFn(); } catch (e) {} }
             try { playFn(); } catch (e) {}
             return;
         }
+
+        var fromApplied = false;
+        var played      = false;
+
+        var ensureFrom = function () {
+            if (fromApplied || typeof setFromFn !== 'function') return;
+            fromApplied = true;
+            try { setFromFn(); } catch (e) { warn('setFromFn threw', e); }
+        };
+        var safePlay = function () {
+            ensureFrom();
+            played = true;
+            try { playFn(); } catch (e) {}
+        };
+        var safeReplay = function () {
+            ensureFrom();
+            played = true;
+            try { playFn(); } catch (e) {}
+        };
+        var safeReverse = function () {
+            if (!played) return; // never reverse before first play
+            try { reverseFn(); } catch (e) {}
+        };
 
         var cfg = {
             trigger:             opts.scrollTrigger.trigger,
             start:               opts.scrollTrigger.start || 'top 85%',
             end:                 opts.scrollTrigger.end,
             invalidateOnRefresh: true,
+            // CRITICAL — defer fromState until ScrollTrigger has computed
+            // positions. If reload lands past start, fromState is never
+            // applied → no flash of hidden text ("éclairage perdu").
+            onRefresh: function (self) {
+                var p = typeof self.progress === 'number' ? self.progress : 0;
+                if (p > 0.01) {
+                    // Past start — text should be visible. Run play once
+                    // to put spans in their played-out state. Subsequent
+                    // refreshes skip via the `played` guard.
+                    if (!played) {
+                        played = true;
+                        try { playFn(); } catch (e) {}
+                    }
+                } else {
+                    // Before start — apply fromState so entrance works.
+                    ensureFrom();
+                }
+            },
         };
 
         if (direction === 'once') {
             cfg.once    = true;
-            cfg.onEnter = function () { try { playFn(); } catch (e) {} };
+            cfg.onEnter = safePlay;
         } else if (direction === 'replay') {
-            cfg.onEnter     = function () { try { playFn(); } catch (e) {} };
-            cfg.onEnterBack = function () { try { playFn(); } catch (e) {} };
+            cfg.onEnter     = safeReplay;
+            cfg.onEnterBack = safeReplay;
         } else { // bidirectional
-            cfg.onEnter     = function () { try { playFn();    } catch (e) {} };
-            cfg.onEnterBack = function () { try { playFn();    } catch (e) {} };
+            cfg.onEnter     = safePlay;
+            cfg.onEnterBack = safePlay;
             if (typeof reverseFn === 'function') {
-                cfg.onLeaveBack = function () { try { reverseFn(); } catch (e) {} };
+                cfg.onLeaveBack = safeReverse;
             }
         }
 
@@ -440,6 +500,7 @@
             window.ScrollTrigger.create(cfg);
         } catch (e) {
             warn('withScroll: ScrollTrigger.create failed — running immediately', e);
+            ensureFrom();
             try { playFn(); } catch (e2) {}
         }
     }
@@ -654,7 +715,6 @@
         'word-fade-up': function (el, opts) {
             var words = splitWords(el, false);
             var y = 16 * (opts.lvlFactor || 1);
-            gsap().set(words, { opacity: 0, y: y });
             withScroll(opts,
                 function () {
                     gsap().to(words, {
@@ -667,14 +727,14 @@
                         opacity: 0, y: y, duration: 0.4, ease: 'power3.in',
                         stagger: { each: 0.02, from: 'end' }, overwrite: 'auto',
                     });
-                }
+                },
+                function () { gsap().set(words, { opacity: 0, y: y }); }
             );
         },
 
         // 2. Word fade-blur — premium / editorial.
         'word-fade-blur': function (el, opts) {
             var words = splitWords(el, false);
-            gsap().set(words, { opacity: 0, filter: 'blur(8px)' });
             withScroll(opts,
                 function () {
                     gsap().to(words, {
@@ -689,14 +749,14 @@
                         duration: 0.45, ease: 'power2.in',
                         stagger: { each: 0.02, from: 'end' }, overwrite: 'auto',
                     });
-                }
+                },
+                function () { gsap().set(words, { opacity: 0, filter: 'blur(8px)' }); }
             );
         },
 
         // 3. Word slide-up (overflow) — cinematic Stripe-style.
         'word-slide-up-overflow': function (el, opts) {
             var inners = splitWords(el, true);
-            gsap().set(inners, { yPercent: 110 });
             withScroll(opts,
                 function () {
                     gsap().to(inners, {
@@ -709,7 +769,8 @@
                         yPercent: 110, duration: 0.45, ease: 'power4.in',
                         stagger: { each: 0.025, from: 'end' }, overwrite: 'auto',
                     });
-                }
+                },
+                function () { gsap().set(inners, { yPercent: 110 }); }
             );
         },
 
@@ -719,7 +780,6 @@
             if (text.length > 60) return TEXT_PRESETS['word-fade-up'](el, opts);
             var chars = splitChars(el);
             var y = 8 * (opts.lvlFactor || 1);
-            gsap().set(chars, { opacity: 0, y: y });
             withScroll(opts,
                 function () {
                     gsap().to(chars, {
@@ -732,7 +792,8 @@
                         opacity: 0, y: y, duration: 0.35, ease: 'power3.in',
                         stagger: { each: 0.012, from: 'end' }, overwrite: 'auto',
                     });
-                }
+                },
+                function () { gsap().set(chars, { opacity: 0, y: y }); }
             );
         },
 
@@ -740,7 +801,6 @@
         'line-fade-up-stagger': function (el, opts) {
             var lines = splitLines(el);
             var y = 24 * (opts.lvlFactor || 1);
-            gsap().set(lines, { opacity: 0, y: y });
             withScroll(opts,
                 function () {
                     gsap().to(lines, {
@@ -753,7 +813,8 @@
                         opacity: 0, y: y, duration: 0.5, ease: 'power3.in',
                         stagger: { each: 0.06, from: 'end' }, overwrite: 'auto',
                     });
-                }
+                },
+                function () { gsap().set(lines, { opacity: 0, y: y }); }
             );
         },
 
@@ -761,7 +822,6 @@
         'text-typing': function (el, opts) {
             var chars = splitChars(el);
             var stagger = Math.min(0.045, chars.length > 0 ? 1.5 / chars.length : 0.045);
-            gsap().set(chars, { opacity: 0 });
             withScroll(opts,
                 function () {
                     gsap().to(chars, {
@@ -774,7 +834,8 @@
                         stagger: { each: stagger, from: 'end' },
                         ease: 'none', overwrite: 'auto',
                     });
-                }
+                },
+                function () { gsap().set(chars, { opacity: 0 }); }
             );
         },
 
@@ -783,7 +844,6 @@
             var text = (el.textContent || '').trim();
             if (text.length > 80) {
                 var words = splitWords(el, false);
-                gsap().set(words, { opacity: 0.22 });
                 withScroll(opts,
                     function () {
                         gsap().to(words, {
@@ -797,12 +857,12 @@
                             stagger: { each: 0.03, from: 'end' },
                             ease: 'power2.in', overwrite: 'auto',
                         });
-                    }
+                    },
+                    function () { gsap().set(words, { opacity: 0.22 }); }
                 );
                 return;
             }
             var chars = splitChars(el);
-            gsap().set(chars, { opacity: 0.22 });
             withScroll(opts,
                 function () {
                     gsap().to(chars, {
@@ -816,7 +876,8 @@
                         stagger: { each: 0.015, from: 'end' },
                         ease: 'power2.in', overwrite: 'auto',
                     });
-                }
+                },
+                function () { gsap().set(chars, { opacity: 0.22 }); }
             );
         },
 
@@ -855,44 +916,80 @@
                 // Graceful fallback — the widget didn't mark its children,
                 // so just fade the whole widget root in.
                 var y0 = 16 * (opts.lvlFactor || 1);
-                g.set(rootEl, { opacity: 0, y: y0 });
-                withScroll(opts, function () {
-                    g.to(rootEl, {
-                        opacity: 1, y: 0, duration: 0.7, ease: 'power3.out',
-                        clearProps: 'opacity,transform', overwrite: 'auto',
-                    });
-                });
+                withScroll(opts,
+                    function () {
+                        g.to(rootEl, {
+                            opacity: 1, y: 0, duration: 0.7, ease: 'power3.out',
+                            clearProps: 'opacity,transform', overwrite: 'auto',
+                        });
+                    },
+                    function () {
+                        g.to(rootEl, {
+                            opacity: 0, y: y0, duration: 0.45, ease: 'power3.in',
+                            overwrite: 'auto',
+                        });
+                    },
+                    function () { g.set(rootEl, { opacity: 0, y: y0 }); }
+                );
                 return;
             }
-            // Pre-set all targets to their fromState, then assemble a
-            // paused timeline that runs onEnter.
+            // Map targets to their (kind, words?) shape — split runs once
+            // per refresh because splitWords is idempotent via __twSplit.
             var prepared = Array.prototype.slice.call(targets).map(function (t) {
                 var tag = (t.tagName || '').toLowerCase();
                 var isHeadline = tag === 'h1' || tag === 'h2' || tag === 'h3';
                 if (isHeadline) {
-                    var words = splitWords(t, false);
-                    g.set(words, { opacity: 0, y: 16 * (opts.lvlFactor || 1) });
-                    return { kind: 'headline', el: t, words: words };
+                    return { kind: 'headline', el: t, words: splitWords(t, false) };
                 }
-                g.set(t, { opacity: 0, y: 14 * (opts.lvlFactor || 1) });
                 return { kind: 'el', el: t };
             });
-            withScroll(opts, function () {
-                var tl = g.timeline();
-                prepared.forEach(function (p, i) {
-                    if (p.kind === 'headline') {
-                        tl.to(p.words, {
-                            opacity: 1, y: 0, duration: 0.65, ease: 'power3.out',
-                            stagger: 0.03, clearProps: 'opacity,transform', overwrite: 'auto',
-                        }, i === 0 ? 0 : 0.15);
-                    } else {
-                        tl.to(p.el, {
-                            opacity: 1, y: 0, duration: 0.55, ease: 'power3.out',
-                            clearProps: 'opacity,transform', overwrite: 'auto',
-                        }, i === 0 ? 0 : '<0.08');
-                    }
-                });
-            });
+            var lvlF = opts.lvlFactor || 1;
+            withScroll(opts,
+                function () {
+                    var tl = g.timeline();
+                    prepared.forEach(function (p, i) {
+                        if (p.kind === 'headline') {
+                            tl.to(p.words, {
+                                opacity: 1, y: 0, duration: 0.65, ease: 'power3.out',
+                                stagger: 0.03, clearProps: 'opacity,transform', overwrite: 'auto',
+                            }, i === 0 ? 0 : 0.15);
+                        } else {
+                            tl.to(p.el, {
+                                opacity: 1, y: 0, duration: 0.55, ease: 'power3.out',
+                                clearProps: 'opacity,transform', overwrite: 'auto',
+                            }, i === 0 ? 0 : '<0.08');
+                        }
+                    });
+                },
+                function () {
+                    // Reverse choreography — fade back out top-to-bottom.
+                    prepared.forEach(function (p) {
+                        if (p.kind === 'headline') {
+                            g.to(p.words, {
+                                opacity: 0, y: 16 * lvlF, duration: 0.4,
+                                ease: 'power3.in', stagger: { each: 0.02, from: 'end' },
+                                overwrite: 'auto',
+                            });
+                        } else {
+                            g.to(p.el, {
+                                opacity: 0, y: 14 * lvlF, duration: 0.35,
+                                ease: 'power3.in', overwrite: 'auto',
+                            });
+                        }
+                    });
+                },
+                function () {
+                    // setFromState — applied only when refresh detects we
+                    // are BEFORE start (anti-flash on reload past hero).
+                    prepared.forEach(function (p) {
+                        if (p.kind === 'headline') {
+                            g.set(p.words, { opacity: 0, y: 16 * lvlF });
+                        } else {
+                            g.set(p.el, { opacity: 0, y: 14 * lvlF });
+                        }
+                    });
+                }
+            );
         },
     };
 
