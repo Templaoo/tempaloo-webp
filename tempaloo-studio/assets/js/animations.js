@@ -31,6 +31,59 @@
     var ts = (window.tempaloo && window.tempaloo.studio) || {};
     if (!ts.onReady || !ts.delegate) return;
 
+    /* ── Debug logger — opt-in via ?tw_debug=1 OR localStorage ─
+     *
+     * When enabled, logs the entire animation pipeline to the console
+     * so we can diagnose "widget invisible after refresh" reports.
+     * Tracks: GSAP load timing, plugin registration, scope discovery,
+     * preset application, ScrollTrigger fire events, errors caught.
+     *
+     * Activation:
+     *   - Add `?tw_debug=1` to any URL → immediate trace for that load
+     *   - Or run `localStorage.setItem('tw_debug','1')` for persistent
+     *   - Or `?tw_debug=0` / `localStorage.removeItem('tw_debug')` to clear
+     */
+    var DEBUG = (function () {
+        try {
+            var qs = location.search.match(/[?&]tw_debug=([^&]*)/);
+            if (qs) {
+                var v = qs[1];
+                if (v === '1' || v === 'true') { localStorage.setItem('tw_debug', '1'); return true; }
+                if (v === '0' || v === 'false') { localStorage.removeItem('tw_debug'); return false; }
+            }
+            return localStorage.getItem('tw_debug') === '1';
+        } catch (e) { return false; }
+    })();
+
+    function log() {
+        if (!DEBUG || !window.console) return;
+        var args = Array.prototype.slice.call(arguments);
+        args.unshift('%c[tw]', 'color:#3fb2a2;font-weight:bold');
+        try { console.log.apply(console, args); } catch (e) {}
+    }
+    function warn() {
+        if (!window.console) return;
+        var args = Array.prototype.slice.call(arguments);
+        args.unshift('[tw]');
+        try { console.warn.apply(console, args); } catch (e) {}
+    }
+
+    log('runtime boot — gsap=' + !!window.gsap + ' scrollTrigger=' + !!window.ScrollTrigger + ' debug=' + DEBUG);
+    if (DEBUG) {
+        // Expose hooks for manual inspection in DevTools.
+        window.tempaloo.studio.__debug = {
+            stuckElements: function () {
+                var stuck = [];
+                document.querySelectorAll('[data-tw-anim-scope], [data-tw-anim-target], [data-tw-anim-text]').forEach(function (el) {
+                    if (parseFloat(getComputedStyle(el).opacity) < 0.05) stuck.push(el);
+                });
+                return stuck;
+            },
+            forceShow: function () { ensureVisible(true); },
+            scrollTriggers: function () { return window.ScrollTrigger ? window.ScrollTrigger.getAll() : []; },
+        };
+    }
+
     /* ── Register ScrollTrigger with GSAP — CRITICAL ─────────
      *
      * Without this, every `gsap.from(target, { scrollTrigger: {…} })`
@@ -48,9 +101,100 @@
             try {
                 window.gsap.registerPlugin(window.ScrollTrigger);
                 window.gsap.__twSTRegistered = true;
-            } catch (e) { /* swallow — still try to animate */ }
+                log('ScrollTrigger registered with GSAP');
+            } catch (e) { warn('ScrollTrigger registerPlugin threw:', e); }
         }
+    } else if (!window.gsap) {
+        warn('GSAP not loaded at animations.js eval — animations will silently no-op');
+    } else if (!window.ScrollTrigger) {
+        warn('ScrollTrigger not loaded — scroll-into-view animations will fire on init instead');
     }
+
+    /* ── Safety net — force visibility on stuck elements ─────
+     *
+     * Defensive fallback for any element that ends up at opacity 0
+     * for >4 seconds after page load. Possible causes: GSAP failed
+     * to register, a preset threw mid-execution, ScrollTrigger
+     * computed wrong offsets due to layout shift, or browser quirks
+     * on history-restored scroll positions. This guarantees the page
+     * is ALWAYS usable — animations are nice-to-have, content visibility
+     * is non-negotiable.
+     */
+    function ensureVisible(force) {
+        var stuckRoots = [];
+        var stuckSplits = [];
+        document.querySelectorAll('[data-tw-anim-scope], [data-tw-anim-target], [data-tw-anim-text]').forEach(function (el) {
+            var op = parseFloat(getComputedStyle(el).opacity);
+            if (op < 0.05) stuckRoots.push(el);
+        });
+        // Also check split-text descendants (words / chars / lines) which
+        // are the most common stuck-at-0 case after a failed GSAP timeline.
+        document.querySelectorAll('.tw-word, .tw-word__inner, .tw-char, .tw-line__inner').forEach(function (el) {
+            var op = parseFloat(getComputedStyle(el).opacity);
+            if (op < 0.05) stuckSplits.push(el);
+        });
+
+        if (!stuckRoots.length && !stuckSplits.length) {
+            log('safety net: all elements visible');
+            return;
+        }
+        warn('safety net: forcing visibility on', stuckRoots.length, 'roots +',
+             stuckSplits.length, 'split-spans', force ? '(manual)' : '(auto)');
+
+        function clean(el) {
+            if (window.gsap && typeof window.gsap.killTweensOf === 'function') {
+                try { window.gsap.killTweensOf(el); } catch (e) {}
+            }
+            el.style.opacity = '';
+            el.style.transform = '';
+            el.style.filter = '';
+            el.style.clipPath = '';
+            el.style.yPercent = '';
+        }
+
+        stuckRoots.forEach(function (el) {
+            clean(el);
+            el.querySelectorAll('.tw-word, .tw-word__inner, .tw-char, .tw-line__inner').forEach(clean);
+        });
+        stuckSplits.forEach(clean);
+    }
+    // Schedule the safety net once layout has settled.
+    if (document.readyState === 'complete') {
+        setTimeout(function () { ensureVisible(false); }, 4000);
+    } else {
+        window.addEventListener('load', function () {
+            setTimeout(function () { ensureVisible(false); }, 4000);
+        });
+    }
+
+    /* ── Boot-time asset audit (debug only) ─────────────────── */
+    function bootAudit() {
+        if (!DEBUG) return;
+        var stylesheets = Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
+            .map(function (l) { return l.href; });
+        var scripts = Array.from(document.scripts)
+            .map(function (s) { return s.src; })
+            .filter(Boolean);
+        var twStyles  = stylesheets.filter(function (h) { return h.indexOf('tempaloo-studio') >= 0; });
+        var twScripts = scripts.filter(function (h) { return h.indexOf('tempaloo-studio') >= 0; });
+        var scopes    = document.querySelectorAll('[data-tw-anim-scope]').length;
+        var targets   = document.querySelectorAll('[data-tw-anim-target]').length;
+        var textTgts  = document.querySelectorAll('[data-tw-anim-text]').length;
+        var anims     = (window.tempaloo && window.tempaloo.studio && window.tempaloo.studio.anims) || {};
+
+        log('— BOOT AUDIT —');
+        log('  GSAP:', window.gsap ? window.gsap.version || '?' : 'MISSING');
+        log('  ScrollTrigger:', window.ScrollTrigger ? window.ScrollTrigger.version || '?' : 'MISSING');
+        log('  ST registered:', !!(window.gsap && window.gsap.__twSTRegistered));
+        log('  Stylesheets (tempaloo):', twStyles);
+        log('  Scripts (tempaloo):', twScripts);
+        log('  Widget scopes found:', scopes);
+        log('  Anim targets found:', targets, '(text:', textTgts + ')');
+        log('  Anims config:', Object.keys(anims).length ? anims : '(empty)');
+        log('  intensity:', level());
+    }
+    if (document.readyState !== 'loading') bootAudit();
+    else document.addEventListener('DOMContentLoaded', bootAudit);
 
     /* ── Refresh ScrollTrigger once layout is final ─────────
      *
@@ -59,20 +203,30 @@
      * Refresh on window.load (everything done) and document.fonts.ready
      * (web fonts swapped in) so triggers fire at the right scroll point.
      */
-    function refreshScrollTrigger() {
+    function refreshScrollTrigger(why) {
         if (window.ScrollTrigger && typeof window.ScrollTrigger.refresh === 'function') {
-            try { window.ScrollTrigger.refresh(); } catch (e) {}
+            try { window.ScrollTrigger.refresh(); log('ScrollTrigger.refresh()', why || ''); }
+            catch (e) { warn('ScrollTrigger.refresh threw:', e); }
         }
     }
+    // Refresh AT MULTIPLE points so scroll positions stay accurate
+    // through the whole page-loading lifecycle.
     if (document.readyState === 'complete') {
-        // Page already loaded by the time we got here — refresh next tick.
-        setTimeout(refreshScrollTrigger, 50);
+        setTimeout(function () { refreshScrollTrigger('initial-already-complete'); }, 50);
     } else {
-        window.addEventListener('load', function () { setTimeout(refreshScrollTrigger, 50); });
+        document.addEventListener('DOMContentLoaded', function () { setTimeout(function () { refreshScrollTrigger('DOMContentLoaded'); }, 0); });
+        window.addEventListener('load',                function () { setTimeout(function () { refreshScrollTrigger('window-load'); }, 50); });
     }
     if (document.fonts && document.fonts.ready && typeof document.fonts.ready.then === 'function') {
-        document.fonts.ready.then(refreshScrollTrigger);
+        document.fonts.ready.then(function () { refreshScrollTrigger('fonts-ready'); });
     }
+    // Also on window resize (debounced) — ScrollTrigger handles this
+    // natively but we add an extra trigger for restored scroll positions.
+    var resizeTimer;
+    window.addEventListener('resize', function () {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(function () { refreshScrollTrigger('resize'); }, 200);
+    });
 
     /* ── Helpers ─────────────────────────────────────────────── */
 
@@ -549,10 +703,13 @@
     /* ── Scope-driven entrance dispatcher ───────────────────── */
 
     function applyEntrance(rootEl) {
-        if (!gsap()) return;
+        if (!gsap()) {
+            warn('applyEntrance skipped — gsap missing for', rootEl);
+            return;
+        }
 
         var lvl = level();
-        if (lvl === 'off') return;
+        if (lvl === 'off') { log('applyEntrance: intensity=off, skipping', rootEl); return; }
 
         var scope = rootEl.getAttribute('data-tw-anim-scope');
         if (!scope) return;
@@ -580,10 +737,17 @@
             scrollTrigger: hasST() && trig !== 'none' ? { trigger: rootEl, start: trig, once: true } : null,
         };
 
+        log('applyEntrance', { scope: scope, preset: preset, lvl: lvl, opts: opts });
+
         // Composite text presets like 'editorial-stack' take the rootEl
         // and orchestrate their own targets internally.
         if (TEXT_PRESETS[preset] && (preset === 'editorial-stack')) {
-            try { TEXT_PRESETS[preset](rootEl, opts); } catch (e) {}
+            try { TEXT_PRESETS[preset](rootEl, opts); }
+            catch (e) {
+                warn('preset "' + preset + '" threw on', rootEl, e);
+                // Failure fallback: don't leave the widget invisible.
+                rootEl.style.opacity = '1';
+            }
             return;
         }
 
@@ -595,7 +759,8 @@
             var name = t.getAttribute('data-tw-anim-text');
             var fn = TEXT_PRESETS[name];
             if (fn) {
-                try { fn(t, opts); } catch (e) {}
+                try { fn(t, opts); }
+                catch (e) { warn('text preset "' + name + '" threw on', t, e); t.style.opacity = '1'; }
             }
         });
 
@@ -616,8 +781,18 @@
         });
 
         var fn = PRESETS[preset];
-        if (!fn) return;
-        try { fn(elemTargets, opts); } catch (e) {}
+        if (!fn) {
+            warn('applyEntrance: unknown preset "' + preset + '" for scope "' + scope + '"');
+            return;
+        }
+        try {
+            fn(elemTargets, opts);
+            log('applied "' + preset + '" to', elemTargets.length, 'targets in scope', scope);
+        } catch (e) {
+            warn('preset "' + preset + '" threw on', elemTargets, e);
+            // Don't leave widgets invisible if a preset crashed.
+            elemTargets.forEach(function (t) { t.style.opacity = '1'; });
+        }
     }
 
     /* Standalone text-reveal — `data-tw-anim-text` outside any scope.
