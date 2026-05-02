@@ -1001,6 +1001,177 @@
   vertical-align: middle;
 }
 
+/* ── Token swatch picker (used in the bind form) ─────── */
+
+#tempaloo-studio-floating-root .tsa-fp__tokenpick {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+#tempaloo-studio-floating-root .tsa-fp__tokenpick-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--tsa-bg-soft) !important;
+  border: 1px solid var(--tsa-border) !important;
+  border-radius: var(--tsa-radius-sm);
+  color: var(--tsa-text) !important;
+  font-size: 11.5px !important;
+  cursor: pointer;
+  text-align: left;
+}
+#tempaloo-studio-floating-root .tsa-fp__tokenpick-btn:hover {
+  border-color: var(--tsa-accent) !important;
+}
+#tempaloo-studio-floating-root .tsa-fp__tokenpick-btn.is-selected {
+  background: var(--tsa-bg) !important;
+}
+.tsa-fp__tokenpick-chip {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--tsa-border-strong);
+  flex-shrink: 0;
+}
+.tsa-fp__tokenpick-chip--empty {
+  background: repeating-linear-gradient(45deg, var(--tsa-bg) 0 4px, var(--tsa-bg-soft) 4px 8px);
+}
+.tsa-fp__tokenpick-chip-light,
+.tsa-fp__tokenpick-chip-dark {
+  position: absolute;
+  inset: 0;
+}
+.tsa-fp__tokenpick-chip-dark {
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+}
+.tsa-fp__tokenpick-name {
+  flex: 1;
+  font-family: var(--tsa-font-mono, ui-monospace, monospace);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tsa-fp__tokenpick-caret {
+  font-size: 9px;
+  color: var(--tsa-text-muted);
+}
+
+#tempaloo-studio-floating-root .tsa-fp__tokenpick-pop {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 10;
+  background: var(--tsa-bg-strong);
+  border: 1px solid var(--tsa-border-strong);
+  border-radius: var(--tsa-radius-sm);
+  box-shadow: var(--tsa-shadow-lg);
+  padding: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.tsa-fp__tokenpick-group + .tsa-fp__tokenpick-group {
+  margin-top: 10px;
+}
+.tsa-fp__tokenpick-group-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--tsa-text-muted);
+  margin-bottom: 4px;
+  padding: 0 2px;
+}
+.tsa-fp__tokenpick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
+  gap: 4px;
+}
+#tempaloo-studio-floating-root .tsa-fp__tokenpick-swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 4px;
+  border: 1px solid var(--tsa-border) !important;
+  border-radius: 4px;
+  background: transparent !important;
+  cursor: pointer;
+  transition: border-color 120ms ease, transform 120ms ease;
+  min-width: 0;
+}
+#tempaloo-studio-floating-root .tsa-fp__tokenpick-swatch:hover {
+  border-color: var(--tsa-accent) !important;
+  transform: translateY(-1px);
+}
+#tempaloo-studio-floating-root .tsa-fp__tokenpick-swatch.is-active {
+  border-color: var(--tsa-accent) !important;
+  background: color-mix(in srgb, var(--tsa-accent) 8%, transparent) !important;
+}
+.tsa-fp__tokenpick-swatch-name {
+  font-size: 9px;
+  line-height: 1.15;
+  color: var(--tsa-text-soft);
+  text-align: center;
+  word-break: break-word;
+  font-weight: 500;
+}
+#tempaloo-studio-floating-root .tsa-fp__tokenpick-clear {
+  margin-top: 8px;
+  width: 100%;
+  background: transparent !important;
+  border: 1px dashed var(--tsa-border-strong) !important;
+  color: var(--tsa-text-muted) !important;
+  padding: 5px 8px !important;
+  border-radius: 4px;
+  font-size: 10.5px !important;
+  cursor: pointer;
+}
+#tempaloo-studio-floating-root .tsa-fp__tokenpick-clear:hover {
+  color: #ef4444 !important;
+  border-color: #ef4444 !important;
+}
+
+/* Add-form context note + auto-bind toggle */
+.tsa-fp__addform-context {
+  font-size: 10.5px;
+  line-height: 1.45;
+  padding: 6px 10px;
+  background: color-mix(in srgb, var(--tsa-accent) 8%, transparent);
+  border-radius: 4px;
+  color: var(--tsa-text-soft);
+}
+.tsa-fp__addform-autobind {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--tsa-text-soft);
+  cursor: pointer;
+  padding: 4px 0;
+}
+.tsa-fp__addform-autobind input[type="checkbox"] {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+.tsa-fp__addform-autobind code {
+  font-family: var(--tsa-font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  background: var(--tsa-bg);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+/* Wider bindform row variant — token picker needs more horizontal room */
+.tsa-fp__bindform-row--wide .tsa-fp__bindform-label {
+  align-self: flex-start;
+  margin-top: 6px;
+}
+
 /* Mobile fallback */
 @media (max-width: 767px) {
   #tempaloo-studio-floating-root { display: none; }

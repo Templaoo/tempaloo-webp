@@ -190,10 +190,11 @@ export function FloatingPanel() {
   const [inspectLabel,  setInspectLabel]  = useState<string>('');
 
   // Add-token form state
-  const [addOpen,    setAddOpen]    = useState(false);
-  const [addName,    setAddName]    = useState('');
-  const [addLight,   setAddLight]   = useState('#ffffff');
-  const [addDark,    setAddDark]    = useState('#000000');
+  const [addOpen,     setAddOpen]     = useState(false);
+  const [addName,     setAddName]     = useState('');
+  const [addLight,    setAddLight]    = useState('#ffffff');
+  const [addDark,     setAddDark]     = useState('#000000');
+  const [addAutoBind, setAddAutoBind] = useState(false);
 
   // Inspect target — captured at click time, used by the bindings UI
   const [inspectTarget, setInspectTarget] = useState<{ selector: string; label: string } | null>(null);
@@ -511,6 +512,25 @@ export function FloatingPanel() {
     setBindings([]);
   }
 
+  /**
+   * Build a context-aware default name for the "Add color" form when
+   * an inspect target is active. The user clicked on say a services
+   * card, opened Add color — naming the new token "services-card-bg"
+   * makes it obvious that it scopes to that element, not a generic
+   * design system slot. They can edit before submitting.
+   */
+  function suggestContextualName(): string {
+    if (!inspectTarget) return '';
+    // Take the inspect label (e.g. "services · card (light)") and
+    // collapse to a kebab-case slug.
+    return inspectTarget.label
+      .toLowerCase()
+      .replace(/\([^)]*\)/g, '')        // drop "(light)" / "(dark)"
+      .replace(/[^a-z0-9]+/g, '-')      // non-alphanum → hyphen
+      .replace(/^-+|-+$/g, '')          // trim
+      .replace(/-+/g, '-');             // collapse repeats
+  }
+
   function addToken() {
     const raw = addName.trim().toLowerCase().replace(/^-+|-+$/g, '');
     if (!raw) { setHintFlash('Name required.', 2200); return; }
@@ -520,15 +540,38 @@ export function FloatingPanel() {
       setHintFlash(`Token "${fullName}" already exists.`, 3000);
       return;
     }
-    flog('addToken', { fullName, light: addLight, dark: addDark });
+    flog('addToken', { fullName, light: addLight, dark: addDark, autoBind: addAutoBind, target: inspectTarget?.selector });
     setDrafts((d) => ({
       light: { ...d.light, [fullName]: addLight },
       dark:  { ...d.dark,  [fullName]: addDark  },
     }));
     setOpenCats((prev) => new Set([...prev, categoryOf(fullName)]));
+
+    // If user enabled auto-bind AND there's a current inspect target,
+    // immediately bind the new custom token to that element. Defaults
+    // to background-color (the most common reason to create a custom
+    // color from an inspect target). User can change it via the bind
+    // form afterwards if needed.
+    if ( addAutoBind && inspectTarget ) {
+      const id = `${inspectTarget.selector}__background-color`;
+      setBindings((arr) => {
+        const without = arr.filter((b) => b.id !== id);
+        return [...without, {
+          id,
+          selector: inspectTarget.selector,
+          property: 'background-color',
+          token:    fullName,
+          label:    inspectTarget.label,
+        }];
+      });
+      setHintFlash(`Added ${fullName} + bound to ${inspectTarget.label} background`, 4000);
+    } else {
+      setHintFlash(`Added ${fullName} (Save to persist)`, 3500);
+    }
+
     setAddOpen(false);
     setAddName('');
-    setHintFlash(`Added ${fullName} (Save to persist)`, 3500);
+    setAddAutoBind(false);
   }
 
   function setHintFlash(msg: string, ms = 2400) {
@@ -768,6 +811,11 @@ export function FloatingPanel() {
       {/* ── Add color form (collapsible) ─────────────────── */}
       {addOpen && (
         <div className="tsa-fp__addform">
+          {inspectTarget && (
+            <div className="tsa-fp__addform-context">
+              📍 Creating color for <strong>{inspectTarget.label}</strong> — name auto-suggested from selection.
+            </div>
+          )}
           <div className="tsa-fp__addform-row">
             <span className="tsa-fp__addform-prefix">{`--tw-${shortSlug()}-`}</span>
             <input
@@ -775,11 +823,19 @@ export function FloatingPanel() {
               className="tsa-fp__input"
               value={addName}
               onChange={(e) => setAddName(e.target.value)}
-              placeholder="my-color"
+              placeholder={inspectTarget ? suggestContextualName() || 'my-color' : 'my-color'}
               autoFocus
               spellCheck={false}
               onKeyDown={(e) => { if (e.key === 'Enter') addToken(); if (e.key === 'Escape') setAddOpen(false); }}
             />
+            {inspectTarget && !addName.trim() && (
+              <button
+                type="button"
+                className="tsa-fp__btn tsa-fp__btn--small"
+                onClick={() => setAddName(suggestContextualName())}
+                title="Use the inspect target's name"
+              >Use selection name</button>
+            )}
           </div>
           <div className="tsa-fp__addform-row">
             <label className="tsa-fp__addform-side">
@@ -793,9 +849,21 @@ export function FloatingPanel() {
               <input type="text" className="tsa-fp__input" value={addDark} onChange={(e) => setAddDark(e.target.value)} spellCheck={false} />
             </label>
           </div>
+          {inspectTarget && (
+            <label className="tsa-fp__addform-autobind">
+              <input
+                type="checkbox"
+                checked={addAutoBind}
+                onChange={(e) => setAddAutoBind(e.target.checked)}
+              />
+              <span>Auto-bind as <code>background-color</code> of <strong>{inspectTarget.label}</strong> (one-click scoped color)</span>
+            </label>
+          )}
           <div className="tsa-fp__addform-actions">
-            <button type="button" className="tsa-fp__btn" onClick={() => setAddOpen(false)}>Cancel</button>
-            <button type="button" className="tsa-fp__btn tsa-fp__btn--primary" onClick={addToken} disabled={!addName.trim()}>Add</button>
+            <button type="button" className="tsa-fp__btn" onClick={() => { setAddOpen(false); setAddAutoBind(false); }}>Cancel</button>
+            <button type="button" className="tsa-fp__btn tsa-fp__btn--primary" onClick={addToken} disabled={!addName.trim()}>
+              {addAutoBind ? 'Add + bind' : 'Add'}
+            </button>
           </div>
         </div>
       )}
@@ -866,21 +934,15 @@ export function FloatingPanel() {
               <option value="stroke">stroke (SVG)</option>
             </select>
           </div>
-          <div className="tsa-fp__bindform-row">
+          <div className="tsa-fp__bindform-row tsa-fp__bindform-row--wide">
             <span className="tsa-fp__bindform-label">Token</span>
-            <select
-              className="tsa-fp__select"
+            <TokenSwatchPicker
+              tokens={Array.from(new Set([...Object.keys(drafts.light), ...Object.keys(drafts.dark)])).filter((k) => k.startsWith('--tw-'))}
+              lightValues={drafts.light}
+              darkValues={drafts.dark}
               value={bindToken}
-              onChange={(e) => setBindToken(e.target.value)}
-            >
-              <option value="">— choose a token —</option>
-              {Array.from(new Set([...Object.keys(drafts.light), ...Object.keys(drafts.dark)]))
-                .filter((k) => k.startsWith('--tw-'))
-                .sort()
-                .map((k) => (
-                  <option key={k} value={k}>{k.replace(/^--tw-[^-]+-/, '')}</option>
-                ))}
-            </select>
+              onChange={setBindToken}
+            />
           </div>
           <div className="tsa-fp__bindform-actions">
             <button type="button" className="tsa-fp__btn" onClick={() => setBindOpen(false)}>Cancel</button>
@@ -1313,4 +1375,124 @@ function normalizeColor(c: string): string {
   const computed = window.getComputedStyle(probe).color;
   document.body.removeChild(probe);
   return computed;
+}
+
+/* ─── Token swatch picker (used in the Apply-token bindings form)
+ *
+ * Replaces a flat <select> with a clickable grid of grouped swatches.
+ * Each swatch shows light + dark hex side-by-side so the author sees
+ * BOTH variants before picking. Closes on outside-click or Escape.
+ */
+function TokenSwatchPicker({
+  tokens, lightValues, darkValues, value, onChange,
+}: {
+  tokens:      string[];
+  lightValues: Record<string, string>;
+  darkValues:  Record<string, string>;
+  value:       string;
+  onChange:    (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  // Group + sort the token list. Same regex buckets as elsewhere in the
+  // panel (Backgrounds / Text / Accent / Borders / Buttons / Other).
+  const groups = useMemo(() => {
+    const buckets: Record<string, string[]> = {
+      'Backgrounds': [], 'Text': [], 'Accent': [], 'Borders': [], 'Buttons': [], 'Other': [],
+    };
+    tokens.forEach((k) => {
+      if (/^--tw-[^-]+-bg(-|$)/.test(k))                    buckets['Backgrounds'].push(k);
+      else if (/^--tw-[^-]+-text(-|$)/.test(k))             buckets['Text'].push(k);
+      else if (/-accent(-|$)/.test(k))                       buckets['Accent'].push(k);
+      else if (/-border(-|$)/.test(k))                       buckets['Borders'].push(k);
+      else if (/-(btn|cta)-/.test(k))                        buckets['Buttons'].push(k);
+      else if (isColorValue(lightValues[k] || darkValues[k] || '')) buckets['Other'].push(k);
+    });
+    Object.keys(buckets).forEach((g) => buckets[g].sort());
+    return buckets;
+  }, [tokens, lightValues, darkValues]);
+
+  const display = value
+    ? value.replace(/^--tw-[^-]+-/, '')
+    : '— choose a token —';
+  const lightHex = value ? (lightValues[value] || '') : '';
+  const darkHex  = value ? (darkValues[value]  || '') : '';
+
+  return (
+    <div className="tsa-fp__tokenpick" ref={ref}>
+      <button
+        type="button"
+        className={'tsa-fp__tokenpick-btn' + (value ? ' is-selected' : '')}
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        {value ? (
+          <span className="tsa-fp__tokenpick-chip">
+            <span className="tsa-fp__tokenpick-chip-light" style={{ background: lightHex }} />
+            <span className="tsa-fp__tokenpick-chip-dark"  style={{ background: darkHex  }} />
+          </span>
+        ) : <span className="tsa-fp__tokenpick-chip tsa-fp__tokenpick-chip--empty" />}
+        <span className="tsa-fp__tokenpick-name">{display}</span>
+        <span className="tsa-fp__tokenpick-caret" aria-hidden="true">▾</span>
+      </button>
+
+      {open && (
+        <div className="tsa-fp__tokenpick-pop" role="listbox">
+          {Object.entries(groups).map(([group, list]) =>
+            list.length === 0 ? null : (
+              <div key={group} className="tsa-fp__tokenpick-group">
+                <div className="tsa-fp__tokenpick-group-label">{group}</div>
+                <div className="tsa-fp__tokenpick-grid">
+                  {list.map((k) => {
+                    const lh = lightValues[k] || '';
+                    const dh = darkValues[k]  || lh;
+                    const short = k.replace(/^--tw-[^-]+-/, '');
+                    const active = k === value;
+                    return (
+                      <button
+                        type="button"
+                        key={k}
+                        className={'tsa-fp__tokenpick-swatch' + (active ? ' is-active' : '')}
+                        title={`${short} — ☀ ${lh} / ☾ ${dh}`}
+                        onClick={() => { onChange(k); setOpen(false); }}
+                      >
+                        <span className="tsa-fp__tokenpick-chip">
+                          <span className="tsa-fp__tokenpick-chip-light" style={{ background: lh }} />
+                          <span className="tsa-fp__tokenpick-chip-dark"  style={{ background: dh }} />
+                        </span>
+                        <span className="tsa-fp__tokenpick-swatch-name">{short}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )
+          )}
+          {value && (
+            <button
+              type="button"
+              className="tsa-fp__tokenpick-clear"
+              onClick={() => { onChange(''); setOpen(false); }}
+            >× Clear selection</button>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
