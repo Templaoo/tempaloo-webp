@@ -1,0 +1,482 @@
+{
+  "version": "2.0.0",
+  "comment": "Single source of truth for animation presets. Read by PHP (Animation_Presets), runtime JS (animations.js), and React admin (AnimationPage). Adding a preset here = automatic exposure across all 3 layers. Each preset documents the EXACT GSAP parameters required by its skill file (gsap-core / gsap-timeline / gsap-scrolltrigger / gsap-plugins) — UI controls are auto-generated from the `params` schema; impossible to invent a knob GSAP doesn't support.",
+
+  "enums": {
+    "EASE": [
+      { "id": "none",                  "label": "None (linear)" },
+      { "id": "power1.out",            "label": "Power 1 — out (gentle)" },
+      { "id": "power2.out",            "label": "Power 2 — out" },
+      { "id": "power3.out",            "label": "Power 3 — out (default)" },
+      { "id": "power4.out",            "label": "Power 4 — out (snappy)" },
+      { "id": "power2.inOut",          "label": "Power 2 — in/out" },
+      { "id": "power3.inOut",          "label": "Power 3 — in/out" },
+      { "id": "expo.out",              "label": "Expo — out (cinematic)" },
+      { "id": "circ.inOut",            "label": "Circ — in/out" },
+      { "id": "back.out(1.7)",         "label": "Back — out (overshoot)" },
+      { "id": "back.out(2.5)",         "label": "Back — out (strong overshoot)" },
+      { "id": "elastic.out(1, 0.3)",   "label": "Elastic — out" },
+      { "id": "bounce.out",            "label": "Bounce — out" },
+      { "id": "sine.inOut",            "label": "Sine — in/out (smooth)" }
+    ],
+    "TRIGGER_START": [
+      { "id": "top 90%",    "label": "Très tôt (90%)" },
+      { "id": "top 85%",    "label": "Tôt (85%, défaut)" },
+      { "id": "top 75%",    "label": "Standard (75%)" },
+      { "id": "top 60%",    "label": "Tard (60%)" },
+      { "id": "center 75%", "label": "Centré (75%)" },
+      { "id": "center center", "label": "Centre écran" },
+      { "id": "none",       "label": "Au chargement (sans scroll)" }
+    ],
+    "TOGGLE_ACTIONS": [
+      { "id": "play none none none",     "label": "Une fois (forward seul)" },
+      { "id": "play none none reset",    "label": "Replay (rewind à la sortie)" },
+      { "id": "play none none reverse",  "label": "Bidirectionnel (défaut)" },
+      { "id": "play pause resume reset", "label": "Pause hors écran" }
+    ],
+    "STAGGER_FROM": [
+      { "id": "start",  "label": "Du début" },
+      { "id": "end",    "label": "De la fin" },
+      { "id": "center", "label": "Du centre" },
+      { "id": "edges",  "label": "Des bords" },
+      { "id": "random", "label": "Aléatoire" }
+    ]
+  },
+
+  "elementTypes": [
+    {
+      "id": "h1",
+      "label": "H1 — Titre principal",
+      "icon": "type",
+      "selectors": ["h1", ".elementor-widget-heading h1", ".elementor-heading-title h1"],
+      "recommendedPreset": "word-fade-blur"
+    },
+    {
+      "id": "h2",
+      "label": "H2 — Titre de section",
+      "icon": "type",
+      "selectors": ["h2", ".elementor-widget-heading h2", ".elementor-heading-title h2"],
+      "recommendedPreset": "word-fade-up"
+    },
+    {
+      "id": "h3",
+      "label": "H3 — Sous-titre",
+      "icon": "type",
+      "selectors": ["h3", ".elementor-widget-heading h3", ".elementor-heading-title h3"],
+      "recommendedPreset": "fade-up"
+    },
+    {
+      "id": "p",
+      "label": "Paragraphe",
+      "icon": "align-left",
+      "selectors": ["p", ".elementor-widget-text-editor p"],
+      "recommendedPreset": "fade-up"
+    },
+    {
+      "id": "img",
+      "label": "Image",
+      "icon": "image",
+      "selectors": ["img:not([data-tw-anim-skip])", ".elementor-widget-image img"],
+      "recommendedPreset": "scale-in"
+    },
+    {
+      "id": "button",
+      "label": "Bouton / CTA",
+      "icon": "mouse-pointer",
+      "selectors": [".tw-btn", ".elementor-button", "button.cta"],
+      "recommendedPreset": "fade-up"
+    },
+    {
+      "id": "container",
+      "label": "Container / Section",
+      "icon": "square",
+      "selectors": ["section[data-tw-anim-scope]", ".elementor-section", ".e-con.e-flex"],
+      "recommendedPreset": "fade-up"
+    },
+    {
+      "id": "link",
+      "label": "Lien (texte)",
+      "icon": "link",
+      "selectors": ["a:not(.tw-btn):not(.elementor-button)"],
+      "recommendedPreset": "fade"
+    }
+  ],
+
+  "presets": [
+    {
+      "id": "none",
+      "label": "Aucune",
+      "category": "element",
+      "description": "L'élément est rendu instantanément, sans animation. Utile pour désactiver un type ciblé.",
+      "requires": [],
+      "params": {},
+      "scrollTrigger": null
+    },
+
+    {
+      "id": "fade",
+      "label": "Fade",
+      "category": "element",
+      "description": "Apparition par variation d'opacité uniquement. Discret, 100% accessible.",
+      "requires": ["ScrollTrigger"],
+      "params": {
+        "duration": { "type": "number", "value": 0.45, "min": 0.1, "max": 2,    "step": 0.05, "unit": "s",  "label": "Durée" },
+        "ease":     { "type": "enum",   "value": "power1.out", "enum": "EASE",  "label": "Ease" },
+        "stagger":  { "type": "number", "value": 0,    "min": 0,   "max": 0.3, "step": 0.01, "unit": "s",  "label": "Stagger" },
+        "useAutoAlpha": { "type": "boolean", "value": true, "label": "autoAlpha (visibility:hidden à 0)", "tip": "Recommandation gsap-core : évite les clics sur invisible." }
+      },
+      "scrollTrigger": {
+        "start": { "type": "enum", "value": "top 85%", "enum": "TRIGGER_START", "label": "Start" },
+        "toggleActions": { "type": "enum", "value": "play none none reverse", "enum": "TOGGLE_ACTIONS", "label": "Toggle actions" }
+      }
+    },
+
+    {
+      "id": "fade-up",
+      "label": "Fade up",
+      "category": "element",
+      "description": "Élément translaté depuis y > 0 avec fade in. Le pattern d'entrée le plus universel.",
+      "requires": ["ScrollTrigger"],
+      "params": {
+        "duration": { "type": "number", "value": 0.7,  "min": 0.1, "max": 2,    "step": 0.05, "unit": "s",  "label": "Durée" },
+        "ease":     { "type": "enum",   "value": "power3.out", "enum": "EASE",  "label": "Ease" },
+        "stagger":  { "type": "number", "value": 0.08, "min": 0,   "max": 0.3, "step": 0.01, "unit": "s",  "label": "Stagger" },
+        "y":        { "type": "number", "value": 24,   "min": 0,   "max": 120, "step": 2,    "unit": "px", "label": "Distance Y", "tip": "GSAP transform alias — meilleur perf que top." },
+        "useAutoAlpha": { "type": "boolean", "value": true, "label": "autoAlpha" }
+      },
+      "scrollTrigger": {
+        "start": { "type": "enum", "value": "top 85%", "enum": "TRIGGER_START", "label": "Start" },
+        "toggleActions": { "type": "enum", "value": "play none none reverse", "enum": "TOGGLE_ACTIONS", "label": "Toggle actions" }
+      }
+    },
+
+    {
+      "id": "fade-down",
+      "label": "Fade down",
+      "category": "element",
+      "description": "Élément translaté depuis y < 0 avec fade in. Idéal pour menus, headers.",
+      "requires": ["ScrollTrigger"],
+      "params": {
+        "duration": { "type": "number", "value": 0.7,  "min": 0.1, "max": 2,    "step": 0.05, "unit": "s",  "label": "Durée" },
+        "ease":     { "type": "enum",   "value": "power3.out", "enum": "EASE",  "label": "Ease" },
+        "stagger":  { "type": "number", "value": 0.08, "min": 0,   "max": 0.3, "step": 0.01, "unit": "s",  "label": "Stagger" },
+        "y":        { "type": "number", "value": 24,   "min": 0,   "max": 120, "step": 2,    "unit": "px", "label": "Distance Y" },
+        "useAutoAlpha": { "type": "boolean", "value": true, "label": "autoAlpha" }
+      },
+      "scrollTrigger": {
+        "start": { "type": "enum", "value": "top 85%", "enum": "TRIGGER_START", "label": "Start" },
+        "toggleActions": { "type": "enum", "value": "play none none reverse", "enum": "TOGGLE_ACTIONS", "label": "Toggle actions" }
+      }
+    },
+
+    {
+      "id": "fade-left",
+      "label": "Fade left",
+      "category": "element",
+      "description": "Slide horizontal depuis la gauche avec fade in.",
+      "requires": ["ScrollTrigger"],
+      "params": {
+        "duration": { "type": "number", "value": 0.7,  "min": 0.1, "max": 2,    "step": 0.05, "unit": "s",  "label": "Durée" },
+        "ease":     { "type": "enum",   "value": "power3.out", "enum": "EASE",  "label": "Ease" },
+        "stagger":  { "type": "number", "value": 0.08, "min": 0,   "max": 0.3, "step": 0.01, "unit": "s",  "label": "Stagger" },
+        "x":        { "type": "number", "value": 32,   "min": 0,   "max": 200, "step": 4,    "unit": "px", "label": "Distance X" },
+        "useAutoAlpha": { "type": "boolean", "value": true, "label": "autoAlpha" }
+      },
+      "scrollTrigger": {
+        "start": { "type": "enum", "value": "top 85%", "enum": "TRIGGER_START", "label": "Start" },
+        "toggleActions": { "type": "enum", "value": "play none none reverse", "enum": "TOGGLE_ACTIONS", "label": "Toggle actions" }
+      }
+    },
+
+    {
+      "id": "fade-right",
+      "label": "Fade right",
+      "category": "element",
+      "description": "Slide horizontal depuis la droite avec fade in.",
+      "requires": ["ScrollTrigger"],
+      "params": {
+        "duration": { "type": "number", "value": 0.7,  "min": 0.1, "max": 2,    "step": 0.05, "unit": "s",  "label": "Durée" },
+        "ease":     { "type": "enum",   "value": "power3.out", "enum": "EASE",  "label": "Ease" },
+        "stagger":  { "type": "number", "value": 0.08, "min": 0,   "max": 0.3, "step": 0.01, "unit": "s",  "label": "Stagger" },
+        "x":        { "type": "number", "value": 32,   "min": 0,   "max": 200, "step": 4,    "unit": "px", "label": "Distance X" },
+        "useAutoAlpha": { "type": "boolean", "value": true, "label": "autoAlpha" }
+      },
+      "scrollTrigger": {
+        "start": { "type": "enum", "value": "top 85%", "enum": "TRIGGER_START", "label": "Start" },
+        "toggleActions": { "type": "enum", "value": "play none none reverse", "enum": "TOGGLE_ACTIONS", "label": "Toggle actions" }
+      }
+    },
+
+    {
+      "id": "scale-in",
+      "label": "Scale in",
+      "category": "element",
+      "description": "Apparition avec léger zoom + fade. Parfait pour images, cards.",
+      "requires": ["ScrollTrigger"],
+      "params": {
+        "duration":   { "type": "number", "value": 0.7, "min": 0.1, "max": 2,    "step": 0.05, "unit": "s",  "label": "Durée" },
+        "ease":       { "type": "enum",   "value": "back.out(1.7)", "enum": "EASE",  "label": "Ease" },
+        "stagger":    { "type": "number", "value": 0.08, "min": 0,   "max": 0.3, "step": 0.01, "unit": "s",  "label": "Stagger" },
+        "scaleFrom":  { "type": "number", "value": 0.92, "min": 0.5, "max": 1,   "step": 0.01, "unit": "",   "label": "Scale de départ", "tip": "1 = pas de zoom. 0.92 = subtil. 0.7 = dramatique." },
+        "useAutoAlpha": { "type": "boolean", "value": true, "label": "autoAlpha" }
+      },
+      "scrollTrigger": {
+        "start": { "type": "enum", "value": "top 85%", "enum": "TRIGGER_START", "label": "Start" },
+        "toggleActions": { "type": "enum", "value": "play none none reverse", "enum": "TOGGLE_ACTIONS", "label": "Toggle actions" }
+      }
+    },
+
+    {
+      "id": "blur-in",
+      "label": "Blur in",
+      "category": "element",
+      "description": "Apparition avec flou décroissant + fade. Effet premium.",
+      "requires": ["ScrollTrigger"],
+      "params": {
+        "duration":  { "type": "number", "value": 0.85, "min": 0.2, "max": 2.5, "step": 0.05, "unit": "s",  "label": "Durée" },
+        "ease":      { "type": "enum",   "value": "power3.out", "enum": "EASE",  "label": "Ease" },
+        "stagger":   { "type": "number", "value": 0.08, "min": 0,   "max": 0.3, "step": 0.01, "unit": "s",  "label": "Stagger" },
+        "blurFrom":  { "type": "number", "value": 20,   "min": 0,   "max": 50,  "step": 1,    "unit": "px", "label": "Flou de départ" },
+        "useAutoAlpha": { "type": "boolean", "value": true, "label": "autoAlpha" }
+      },
+      "scrollTrigger": {
+        "start": { "type": "enum", "value": "top 85%", "enum": "TRIGGER_START", "label": "Start" },
+        "toggleActions": { "type": "enum", "value": "play none none reverse", "enum": "TOGGLE_ACTIONS", "label": "Toggle actions" }
+      }
+    },
+
+    {
+      "id": "mask-reveal",
+      "label": "Mask reveal",
+      "category": "element",
+      "description": "Élément dévoilé via clip-path inset progressif (gauche → droite).",
+      "requires": ["ScrollTrigger"],
+      "params": {
+        "duration": { "type": "number", "value": 0.8, "min": 0.2, "max": 2.5, "step": 0.05, "unit": "s",  "label": "Durée" },
+        "ease":     { "type": "enum",   "value": "power3.out", "enum": "EASE", "label": "Ease" },
+        "stagger":  { "type": "number", "value": 0.08, "min": 0,   "max": 0.3, "step": 0.01, "unit": "s", "label": "Stagger" }
+      },
+      "scrollTrigger": {
+        "start": { "type": "enum", "value": "top 85%", "enum": "TRIGGER_START", "label": "Start" },
+        "toggleActions": { "type": "enum", "value": "play none none reverse", "enum": "TOGGLE_ACTIONS", "label": "Toggle actions" }
+      }
+    },
+
+    {
+      "id": "word-fade-up",
+      "label": "Mots — fade up",
+      "category": "text",
+      "description": "Chaque mot animé séparément (translateY + fade). Standard pour headlines.",
+      "requires": ["ScrollTrigger", "SplitText"],
+      "splits": "words",
+      "params": {
+        "duration":     { "type": "number", "value": 0.6,  "min": 0.2, "max": 1.5, "step": 0.05, "unit": "s", "label": "Durée par mot" },
+        "ease":         { "type": "enum",   "value": "power3.out", "enum": "EASE", "label": "Ease" },
+        "stagger":      { "type": "number", "value": 0.04, "min": 0.01, "max": 0.2, "step": 0.005, "unit": "s", "label": "Stagger" },
+        "staggerFrom":  { "type": "enum",   "value": "start", "enum": "STAGGER_FROM", "label": "Stagger from" },
+        "y":            { "type": "number", "value": 16,   "min": 0,    "max": 60, "step": 2, "unit": "px", "label": "Distance Y" }
+      },
+      "scrollTrigger": {
+        "start": { "type": "enum", "value": "top 85%", "enum": "TRIGGER_START", "label": "Start" },
+        "toggleActions": { "type": "enum", "value": "play none none reverse", "enum": "TOGGLE_ACTIONS", "label": "Toggle actions" }
+      }
+    },
+
+    {
+      "id": "word-fade-blur",
+      "label": "Mots — fade + blur (premium)",
+      "category": "text",
+      "description": "Chaque mot révélé avec flou décroissant. Effet éditorial / luxe.",
+      "requires": ["ScrollTrigger", "SplitText"],
+      "splits": "words",
+      "params": {
+        "duration":  { "type": "number", "value": 0.7,  "min": 0.2, "max": 1.5, "step": 0.05, "unit": "s", "label": "Durée par mot" },
+        "ease":      { "type": "enum",   "value": "power2.out", "enum": "EASE", "label": "Ease" },
+        "stagger":   { "type": "number", "value": 0.04, "min": 0.01, "max": 0.2, "step": 0.005, "unit": "s", "label": "Stagger" },
+        "staggerFrom": { "type": "enum", "value": "start", "enum": "STAGGER_FROM", "label": "Stagger from" },
+        "blurFrom":  { "type": "number", "value": 8,   "min": 0,    "max": 24, "step": 1, "unit": "px", "label": "Flou de départ" }
+      },
+      "scrollTrigger": {
+        "start": { "type": "enum", "value": "top 85%", "enum": "TRIGGER_START", "label": "Start" },
+        "toggleActions": { "type": "enum", "value": "play none none reverse", "enum": "TOGGLE_ACTIONS", "label": "Toggle actions" }
+      }
+    },
+
+    {
+      "id": "word-slide-up-overflow",
+      "label": "Mots — slide up (cinematic)",
+      "category": "text",
+      "description": "Mots montent depuis sous un masque. Style Stripe / Linear.",
+      "requires": ["ScrollTrigger", "SplitText"],
+      "splits": "words",
+      "params": {
+        "duration":  { "type": "number", "value": 0.7,  "min": 0.2, "max": 1.5, "step": 0.05, "unit": "s", "label": "Durée" },
+        "ease":      { "type": "enum",   "value": "power4.out", "enum": "EASE", "label": "Ease" },
+        "stagger":   { "type": "number", "value": 0.04, "min": 0.01, "max": 0.2, "step": 0.005, "unit": "s", "label": "Stagger" },
+        "yPercentFrom": { "type": "number", "value": 110, "min": 100, "max": 200, "step": 5, "unit": "%", "label": "yPercent de départ", "tip": "110 = mot juste sous la masque (recommandé)." }
+      },
+      "scrollTrigger": {
+        "start": { "type": "enum", "value": "top 85%", "enum": "TRIGGER_START", "label": "Start" },
+        "toggleActions": { "type": "enum", "value": "play none none reverse", "enum": "TOGGLE_ACTIONS", "label": "Toggle actions" }
+      }
+    },
+
+    {
+      "id": "char-up",
+      "label": "Caractères — up",
+      "category": "text",
+      "description": "Animation caractère par caractère. Réservé aux titres COURTS (≤ 60 chars). Auto-fallback sur word-fade-up sinon.",
+      "requires": ["ScrollTrigger", "SplitText"],
+      "splits": "chars",
+      "params": {
+        "duration":  { "type": "number", "value": 0.5,  "min": 0.1, "max": 1.5, "step": 0.05, "unit": "s", "label": "Durée par char" },
+        "ease":      { "type": "enum",   "value": "power3.out", "enum": "EASE", "label": "Ease" },
+        "stagger":   { "type": "number", "value": 0.018, "min": 0.005, "max": 0.1, "step": 0.002, "unit": "s", "label": "Stagger" },
+        "y":         { "type": "number", "value": 8,    "min": 0,    "max": 30, "step": 1, "unit": "px", "label": "Distance Y" }
+      },
+      "scrollTrigger": {
+        "start": { "type": "enum", "value": "top 85%", "enum": "TRIGGER_START", "label": "Start" },
+        "toggleActions": { "type": "enum", "value": "play none none reverse", "enum": "TOGGLE_ACTIONS", "label": "Toggle actions" }
+      }
+    },
+
+    {
+      "id": "line-fade-up-stagger",
+      "label": "Lignes — fade up stagger",
+      "category": "text",
+      "description": "Animation ligne par ligne (split sur <br>). Pour titres multi-lignes éditoriaux.",
+      "requires": ["ScrollTrigger", "SplitText"],
+      "splits": "lines",
+      "params": {
+        "duration":  { "type": "number", "value": 0.7,  "min": 0.2, "max": 2,   "step": 0.05, "unit": "s", "label": "Durée par ligne" },
+        "ease":      { "type": "enum",   "value": "power3.out", "enum": "EASE", "label": "Ease" },
+        "stagger":   { "type": "number", "value": 0.1,  "min": 0.02, "max": 0.5, "step": 0.02, "unit": "s", "label": "Stagger" },
+        "y":         { "type": "number", "value": 24,   "min": 0,    "max": 100, "step": 2, "unit": "px", "label": "Distance Y" }
+      },
+      "scrollTrigger": {
+        "start": { "type": "enum", "value": "top 85%", "enum": "TRIGGER_START", "label": "Start" },
+        "toggleActions": { "type": "enum", "value": "play none none reverse", "enum": "TOGGLE_ACTIONS", "label": "Toggle actions" }
+      }
+    },
+
+    {
+      "id": "text-typing",
+      "label": "Texte — machine à écrire",
+      "category": "text",
+      "description": "Caractères révélés un par un instantanément (typewriter).",
+      "requires": ["ScrollTrigger", "SplitText"],
+      "splits": "chars",
+      "params": {
+        "totalDuration": { "type": "number", "value": 1.5, "min": 0.3, "max": 6, "step": 0.1, "unit": "s", "label": "Durée totale", "tip": "Stagger auto = total/nbChars (max 0.045s/char)." }
+      },
+      "scrollTrigger": {
+        "start": { "type": "enum", "value": "top 80%", "enum": "TRIGGER_START", "label": "Start" },
+        "toggleActions": { "type": "enum", "value": "play none none reverse", "enum": "TOGGLE_ACTIONS", "label": "Toggle actions" }
+      }
+    },
+
+    {
+      "id": "text-fill-sweep",
+      "label": "Texte — color fill sweep",
+      "category": "text",
+      "description": "Vague d'opacité qui balaie le texte de gauche à droite (de 0.22 → 1).",
+      "requires": ["ScrollTrigger", "SplitText"],
+      "splits": "auto",
+      "params": {
+        "duration":     { "type": "number", "value": 0.4,  "min": 0.1, "max": 1.5, "step": 0.05, "unit": "s", "label": "Durée" },
+        "ease":         { "type": "enum",   "value": "power2.out", "enum": "EASE", "label": "Ease" },
+        "stagger":      { "type": "number", "value": 0.05, "min": 0.005, "max": 0.2, "step": 0.005, "unit": "s", "label": "Stagger" },
+        "opacityFrom":  { "type": "number", "value": 0.22, "min": 0,    "max": 0.6, "step": 0.02, "unit": "", "label": "Opacité initiale" }
+      },
+      "scrollTrigger": {
+        "start": { "type": "enum", "value": "top 85%", "enum": "TRIGGER_START", "label": "Start" },
+        "toggleActions": { "type": "enum", "value": "play none none reverse", "enum": "TOGGLE_ACTIONS", "label": "Toggle actions" }
+      }
+    },
+
+    {
+      "id": "scroll-words-fill",
+      "label": "Texte — scroll-linked words fill",
+      "category": "text",
+      "description": "Mots se remplissent au fil du scroll (scrub 1:1). Style Apple/Stripe-Tax. Trigger NON applicable — scrub.",
+      "requires": ["ScrollTrigger", "SplitText"],
+      "splits": "words",
+      "scrubOnly": true,
+      "params": {
+        "stagger":      { "type": "number", "value": 0.1,  "min": 0.02, "max": 0.5, "step": 0.02, "unit": "s", "label": "Stagger" },
+        "opacityFrom":  { "type": "number", "value": 0.18, "min": 0,    "max": 0.6, "step": 0.02, "unit": "", "label": "Opacité initiale" }
+      },
+      "scrollTrigger": {
+        "start": { "type": "enum",   "value": "top 80%", "enum": "TRIGGER_START", "label": "Start" },
+        "end":   { "type": "string", "value": "top 30%", "label": "End" },
+        "scrub": { "type": "boolean", "value": true,    "locked": true, "label": "Scrub (lié au scroll)" }
+      }
+    },
+
+    {
+      "id": "editorial-stack",
+      "label": "Editorial stack (composite)",
+      "category": "text",
+      "description": "Orchestre eyebrow / headline (split words) / lead / cta dans un timeline. Pour heros.",
+      "requires": ["ScrollTrigger", "SplitText"],
+      "splits": "words",
+      "params": {
+        "headlineDuration": { "type": "number", "value": 0.65, "min": 0.2, "max": 1.5, "step": 0.05, "unit": "s", "label": "Durée headline" },
+        "elementDuration":  { "type": "number", "value": 0.55, "min": 0.2, "max": 1.5, "step": 0.05, "unit": "s", "label": "Durée éléments" },
+        "wordStagger":      { "type": "number", "value": 0.03, "min": 0.005, "max": 0.15, "step": 0.005, "unit": "s", "label": "Stagger mots" },
+        "lineGap":          { "type": "number", "value": 0.15, "min": 0,    "max": 0.5, "step": 0.02, "unit": "s", "label": "Gap entre lignes" },
+        "ease":             { "type": "enum",   "value": "power3.out", "enum": "EASE", "label": "Ease" }
+      },
+      "scrollTrigger": {
+        "start": { "type": "enum", "value": "top 85%", "enum": "TRIGGER_START", "label": "Start" },
+        "toggleActions": { "type": "enum", "value": "play none none reverse", "enum": "TOGGLE_ACTIONS", "label": "Toggle actions" }
+      }
+    }
+  ],
+
+  "behaviors": [
+    {
+      "id": "lift",
+      "label": "Hover lift",
+      "description": "CSS hover transform — pas de JS GSAP."
+    },
+    {
+      "id": "magnetic",
+      "label": "Magnetic CTA",
+      "description": "Bouton suit légèrement le curseur (rayon 40px).",
+      "requires": ["gsap"],
+      "params": {
+        "range": { "type": "number", "value": 40, "min": 10, "max": 100, "step": 5, "unit": "px", "label": "Rayon magnétique" },
+        "ease":  { "type": "enum",   "value": "power2.out", "enum": "EASE", "label": "Ease (suivi)" }
+      }
+    },
+    {
+      "id": "counter",
+      "label": "Number counter",
+      "description": "Compteur animé déclenché à l'entrée du viewport.",
+      "requires": ["gsap", "ScrollTrigger"],
+      "params": {
+        "duration": { "type": "number", "value": 1.6, "min": 0.5, "max": 4, "step": 0.1, "unit": "s", "label": "Durée" },
+        "ease":     { "type": "enum",   "value": "power2.out", "enum": "EASE", "label": "Ease" }
+      }
+    },
+    {
+      "id": "marquee",
+      "label": "Marquee (logo strip)",
+      "description": "Boucle horizontale infinie pour barres de logos.",
+      "requires": ["gsap"],
+      "params": {
+        "speed": { "type": "number", "value": 40, "min": 10, "max": 200, "step": 5, "unit": "px/s", "label": "Vitesse" }
+      }
+    },
+    {
+      "id": "parallax-mouse",
+      "label": "Parallax (mouse)",
+      "description": "Élément suit subtilement la position de la souris dans le viewport.",
+      "requires": ["gsap"],
+      "params": {
+        "depth": { "type": "number", "value": 12, "min": 2, "max": 60, "step": 2, "unit": "px", "label": "Profondeur max" }
+      }
+    }
+  ]
+}
