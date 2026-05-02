@@ -42,6 +42,19 @@ final class Theme_Tokens {
         // Editor: same, so the editor preview matches the live site.
         add_action( 'elementor/editor/wp_head',  [ $this, 'emit' ], 5 );
         add_action( 'elementor/preview/wp_head', [ $this, 'emit' ], 5 );
+
+        // Elementor globals bridge — runs LATE (priority 100) so it
+        // wins over Elementor's own kit CSS, which is enqueued via
+        // wp_print_styles at priority 8. Maps native Elementor system
+        // tokens (--e-global-color-*, --e-global-typography-*) onto
+        // our --tw-{slug}-* tokens, so when the user adds a native
+        // Elementor widget (Heading, Text Editor, Button, …) and
+        // assigns a "Global" color or typography to it, the widget
+        // automatically picks up the active template's design system
+        // — without touching Elementor's stored Active Kit data.
+        add_action( 'wp_head',                   [ $this, 'emit_elementor_bridge' ], 100 );
+        add_action( 'elementor/editor/wp_head',  [ $this, 'emit_elementor_bridge' ], 100 );
+        add_action( 'elementor/preview/wp_head', [ $this, 'emit_elementor_bridge' ], 100 );
     }
 
     /**
@@ -87,6 +100,118 @@ final class Theme_Tokens {
                 . "}";
 
         echo "\n<style id=\"tempaloo-studio-tokens\">\n" . $css . "\n</style>\n"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+    }
+
+    /**
+     * Bridge between native Elementor widget styles and our token system.
+     *
+     * Elementor stores its 4 system colors + 4 system typographies in the
+     * Active Kit (a special elementor_library post). It compiles them
+     * into CSS variables every native widget reads via "Global Color" /
+     * "Global Typography" pickers:
+     *
+     *   --e-global-color-primary | -secondary | -text | -accent
+     *   --e-global-typography-{primary|secondary|text|accent}-font-family
+     *   --e-global-typography-{...}-font-size
+     *   --e-global-typography-{...}-font-weight
+     *   --e-global-typography-{...}-line-height
+     *
+     * Without this bridge, those vars resolve to whatever the user has
+     * (or hasn't) configured in Site Settings — usually Elementor's
+     * factory defaults that look NOTHING like our Avero design system.
+     *
+     * What we do: emit a `:root{}` block that REDIRECTS the e-global-*
+     * vars to our --tw-{slug}-* tokens. Source order matters — we run
+     * at wp_head priority 100, AFTER Elementor's kit CSS (which loads
+     * with wp_print_styles around priority 8). Native widgets that use
+     * "Global" pickers now pick up the active template's design system
+     * automatically. Widgets with manually-set values (Custom color,
+     * Custom typography) keep their explicit value — we don't touch
+     * that path.
+     *
+     * Filterable via `tempaloo_studio_elementor_bridge` (return false to
+     * disable for sites that prefer Elementor's own kit).
+     */
+    public function emit_elementor_bridge(): void {
+        $template = $this->templates->active();
+        if ( ! $template ) return;
+
+        /**
+         * Filter — opt out of the Elementor globals bridge.
+         *
+         * @param bool   $enabled  Defaults to true. Return false to skip emission.
+         * @param string $slug     Active template slug.
+         */
+        $enabled = apply_filters( 'tempaloo_studio_elementor_bridge', true, (string) $template['slug'] );
+        if ( ! $enabled ) return;
+
+        $slug   = $template['slug'];
+        $prefix = '--tw-' . $this->short_slug( $slug );
+
+        // Map Elementor's 4 system colors onto our semantic tokens.
+        // The choice of which --tw-* corresponds to which e-global is
+        // a deliberate UX decision: when a user picks "Primary" in
+        // Elementor's color picker, they expect the brand color → we
+        // map to --tw-{slug}-accent. "Text" → text. "Secondary" gets
+        // the soft text shade so headings vs body have hierarchy.
+        $map_colors = [
+            'primary'   => $prefix . '-accent',
+            'secondary' => $prefix . '-text-soft',
+            'text'      => $prefix . '-text',
+            'accent'    => $prefix . '-accent-hover',
+        ];
+        // Map Elementor's 4 system typographies onto our 2 font tokens.
+        // Primary + Secondary → heading font (most users put H1/H2 on
+        // these). Text + Accent → body font. Authors who want different
+        // splits can opt out via the filter and configure manually.
+        $map_fonts = [
+            'primary'   => $prefix . '-font-heading',
+            'secondary' => $prefix . '-font-heading',
+            'text'      => $prefix . '-font-body',
+            'accent'    => $prefix . '-font-body',
+        ];
+
+        $decls = '';
+        foreach ( $map_colors as $key => $var ) {
+            $decls .= '--e-global-color-' . $key . ':var(' . $var . ');';
+        }
+        foreach ( $map_fonts as $key => $var ) {
+            $decls .= '--e-global-typography-' . $key . '-font-family:var(' . $var . ');';
+        }
+
+        // Sensible default sizes / weights / line-heights so authors
+        // don't have to set them manually for the bridge to look good.
+        // These can be overridden in Site Settings → Design System
+        // (those values land in :root via Elementor's kit CSS at lower
+        // priority and lose to our :root here — but the user can still
+        // opt out of the whole bridge via the filter above).
+        $decls .= '--e-global-typography-primary-font-weight:600;';
+        $decls .= '--e-global-typography-primary-line-height:1.15;';
+        $decls .= '--e-global-typography-secondary-font-weight:500;';
+        $decls .= '--e-global-typography-secondary-line-height:1.25;';
+        $decls .= '--e-global-typography-text-font-weight:400;';
+        $decls .= '--e-global-typography-text-line-height:1.55;';
+        $decls .= '--e-global-typography-accent-font-weight:500;';
+        $decls .= '--e-global-typography-accent-line-height:1.45;';
+
+        $body_class = 'body.tempaloo-studio-' . $slug;
+        $css  = ':root{' . $decls . '}';
+
+        // Belt-and-suspenders: also force the font-family on native
+        // Elementor widgets that DON'T use Global Typography (their
+        // "Default" setting). Scoped under the active-template body
+        // class so it only kicks in on pages that ship our design.
+        // Selectors target the inner element Elementor renders the
+        // text into — using `:where()` to keep specificity at 0,0,1,2
+        // so author overrides on individual widgets still win.
+        $css .= $body_class . ' :where(.elementor-widget-heading .elementor-heading-title){'
+              . 'font-family:var(' . $prefix . '-font-heading,inherit);}';
+        $css .= $body_class . ' :where(.elementor-widget-text-editor,.elementor-widget-text-editor p,.elementor-widget-text-editor li){'
+              . 'font-family:var(' . $prefix . '-font-body,inherit);}';
+        $css .= $body_class . ' :where(.elementor-widget-button .elementor-button){'
+              . 'font-family:var(' . $prefix . '-font-body,inherit);}';
+
+        echo "\n<style id=\"tempaloo-studio-elementor-bridge\">\n" . $css . "\n</style>\n"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
     }
 
     /**

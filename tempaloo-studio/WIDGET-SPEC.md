@@ -654,6 +654,42 @@ The `class-{widget}.php` extends a shared `Tempaloo\Elementor\Widget_Base` (our 
 
 ---
 
+## 2.a Native Elementor widgets inherit the design system
+
+A user dragging in a stock Elementor widget (Heading, Text Editor, Button, Image, …) expects it to **look like** the rest of the active template — same fonts, same colors. Without help, those widgets resolve to Elementor's Active Kit (Site Settings → Design System), which is whatever the user happened to configure (or the factory defaults). Result: the page mixes our Avero look with random Elementor defaults.
+
+**The bridge** ([Theme_Tokens::emit_elementor_bridge](includes/Elementor/Theme_Tokens.php)) emits a `<style id="tempaloo-studio-elementor-bridge">` at `wp_head` priority **100** (after Elementor's kit CSS at priority 8) that redirects every Elementor system variable to the active template's `--tw-{slug}-*` token:
+
+| Elementor system var | Mapped to |
+|---|---|
+| `--e-global-color-primary` | `--tw-{slug}-accent` (brand color) |
+| `--e-global-color-secondary` | `--tw-{slug}-text-soft` |
+| `--e-global-color-text` | `--tw-{slug}-text` |
+| `--e-global-color-accent` | `--tw-{slug}-accent-hover` |
+| `--e-global-typography-primary-font-family` | `--tw-{slug}-font-heading` |
+| `--e-global-typography-secondary-font-family` | `--tw-{slug}-font-heading` |
+| `--e-global-typography-text-font-family` | `--tw-{slug}-font-body` |
+| `--e-global-typography-accent-font-family` | `--tw-{slug}-font-body` |
+
+Plus default font-weights and line-heights for the four system typographies.
+
+**Belt-and-suspenders:** the bridge also forces font-family on native Heading / Text Editor / Button widgets via `body.tempaloo-studio-{slug} :where(.elementor-widget-*)` selectors. Wrapping the descendant selector in `:where()` keeps the specificity at (0,0,1,2) so any explicit author override on an individual widget still wins.
+
+**Source-order win:**
+- Elementor's kit CSS file: registered with `wp_print_styles` priority 8 → `<link>` tag in head ~position 8
+- Our bridge: `wp_head` priority 100 → `<style>` tag in head ~position 100
+- Same selector specificity (`:root`) → **last-declared wins** → ours wins.
+
+**Opt-out:**
+```php
+add_filter( 'tempaloo_studio_elementor_bridge', '__return_false' );
+```
+For sites that prefer to manage the kit manually.
+
+**What we DON'T do:** write to the Active Kit's post_meta (`_elementor_page_settings`). That would clobber the user's existing kit and is non-reversible without a backup. The CSS-variable bridge is purely runtime and reverts automatically when our template is deactivated.
+
+---
+
 ## 2.b Public PHP filters (extension API)
 
 The plugin exposes 5 filters that white-label forks, premium add-ons or per-site theming can hook to without forking the codebase:
