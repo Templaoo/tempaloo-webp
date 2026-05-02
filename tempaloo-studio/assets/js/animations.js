@@ -989,6 +989,25 @@
         var scope = rootEl.getAttribute('data-tw-anim-scope');
         if (!scope) return;
 
+        // ── Idempotent reset via gsap.context().revert() ──────
+        //
+        // Elementor remounts widgets multiple times in editor mode
+        // (every control edit, every save, every undo). Without this,
+        // each applyEntrance() call would create a fresh gsap.set +
+        // ScrollTrigger.create on TOP of the previous one without
+        // killing the old triggers. Result: stacked ScrollTriggers
+        // fire onEnter / onLeaveBack repeatedly for the same chars,
+        // gsap.to calls race each other, and the user sees flicker
+        // ("bug lorsque je monte et descend" reported by user).
+        //
+        // gsap.context.revert() kills every tween + ScrollTrigger
+        // created inside the ctx AND reverts their inline styles, so
+        // the next preset rebuilds from a clean slate.
+        if (rootEl.__tw_anim_ctx) {
+            try { rootEl.__tw_anim_ctx.revert(); } catch (e) { warn('anim ctx revert threw', e); }
+            rootEl.__tw_anim_ctx = null;
+        }
+
         // Resolve per-widget config from the inlined payload.
         var cfg = (window.tempaloo && window.tempaloo.studio && window.tempaloo.studio.anims) || {};
         var widgetCfg = cfg[scope] || {};
@@ -1029,75 +1048,70 @@
 
         log('applyEntrance', { scope: scope, preset: preset, lvl: lvl, opts: opts });
 
-        // Text presets selected as the scope-level entrance need routing.
-        // Three cases:
-        //   1. 'editorial-stack' — composite — orchestrates rootEl's children
-        //   2. Word/char/line splitters (word-fade-up, char-up, text-typing,
-        //      text-fill-sweep, scroll-words-fill, etc.) — apply to the
-        //      element that holds the actual text. Heuristic: first
-        //      headline (h1/h2/h3) → first [data-tw-anim-target] →
-        //      rootEl. This avoids splitting every char in a multi-quote
-        //      testimonials section (would create hundreds of spans).
-        if (TEXT_PRESETS[preset]) {
-            if (preset === 'editorial-stack') {
-                try { TEXT_PRESETS[preset](rootEl, opts); }
-                catch (e) { warn('preset "' + preset + '" threw on', rootEl, e); restoreVisibility(rootEl); }
+        // Wrap every preset execution in a gsap.context() scoped to
+        // rootEl. EVERY tween, timeline, and ScrollTrigger created by
+        // the preset is automatically tracked. Calling ctx.revert() on
+        // the next applyEntrance kills the lot atomically — fixes the
+        // "stacked triggers fire repeatedly" bug observed when Elementor
+        // remounts the widget several times.
+        rootEl.__tw_anim_ctx = gsap.context(function () {
+
+            if (TEXT_PRESETS[preset]) {
+                if (preset === 'editorial-stack') {
+                    try { TEXT_PRESETS[preset](rootEl, opts); }
+                    catch (e) { warn('preset "' + preset + '" threw on', rootEl, e); restoreVisibility(rootEl); }
+                    return;
+                }
+                var textRoot = rootEl.querySelector('h1, h2, h3, h4')
+                            || rootEl.querySelector('[data-tw-anim-target]')
+                            || rootEl;
+                log('  text-preset routed to', textRoot.tagName.toLowerCase(), 'in', scope);
+                try { TEXT_PRESETS[preset](textRoot, opts); }
+                catch (e) { warn('text preset "' + preset + '" threw on', textRoot, e); restoreVisibility(textRoot); }
                 return;
             }
-            var textRoot = rootEl.querySelector('h1, h2, h3, h4')
-                        || rootEl.querySelector('[data-tw-anim-target]')
-                        || rootEl;
-            log('  text-preset routed to', textRoot.tagName.toLowerCase(), 'in', scope);
-            try { TEXT_PRESETS[preset](textRoot, opts); }
-            catch (e) { warn('text preset "' + preset + '" threw on', textRoot, e); restoreVisibility(textRoot); }
-            return;
-        }
 
-        // Per-target text-reveals — any `[data-tw-anim-text]` element
-        // gets its own preset and is excluded from the main entrance.
-        // Choice is respected at every intensity (lvlFactor handles size).
-        var textTargets = Array.prototype.slice.call(rootEl.querySelectorAll('[data-tw-anim-text]'));
-        textTargets.forEach(function (t) {
-            var name = t.getAttribute('data-tw-anim-text');
-            var fn = TEXT_PRESETS[name];
-            if (fn) {
-                try { fn(t, opts); }
-                catch (e) { warn('text preset "' + name + '" threw on', t, e); restoreVisibility(t); }
+            // Per-target text-reveals — any `[data-tw-anim-text]` element
+            // gets its own preset and is excluded from the main entrance.
+            var textTargets = Array.prototype.slice.call(rootEl.querySelectorAll('[data-tw-anim-text]'));
+            textTargets.forEach(function (t) {
+                var name = t.getAttribute('data-tw-anim-text');
+                var fn = TEXT_PRESETS[name];
+                if (fn) {
+                    try { fn(t, opts); }
+                    catch (e) { warn('text preset "' + name + '" threw on', t, e); restoreVisibility(t); }
+                }
+            });
+
+            // Element entrance for remaining targets.
+            var allTargets = rootEl.querySelectorAll('[data-tw-anim-target]');
+            var elemTargets = Array.prototype.slice.call(allTargets)
+                .filter(function (t) { return !t.hasAttribute('data-tw-anim-text'); });
+
+            if (!elemTargets.length && textTargets.length === 0) {
+                elemTargets = [rootEl];
             }
-        });
+            if (!elemTargets.length) return;
 
-        // Element entrance for remaining targets (excluding text-reveal ones).
-        var allTargets = rootEl.querySelectorAll('[data-tw-anim-target]');
-        var elemTargets = Array.prototype.slice.call(allTargets)
-            .filter(function (t) { return !t.hasAttribute('data-tw-anim-text'); });
+            elemTargets.sort(function (a, b) {
+                return parseFloat(a.getAttribute('data-tw-anim-order') || '0')
+                     - parseFloat(b.getAttribute('data-tw-anim-order') || '0');
+            });
 
-        if (!elemTargets.length && textTargets.length === 0) {
-            // No targets declared — animate the whole widget root.
-            elemTargets = [rootEl];
-        }
-        if (!elemTargets.length) return;
+            var fn = PRESETS[preset];
+            if (!fn) {
+                warn('applyEntrance: unknown preset "' + preset + '" for scope "' + scope + '"');
+                return;
+            }
+            try {
+                fn(elemTargets, opts);
+                log('applied "' + preset + '" to', elemTargets.length, 'targets in scope', scope);
+            } catch (e) {
+                warn('preset "' + preset + '" threw on', elemTargets, e);
+                elemTargets.forEach(restoreVisibility);
+            }
 
-        elemTargets.sort(function (a, b) {
-            return parseFloat(a.getAttribute('data-tw-anim-order') || '0')
-                 - parseFloat(b.getAttribute('data-tw-anim-order') || '0');
-        });
-
-        var fn = PRESETS[preset];
-        if (!fn) {
-            warn('applyEntrance: unknown preset "' + preset + '" for scope "' + scope + '"');
-            return;
-        }
-        try {
-            fn(elemTargets, opts);
-            log('applied "' + preset + '" to', elemTargets.length, 'targets in scope', scope);
-        } catch (e) {
-            warn('preset "' + preset + '" threw on', elemTargets, e);
-            // Don't leave widgets invisible — clear ALL inline animation
-            // properties GSAP may have set BEFORE throwing (especially
-            // filter:blur, scale, clipPath which were the actual stuck
-            // values, not just opacity).
-            elemTargets.forEach(restoreVisibility);
-        }
+        }, rootEl);
     }
 
     /**
