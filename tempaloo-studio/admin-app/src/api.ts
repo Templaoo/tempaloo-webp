@@ -45,7 +45,12 @@ export const api = {
       body: JSON.stringify({ slug, replace }),
     }),
   getAnimation: () => call<AnimationState>('/animation'),
-  setAnimation: (payload: { intensity?: string; template_slug?: string; presets?: Record<string, AnimationPreset> }) =>
+  setAnimation: (payload: {
+    intensity?:     string;
+    direction?:     string;
+    template_slug?: string;
+    presets?:       Record<string, AnimationPreset>;
+  }) =>
     call<AnimationState>('/animation', {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -53,20 +58,23 @@ export const api = {
 };
 
 export interface AnimationPreset {
-  entrance?: string;
-  stagger?:  number;
-  duration?: number;
-  trigger?:  string;
+  entrance?:  string;
+  stagger?:   number;
+  duration?:  number;
+  trigger?:   string;
+  direction?: string; // 'once' | 'replay' | 'bidirectional' | 'scrub'
 }
 
 export interface AnimationState {
-  intensity:       string;
-  allowed:         string[];
-  presets_allowed: string[];
-  presets_grouped: { element: string[]; text: string[] };
-  template_slug:   string;
-  widgets:         string[];
-  presets:         Record<string, AnimationPreset>;
+  intensity:           string;
+  direction:           string;
+  allowed:             string[];
+  directions_allowed:  string[];
+  presets_allowed:     string[];
+  presets_grouped:     { element: string[]; text: string[] };
+  template_slug:       string;
+  widgets:             string[];
+  presets:             Record<string, AnimationPreset>;
 }
 
 export interface ImportedPage {

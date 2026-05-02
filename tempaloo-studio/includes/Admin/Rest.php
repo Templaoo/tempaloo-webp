@@ -123,6 +123,11 @@ final class Rest {
                     'enum'        => Animation::ALLOWED,
                     'description' => 'Global animation intensity: off | subtle | medium | bold.',
                 ],
+                'direction'     => [
+                    'type'        => 'string',
+                    'enum'        => Animation::DIRECTIONS,
+                    'description' => 'Default scroll-replay direction: once | replay | bidirectional | scrub.',
+                ],
                 'template_slug' => [
                     'type'              => 'string',
                     'sanitize_callback' => 'sanitize_key',
@@ -130,7 +135,7 @@ final class Rest {
                 ],
                 'presets'       => [
                     'type'        => 'object',
-                    'description' => 'widget_slug → { entrance, stagger, duration, trigger }.',
+                    'description' => 'widget_slug → { entrance, stagger, duration, trigger, direction }.',
                 ],
             ],
         ] );
@@ -276,27 +281,36 @@ final class Rest {
         $entrance_element = array_values( array_diff( Animation::PRESETS, $entrance_text ) );
 
         return rest_ensure_response( [
-            'intensity'        => Animation::intensity(),
-            'allowed'          => Animation::ALLOWED,
-            'presets_allowed'  => Animation::PRESETS,
-            'presets_grouped'  => [
+            'intensity'           => Animation::intensity(),
+            'direction'           => Animation::direction(),
+            'allowed'             => Animation::ALLOWED,
+            'directions_allowed'  => Animation::DIRECTIONS,
+            'presets_allowed'     => Animation::PRESETS,
+            'presets_grouped'     => [
                 'element' => $entrance_element,
                 'text'    => $entrance_text,
             ],
-            'template_slug'    => $slug,
-            'widgets'          => $active && is_array( $active['widgets'] ?? null ) ? array_values( $active['widgets'] ) : [],
-            'presets'          => (object) $presets,
+            'template_slug'       => $slug,
+            'widgets'             => $active && is_array( $active['widgets'] ?? null ) ? array_values( $active['widgets'] ) : [],
+            'presets'             => (object) $presets,
         ] );
     }
 
     public function set_animation( \WP_REST_Request $req ) {
         $intensity     = $req->get_param( 'intensity' );
+        $direction     = $req->get_param( 'direction' );
         $presets       = $req->get_param( 'presets' );
         $template_slug = sanitize_key( (string) ( $req->get_param( 'template_slug' ) ?? '' ) );
 
         if ( $intensity !== null && $intensity !== '' ) {
             if ( ! Animation::set_intensity( (string) $intensity ) ) {
                 return new \WP_Error( 'bad_intensity', 'Allowed values: ' . implode( ', ', Animation::ALLOWED ), [ 'status' => 400 ] );
+            }
+        }
+
+        if ( $direction !== null && $direction !== '' ) {
+            if ( ! Animation::set_direction( (string) $direction ) ) {
+                return new \WP_Error( 'bad_direction', 'Allowed values: ' . implode( ', ', Animation::DIRECTIONS ), [ 'status' => 400 ] );
             }
         }
 

@@ -2,7 +2,7 @@
 
 > **Single source of truth.** Every landing page authored on Stitch / Claude Design / hand-coded HTML+CSS+GSAP **must** follow this spec to be cleanly converted into a Tempaloo Studio widget. Following this spec is not optional — it's the contract that makes the conversion possible (and eventually automatic via the planned converter tool).
 
-> **Status:** v0.7 — 2026-05-02. Living document. Every new constraint discovered during a real conversion is added here.
+> **Status:** v0.8 — 2026-05-02. Living document. Every new constraint discovered during a real conversion is added here.
 >
 > **Plugin identity:**
 > - Display name: `Tempaloo Studio`
@@ -45,9 +45,9 @@ When you design on Stitch / Claude:
 
 ---
 
-## 1. The 17 commandments
+## 1. The 18 commandments
 
-A widget that follows all 17 rules is **conversion-ready**. A widget that misses any one is **not safe to ship**.
+A widget that follows all 18 rules is **conversion-ready**. A widget that misses any one is **not safe to ship**.
 
 ### 1. Top-level wrapper carries the widget identity
 
@@ -635,6 +635,62 @@ deferred-registration logic. Every existing widget that uses
 benefits automatically — no per-widget changes needed. Future widgets
 must use `ts.onReady`; direct `elementorFrontend.hooks.addAction`
 calls will be reverted in code review.
+
+### 18. Animation direction model — `bidirectional` is the default; pick `once` / `replay` / `scrub` deliberately
+
+Every scroll-triggered animation must declare HOW it behaves when the
+user moves through it multiple times. Four options:
+
+| Direction | Forward | Reverse | Use case |
+|---|---|---|---|
+| `once` | first scroll-down only | none | Hero on long pages, performance-critical |
+| `replay` | every enter (down OR up) | none | Banner that re-plays each time |
+| **`bidirectional`** ⭐ | scroll-down → play | scroll-up → reverse | Default — mirror entrance choreography |
+| `scrub` | progress tied 1:1 to scroll | progress tied 1:1 | Narrative line-fills, parallax |
+
+**Implementation contract** — `assets/js/animations.js` provides two
+helpers that BOTH honor the direction model:
+
+```js
+scheduleAnim(targets, fromState, toState, scrollCfg, direction)
+withScroll(opts, playFn, reverseFn)
+```
+
+- `scheduleAnim` builds a paused `gsap.timeline()` and wires it to a
+  standalone `ScrollTrigger.create({ onEnter, onEnterBack, onLeaveBack })`.
+- `withScroll` is the same pattern for ad-hoc text-preset tweens; pass
+  a `playFn` AND a `reverseFn` to enable bidirectional reverse on text.
+  Without `reverseFn`, bidirectional degrades to once-style for that
+  preset (no reverse animation).
+
+**Reliability hardening (mandatory):**
+- `invalidateOnRefresh: true` on every ScrollTrigger so positions
+  recompute when layout changes (image load, font swap, viewport
+  resize, Elementor editor re-render).
+- `syncTimelineToTrigger(tl, st)` — after each refresh, if the trigger
+  reports `progress > 0.01` (user past start), snap the timeline to
+  `progress(1).pause()` (visible). Otherwise snap to `progress(0).pause()`.
+  Without this, a page reload while scrolled past the trigger leaves
+  the animation stuck at progress 0 (hidden) until the user scrolls
+  past the trigger again — bug confirmed in how-it-works before fix.
+
+**Configuration layers (priority descending):**
+1. **`tempaloo_studio_anims` runtime filter** — programmatic overrides
+2. **`tempaloo_studio_animation_presets[slug][widget].direction`** —
+   user override stored per-widget in WP options, set via the React
+   admin's per-widget Direction dropdown
+3. **`template.json::animations.presets[widget].direction`** —
+   template default, ships in the manifest
+4. **`tempaloo_studio_animation_direction` global option** —
+   site-wide default (defaults to `bidirectional`), set via the
+   React admin's "Default replay direction" cards
+
+**Audit (post v0.8):** the central runtime + all 9 text presets +
+all 8 element presets in `animations.js` route through `scheduleAnim`
+or `withScroll`. Adding a new preset means writing it as one of those
+two patterns — no per-preset ScrollTrigger.create calls allowed
+outside the helpers. Scrub mode is the only path that retains the
+§1.15.4 tween↔trigger linkage.
 
 ---
 

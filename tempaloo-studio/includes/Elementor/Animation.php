@@ -33,8 +33,16 @@ final class Animation {
 
     const OPTION_INTENSITY = 'tempaloo_studio_animation_intensity';
     const OPTION_PRESETS   = 'tempaloo_studio_animation_presets';
+    const OPTION_DIRECTION = 'tempaloo_studio_animation_direction';
     const DEFAULT_         = 'medium';
     const ALLOWED          = [ 'off', 'subtle', 'medium', 'bold' ];
+
+    /** Direction model — how a scroll-triggered animation behaves
+     *  when the user moves through it multiple times. See
+     *  scheduleAnim() in assets/js/animations.js for runtime
+     *  semantics. */
+    const DEFAULT_DIRECTION = 'bidirectional';
+    const DIRECTIONS        = [ 'once', 'replay', 'bidirectional', 'scrub' ];
 
     /** Available preset names — must match keys in animations.js
      *  PRESETS or TEXT_PRESETS tables. Validation in `set_preset()`
@@ -67,6 +75,17 @@ final class Animation {
     public static function set_intensity( string $value ): bool {
         if ( ! in_array( $value, self::ALLOWED, true ) ) return false;
         update_option( self::OPTION_INTENSITY, $value );
+        return true;
+    }
+
+    public static function direction(): string {
+        $v = get_option( self::OPTION_DIRECTION, self::DEFAULT_DIRECTION );
+        return in_array( $v, self::DIRECTIONS, true ) ? $v : self::DEFAULT_DIRECTION;
+    }
+
+    public static function set_direction( string $value ): bool {
+        if ( ! in_array( $value, self::DIRECTIONS, true ) ) return false;
+        update_option( self::OPTION_DIRECTION, $value );
         return true;
     }
 
@@ -127,6 +146,12 @@ final class Animation {
                 $out['trigger'] = $t;
             }
         }
+        if ( isset( $cfg['direction'] ) && is_string( $cfg['direction'] ) ) {
+            $d = strtolower( trim( $cfg['direction'] ) );
+            if ( in_array( $d, self::DIRECTIONS, true ) ) {
+                $out['direction'] = $d;
+            }
+        }
         return $out;
     }
 
@@ -162,7 +187,10 @@ final class Animation {
          */
         $anims = (array) apply_filters( 'tempaloo_studio_anims', $anims, $active_slug, $intensity );
 
-        $payloadIntensity = wp_json_encode( [ 'intensity' => $intensity ] );
+        $payloadIntensity = wp_json_encode( [
+            'intensity' => $intensity,
+            'direction' => self::direction(),
+        ] );
         $payloadAnims     = wp_json_encode( (object) $anims );
         if ( ! is_string( $payloadIntensity ) || ! is_string( $payloadAnims ) ) return;
 

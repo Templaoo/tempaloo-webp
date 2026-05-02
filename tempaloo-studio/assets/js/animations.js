@@ -253,83 +253,194 @@
         return 1;                              // medium = 1
     }
 
-    /* ── scheduleAnim — standalone-ScrollTrigger pattern (GSAP official) ─
+    /* ── Direction model — how a scroll-triggered animation behaves
+     *    when the user moves through it multiple times:
      *
-     * Earlier attempts linked a paused tween via `animation: tween` on
-     * `ScrollTrigger.create`. GSAP/ScrollTrigger then tried to compute
-     * the tween's "end" during refresh and crashed for multi-target
-     * tweens animating `filter`/`clipPath` (services widget @ blur-in
-     * bold reproducibly hit `Cannot read properties of undefined
-     * (reading 'end')` inside Te.refresh).
+     *      'once'          — play on first enter, kill the trigger.
+     *      'replay'        — replay forward on every enter (down OR up).
+     *      'bidirectional' — play forward on enter, REVERSE when the
+     *                        user scrolls back up past the trigger
+     *                        (mirror entrance choreography). DEFAULT.
+     *      'scrub'         — progress tied 1:1 to scroll position.
+     *                        Requires the §1.15.4 tween↔trigger link.
      *
-     * Per the gsap-scrolltrigger skill: use a **standalone ScrollTrigger**
-     * (no `animation:` link) and run the actual tween from the `onEnter`
-     * callback. ScrollTrigger never inspects the tween's internals, so
-     * the refresh path can't crash on it.
+     * Per the gsap-scrolltrigger skill, we always use the *standalone*
+     * ScrollTrigger pattern (no `animation:` link) for the first three
+     * directions — onEnter / onEnterBack / onLeaveBack callbacks
+     * play / reverse a paused timeline. Scrub falls back to direct
+     * tween linkage because it has no other implementation path.
      *
-     * Lifecycle:
-     *   1. gsap.set(targets, fromState) — apply start values immediately
-     *      so the element is hidden before any scroll happens.
-     *   2. ScrollTrigger.create({ trigger, start, once, onEnter }) — when
-     *      the trigger enters viewport, fire gsap.to(targets, toState).
-     *   3. No scrollTrigger or no ScrollTrigger plugin → run immediately.
-     *   4. ScrollTrigger.create throws → fall back to immediate play.
+     * Reliability hardening (per how-it-works fix):
+     *   - invalidateOnRefresh: true on every trigger
+     *   - syncTimelineToTrigger: after the trigger refreshes, snap the
+     *     timeline's progress to match the trigger's progress, so a
+     *     page reload while scrolled past the trigger leaves the
+     *     animation in its end state (visible) instead of stuck at
+     *     progress=0 (hidden).
      */
-    function scheduleAnim(targets, fromState, toState, scrollTriggerCfg) {
-        var g = gsap();
-        if (!g) return null;
+    function defaultDirection() {
+        var cfg = (window.tempaloo && window.tempaloo.studio && window.tempaloo.studio.animation) || {};
+        var d   = (cfg.direction || '').toLowerCase();
+        if (d === 'once' || d === 'replay' || d === 'bidirectional' || d === 'scrub') return d;
+        return 'bidirectional';
+    }
 
-        // Always set the start state explicitly so if anything later fails,
-        // the element is at a known starting point — never half-styled.
-        try { g.set(targets, fromState); } catch (e) { warn('gsap.set failed', e); }
-
-        var run = function () {
+    function syncTimelineToTrigger(tl, st) {
+        if (!tl || !st) return;
+        var sync = function () {
             try {
-                return g.to(targets, Object.assign({ overwrite: 'auto' }, toState));
-            } catch (e) {
-                warn('gsap.to failed — restoring visibility', e);
-                Array.prototype.forEach.call(targets, restoreVisibility);
-                return null;
-            }
+                var p = typeof st.progress === 'function' ? st.progress() : 0;
+                if (p > 0.01) {
+                    if (tl.progress() < 0.99) tl.progress(1).pause();
+                } else {
+                    if (tl.progress() > 0.01) tl.progress(0).pause();
+                }
+            } catch (e) {}
         };
-
-        if (!scrollTriggerCfg || !window.ScrollTrigger) return run();
-
-        try {
-            window.ScrollTrigger.create({
-                trigger: scrollTriggerCfg.trigger,
-                start:   scrollTriggerCfg.start || 'top 85%',
-                end:     scrollTriggerCfg.end,
-                once:    scrollTriggerCfg.once !== false,
-                onEnter: run,
-            });
-            return null;
-        } catch (e) {
-            warn('ScrollTrigger.create failed — running tween immediately', e);
-            return run();
+        sync();
+        // Re-sync whenever ScrollTrigger refreshes (image load, font
+        // swap, layout shift). Per-trigger onRefresh is the cheapest
+        // way — fires only when this trigger recalculates.
+        if (typeof st.scroll === 'function') {
+            // GSAP 3.12+ — st has built-in event vars at create time;
+            // we register via the create() config. For instances that
+            // already exist (rare in our flow), fall back to a manual
+            // ScrollTrigger.addEventListener.
+            try {
+                window.ScrollTrigger.addEventListener('refresh', sync);
+            } catch (e) {}
         }
     }
 
-    /* ── withScroll — same standalone-ScrollTrigger pattern for tweens
-     *    built ad-hoc (text presets, behavioral animations).
+    /* ── scheduleAnim — central dispatcher honoring `direction`.
      *
-     * Lets a preset write `gsap.set(splits, from); withScroll(opts, fn);`
-     * instead of inlining `scrollTrigger:` in the tween config (which
-     * has the same crash surface as scheduleAnim's old path).
+     * Builds a paused timeline that animates `targets` from `fromState`
+     * → `toState`. If a scrollTriggerCfg is provided, wires the
+     * timeline to a ScrollTrigger according to the chosen direction.
      */
-    function withScroll(opts, runFn) {
-        if (!opts || !opts.scrollTrigger || !window.ScrollTrigger) { runFn(); return; }
+    function scheduleAnim(targets, fromState, toState, scrollTriggerCfg, direction) {
+        var g = gsap();
+        if (!g) return null;
+        direction = direction || defaultDirection();
+
+        try { g.set(targets, fromState); } catch (e) { warn('gsap.set failed', e); }
+
+        // Scrub mode — REQUIRES tween↔trigger link (§1.15.4 exception).
+        // We bypass the timeline+callback path and create the tween with
+        // an inline scrollTrigger that has scrub:true.
+        if (direction === 'scrub' && scrollTriggerCfg && window.ScrollTrigger) {
+            try {
+                return g.to(targets, Object.assign({ overwrite: 'auto' }, toState, {
+                    scrollTrigger: {
+                        trigger: scrollTriggerCfg.trigger,
+                        start:   scrollTriggerCfg.start || 'top 85%',
+                        end:     scrollTriggerCfg.end   || 'bottom 30%',
+                        scrub:   true,
+                        invalidateOnRefresh: true,
+                    },
+                }));
+            } catch (e) {
+                warn('scrub setup threw — falling back to bidirectional', e);
+                direction = 'bidirectional';
+            }
+        }
+
+        // Build a paused timeline so the trigger callbacks (or our
+        // immediate-play fallback) can play / reverse it cleanly.
+        var tl;
         try {
-            window.ScrollTrigger.create({
-                trigger: opts.scrollTrigger.trigger,
-                start:   opts.scrollTrigger.start || 'top 85%',
-                end:     opts.scrollTrigger.end,
-                once:    opts.scrollTrigger.once !== false,
-                onEnter: runFn,
-            });
+            tl = g.timeline({ paused: true });
+            tl.to(targets, Object.assign({ overwrite: 'auto' }, toState));
+        } catch (e) {
+            warn('timeline build failed — restoring visibility', e);
+            Array.prototype.forEach.call(targets, restoreVisibility);
+            return null;
+        }
+
+        if (!scrollTriggerCfg || !window.ScrollTrigger) {
+            tl.play();
+            return tl;
+        }
+
+        var cfg = {
+            trigger:             scrollTriggerCfg.trigger,
+            start:               scrollTriggerCfg.start || 'top 85%',
+            end:                 scrollTriggerCfg.end,
+            invalidateOnRefresh: true,
+        };
+
+        if (direction === 'once') {
+            cfg.once    = true;
+            cfg.onEnter = function () { tl.play(); };
+        } else if (direction === 'replay') {
+            cfg.onEnter     = function () { tl.progress(0); tl.play(); };
+            cfg.onEnterBack = function () { tl.progress(0); tl.play(); };
+        } else { // bidirectional (default)
+            cfg.onEnter     = function () { tl.play(); };
+            cfg.onEnterBack = function () { tl.play(); };
+            cfg.onLeaveBack = function () { tl.reverse(); };
+        }
+
+        var st;
+        try {
+            st = window.ScrollTrigger.create(cfg);
+        } catch (e) {
+            warn('ScrollTrigger.create failed — playing tween immediately', e);
+            tl.play();
+            return tl;
+        }
+
+        syncTimelineToTrigger(tl, st);
+        return tl;
+    }
+
+    /* ── withScroll — same direction model for ad-hoc tweens (text
+     *    presets, behavioral animations). Caller provides a runFn
+     *    that BUILDS its own gsap.to/timeline when invoked, plus the
+     *    fromState we use to gsap.set initial styles.
+     *
+     * Two run callbacks expected:
+     *   playFn()    — applies the "to" state (forward animation)
+     *   reverseFn() — applies the "from" state (reverse, optional)
+     *
+     * If only playFn is provided, bidirectional/replay degrade to
+     * once-style behavior (no reverse on scroll up).
+     */
+    function withScroll(opts, playFn, reverseFn) {
+        opts = opts || {};
+        var direction = (opts.direction || defaultDirection()).toLowerCase();
+
+        if (!opts.scrollTrigger || !window.ScrollTrigger) {
+            try { playFn(); } catch (e) {}
+            return;
+        }
+
+        var cfg = {
+            trigger:             opts.scrollTrigger.trigger,
+            start:               opts.scrollTrigger.start || 'top 85%',
+            end:                 opts.scrollTrigger.end,
+            invalidateOnRefresh: true,
+        };
+
+        if (direction === 'once') {
+            cfg.once    = true;
+            cfg.onEnter = function () { try { playFn(); } catch (e) {} };
+        } else if (direction === 'replay') {
+            cfg.onEnter     = function () { try { playFn(); } catch (e) {} };
+            cfg.onEnterBack = function () { try { playFn(); } catch (e) {} };
+        } else { // bidirectional
+            cfg.onEnter     = function () { try { playFn();    } catch (e) {} };
+            cfg.onEnterBack = function () { try { playFn();    } catch (e) {} };
+            if (typeof reverseFn === 'function') {
+                cfg.onLeaveBack = function () { try { reverseFn(); } catch (e) {} };
+            }
+        }
+
+        try {
+            window.ScrollTrigger.create(cfg);
         } catch (e) {
             warn('withScroll: ScrollTrigger.create failed — running immediately', e);
-            runFn();
+            try { playFn(); } catch (e2) {}
         }
     }
 
@@ -347,7 +458,7 @@
             scheduleAnim(targets,
                 { opacity: 0 },
                 { opacity: 1, duration: opts.duration || 0.45, ease: 'power1.out', stagger: opts.stagger || 0, clearProps: 'opacity' },
-                opts.scrollTrigger);
+                opts.scrollTrigger, opts.direction);
         },
 
         'fade-up': function (targets, opts) {
@@ -355,7 +466,7 @@
             scheduleAnim(targets,
                 { opacity: 0, y: y },
                 { opacity: 1, y: 0, duration: opts.duration || 0.7, ease: 'power3.out', stagger: opts.stagger || 0, clearProps: 'opacity,transform' },
-                opts.scrollTrigger);
+                opts.scrollTrigger, opts.direction);
         },
 
         'fade-down': function (targets, opts) {
@@ -363,7 +474,7 @@
             scheduleAnim(targets,
                 { opacity: 0, y: y },
                 { opacity: 1, y: 0, duration: opts.duration || 0.7, ease: 'power3.out', stagger: opts.stagger || 0, clearProps: 'opacity,transform' },
-                opts.scrollTrigger);
+                opts.scrollTrigger, opts.direction);
         },
 
         'fade-left': function (targets, opts) {
@@ -371,7 +482,7 @@
             scheduleAnim(targets,
                 { opacity: 0, x: x },
                 { opacity: 1, x: 0, duration: opts.duration || 0.7, ease: 'power3.out', stagger: opts.stagger || 0, clearProps: 'opacity,transform' },
-                opts.scrollTrigger);
+                opts.scrollTrigger, opts.direction);
         },
 
         'fade-right': function (targets, opts) {
@@ -379,7 +490,7 @@
             scheduleAnim(targets,
                 { opacity: 0, x: x },
                 { opacity: 1, x: 0, duration: opts.duration || 0.7, ease: 'power3.out', stagger: opts.stagger || 0, clearProps: 'opacity,transform' },
-                opts.scrollTrigger);
+                opts.scrollTrigger, opts.direction);
         },
 
         'scale-in': function (targets, opts) {
@@ -387,7 +498,7 @@
             scheduleAnim(targets,
                 { opacity: 0, scale: 1 - 0.08 * f },
                 { opacity: 1, scale: 1, duration: opts.duration || 0.7, ease: 'back.out(1.4)', stagger: opts.stagger || 0, clearProps: 'opacity,transform' },
-                opts.scrollTrigger);
+                opts.scrollTrigger, opts.direction);
         },
 
         'blur-in': function (targets, opts) {
@@ -395,7 +506,7 @@
             scheduleAnim(targets,
                 { opacity: 0, filter: 'blur(' + (20 * f) + 'px)', willChange: 'opacity, filter' },
                 { opacity: 1, filter: 'blur(0px)', duration: opts.duration || 0.85, ease: 'power3.out', stagger: opts.stagger || 0, clearProps: 'opacity,filter,willChange' },
-                opts.scrollTrigger);
+                opts.scrollTrigger, opts.direction);
         },
 
         'mask-reveal': function (targets, opts) {
@@ -404,13 +515,13 @@
                 scheduleAnim(targets,
                     { opacity: 0 },
                     { opacity: 1, duration: opts.duration || 0.4, ease: 'power1.out', stagger: opts.stagger || 0, clearProps: 'opacity' },
-                    opts.scrollTrigger);
+                    opts.scrollTrigger, opts.direction);
                 return;
             }
             scheduleAnim(targets,
                 { clipPath: 'inset(0 100% 0 0)' },
                 { clipPath: 'inset(0 0% 0 0)', duration: opts.duration || 0.8, ease: 'power3.out', stagger: opts.stagger || 0, clearProps: 'clipPath' },
-                opts.scrollTrigger);
+                opts.scrollTrigger, opts.direction);
         },
     };
 
@@ -544,37 +655,62 @@
             var words = splitWords(el, false);
             var y = 16 * (opts.lvlFactor || 1);
             gsap().set(words, { opacity: 0, y: y });
-            withScroll(opts, function () {
-                gsap().to(words, {
-                    opacity: 1, y: 0, duration: 0.6, ease: 'power3.out',
-                    stagger: 0.03, clearProps: 'opacity,transform', overwrite: 'auto',
-                });
-            });
+            withScroll(opts,
+                function () {
+                    gsap().to(words, {
+                        opacity: 1, y: 0, duration: 0.6, ease: 'power3.out',
+                        stagger: 0.03, overwrite: 'auto',
+                    });
+                },
+                function () {
+                    gsap().to(words, {
+                        opacity: 0, y: y, duration: 0.4, ease: 'power3.in',
+                        stagger: { each: 0.02, from: 'end' }, overwrite: 'auto',
+                    });
+                }
+            );
         },
 
         // 2. Word fade-blur — premium / editorial.
         'word-fade-blur': function (el, opts) {
             var words = splitWords(el, false);
             gsap().set(words, { opacity: 0, filter: 'blur(8px)' });
-            withScroll(opts, function () {
-                gsap().to(words, {
-                    opacity: 1, filter: 'blur(0px)',
-                    duration: 0.7, ease: 'power2.out',
-                    stagger: 0.04, clearProps: 'opacity,filter', overwrite: 'auto',
-                });
-            });
+            withScroll(opts,
+                function () {
+                    gsap().to(words, {
+                        opacity: 1, filter: 'blur(0px)',
+                        duration: 0.7, ease: 'power2.out',
+                        stagger: 0.04, overwrite: 'auto',
+                    });
+                },
+                function () {
+                    gsap().to(words, {
+                        opacity: 0, filter: 'blur(8px)',
+                        duration: 0.45, ease: 'power2.in',
+                        stagger: { each: 0.02, from: 'end' }, overwrite: 'auto',
+                    });
+                }
+            );
         },
 
         // 3. Word slide-up (overflow) — cinematic Stripe-style.
         'word-slide-up-overflow': function (el, opts) {
             var inners = splitWords(el, true);
             gsap().set(inners, { yPercent: 110 });
-            withScroll(opts, function () {
-                gsap().to(inners, {
-                    yPercent: 0, duration: 0.7, ease: 'power4.out',
-                    stagger: 0.04, clearProps: 'transform', overwrite: 'auto',
-                });
-            });
+            withScroll(opts,
+                function () {
+                    gsap().to(inners, {
+                        yPercent: 0, duration: 0.7, ease: 'power4.out',
+                        stagger: 0.04, overwrite: 'auto',
+                    });
+                },
+                function () {
+                    gsap().to(inners, {
+                        yPercent: 110, duration: 0.45, ease: 'power4.in',
+                        stagger: { each: 0.025, from: 'end' }, overwrite: 'auto',
+                    });
+                }
+            );
         },
 
         // 4. Char up — short headlines only (auto-fallback if too long).
@@ -584,12 +720,20 @@
             var chars = splitChars(el);
             var y = 8 * (opts.lvlFactor || 1);
             gsap().set(chars, { opacity: 0, y: y });
-            withScroll(opts, function () {
-                gsap().to(chars, {
-                    opacity: 1, y: 0, duration: 0.5, ease: 'power3.out',
-                    stagger: 0.018, clearProps: 'opacity,transform', overwrite: 'auto',
-                });
-            });
+            withScroll(opts,
+                function () {
+                    gsap().to(chars, {
+                        opacity: 1, y: 0, duration: 0.5, ease: 'power3.out',
+                        stagger: 0.018, overwrite: 'auto',
+                    });
+                },
+                function () {
+                    gsap().to(chars, {
+                        opacity: 0, y: y, duration: 0.35, ease: 'power3.in',
+                        stagger: { each: 0.012, from: 'end' }, overwrite: 'auto',
+                    });
+                }
+            );
         },
 
         // 5. Line fade-up stagger — multi-line headlines (split on <br>).
@@ -597,54 +741,83 @@
             var lines = splitLines(el);
             var y = 24 * (opts.lvlFactor || 1);
             gsap().set(lines, { opacity: 0, y: y });
-            withScroll(opts, function () {
-                gsap().to(lines, {
-                    opacity: 1, y: 0, duration: 0.7, ease: 'power3.out',
-                    stagger: 0.1, clearProps: 'opacity,transform', overwrite: 'auto',
-                });
-            });
+            withScroll(opts,
+                function () {
+                    gsap().to(lines, {
+                        opacity: 1, y: 0, duration: 0.7, ease: 'power3.out',
+                        stagger: 0.1, overwrite: 'auto',
+                    });
+                },
+                function () {
+                    gsap().to(lines, {
+                        opacity: 0, y: y, duration: 0.5, ease: 'power3.in',
+                        stagger: { each: 0.06, from: 'end' }, overwrite: 'auto',
+                    });
+                }
+            );
         },
 
         // 6. Text typing — typewriter chars instant-reveal sequentially.
-        //    Stagger cap: keep total animation duration under 1.5s even
-        //    on long sentences (200-char text would otherwise type for
-        //    9 seconds — too slow for a hero headline).
         'text-typing': function (el, opts) {
             var chars = splitChars(el);
             var stagger = Math.min(0.045, chars.length > 0 ? 1.5 / chars.length : 0.045);
             gsap().set(chars, { opacity: 0 });
-            withScroll(opts, function () {
-                gsap().to(chars, {
-                    opacity: 1, duration: 0.001, stagger: stagger, ease: 'none', overwrite: 'auto',
-                });
-            });
+            withScroll(opts,
+                function () {
+                    gsap().to(chars, {
+                        opacity: 1, duration: 0.001, stagger: stagger, ease: 'none', overwrite: 'auto',
+                    });
+                },
+                function () {
+                    gsap().to(chars, {
+                        opacity: 0, duration: 0.001,
+                        stagger: { each: stagger, from: 'end' },
+                        ease: 'none', overwrite: 'auto',
+                    });
+                }
+            );
         },
 
         // 7. Text fill sweep — wave from dim to full opacity, char-by-char.
-        //    Falls back to word-stagger if the text is too long to char-split
-        //    cleanly. Reliable across all browsers (no background-clip:text
-        //    or color-mix() — those have spotty Safari support).
         'text-fill-sweep': function (el, opts) {
             var text = (el.textContent || '').trim();
             if (text.length > 80) {
                 var words = splitWords(el, false);
                 gsap().set(words, { opacity: 0.22 });
-                withScroll(opts, function () {
-                    gsap().to(words, {
-                        opacity: 1, duration: 0.4, stagger: 0.05,
-                        ease: 'power2.out', clearProps: 'opacity', overwrite: 'auto',
-                    });
-                });
+                withScroll(opts,
+                    function () {
+                        gsap().to(words, {
+                            opacity: 1, duration: 0.4, stagger: 0.05,
+                            ease: 'power2.out', overwrite: 'auto',
+                        });
+                    },
+                    function () {
+                        gsap().to(words, {
+                            opacity: 0.22, duration: 0.3,
+                            stagger: { each: 0.03, from: 'end' },
+                            ease: 'power2.in', overwrite: 'auto',
+                        });
+                    }
+                );
                 return;
             }
             var chars = splitChars(el);
             gsap().set(chars, { opacity: 0.22 });
-            withScroll(opts, function () {
-                gsap().to(chars, {
-                    opacity: 1, duration: 0.3, stagger: 0.022,
-                    ease: 'power2.out', clearProps: 'opacity', overwrite: 'auto',
-                });
-            });
+            withScroll(opts,
+                function () {
+                    gsap().to(chars, {
+                        opacity: 1, duration: 0.3, stagger: 0.022,
+                        ease: 'power2.out', overwrite: 'auto',
+                    });
+                },
+                function () {
+                    gsap().to(chars, {
+                        opacity: 0.22, duration: 0.25,
+                        stagger: { each: 0.015, from: 'end' },
+                        ease: 'power2.in', overwrite: 'auto',
+                    });
+                }
+            );
         },
 
         // 8. Scroll-linked words fill — Apple/Stripe-Tax style.
@@ -827,25 +1000,31 @@
         // Off bails out entirely above.
         var preset = widgetCfg.entrance || 'fade-up';
 
-        var stMs   = parseInt(widgetCfg.stagger || 80, 10);
-        var dur    = parseFloat(widgetCfg.duration || 0.7);
-        var trig   = widgetCfg.trigger || 'top 85%';
-        var lvlF   = intensityFactor(lvl);
+        var stMs       = parseInt(widgetCfg.stagger || 80, 10);
+        var dur        = parseFloat(widgetCfg.duration || 0.7);
+        var trig       = widgetCfg.trigger || 'top 85%';
+        var lvlF       = intensityFactor(lvl);
+        // Direction precedence: per-widget override → global default
+        // ('bidirectional'). The user expects this to mirror entrance
+        // animations on scroll-up by default — they can switch back
+        // to 'once' / 'replay' / 'scrub' per widget from the React admin.
+        var direction  = (widgetCfg.direction || defaultDirection()).toLowerCase();
+        if (direction !== 'once' && direction !== 'replay' && direction !== 'bidirectional' && direction !== 'scrub') {
+            direction = 'bidirectional';
+        }
 
         // editAware: in the Elementor editor preview iframe, return null
         // for the scrollTrigger config so the runtime plays animations
-        // immediately on mount instead of waiting for scroll. This is
-        // the central fix for "widget invisible in live preview" — every
-        // preset routes through this dispatcher, so every widget gets
-        // editor-safe behavior for free.
-        var stCfg = hasST() && trig !== 'none' ? { trigger: rootEl, start: trig, once: true } : null;
+        // immediately on mount instead of waiting for scroll.
+        var stCfg = hasST() && trig !== 'none' ? { trigger: rootEl, start: trig } : null;
         if (ts.editAware) stCfg = ts.editAware(stCfg);
 
         var opts = {
-            stagger: stMs / 1000,
-            duration: dur * (lvl === 'bold' ? 1.25 : 1),
-            lvlFactor: lvlF,
+            stagger:       stMs / 1000,
+            duration:      dur * (lvl === 'bold' ? 1.25 : 1),
+            lvlFactor:     lvlF,
             scrollTrigger: stCfg,
+            direction:     direction,
         };
 
         log('applyEntrance', { scope: scope, preset: preset, lvl: lvl, opts: opts });

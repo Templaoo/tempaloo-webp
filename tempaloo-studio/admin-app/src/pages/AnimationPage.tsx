@@ -19,6 +19,13 @@ const TRIGGER_OPTIONS = [
   { id: 'none',        label: 'On page load (no scroll)' },
 ];
 
+const DIRECTION_OPTIONS: Array<{ id: string; label: string; desc: string }> = [
+  { id: 'once',          label: 'Once',           desc: 'Plays the FIRST time the user scrolls past, then never again. Lightest on perf.' },
+  { id: 'replay',        label: 'Replay',         desc: 'Plays forward EVERY time the user enters the trigger (down OR up). No reverse.' },
+  { id: 'bidirectional', label: 'Bidirectional',  desc: 'Forward on scroll-down, REVERSE on scroll-up — mirror entrance choreography. Default.' },
+  { id: 'scrub',         label: 'Scrub',          desc: 'Progress tied 1:1 to scroll position. Best for narrative animations.' },
+];
+
 // Pretty preset labels for the dropdown.
 const PRESET_LABELS: Record<string, string> = {
   'none':                  'None',
@@ -63,6 +70,21 @@ export function AnimationPage() {
       const updated = await api.setAnimation({ intensity: next });
       setState(updated);
       toast.info(`Animation set to "${next}". Reload pages to see the change.`);
+    } catch (e) {
+      toast.error(`Save failed: ${(e as Error).message}`);
+    } finally {
+      setSavingScope(null);
+    }
+  }
+
+  async function pickDirection(next: string) {
+    if (!state || next === state.direction) return;
+    setSavingScope('__direction');
+    setState({ ...state, direction: next });
+    try {
+      const updated = await api.setAnimation({ direction: next });
+      setState(updated);
+      toast.info(`Default replay set to "${next}". Per-widget overrides keep their value. Reload to see the change.`);
     } catch (e) {
       toast.error(`Save failed: ${(e as Error).message}`);
     } finally {
@@ -140,14 +162,43 @@ export function AnimationPage() {
             })}
           </div>
 
+          {/* ── Default replay direction ─────────────────────── */}
+          <div className="tsa-card tsa-mt-5">
+            <header className="tsa-card__header">
+              <div>
+                <div className="tsa-card__title">Default replay direction</div>
+                <div className="tsa-card__subtitle">
+                  How animations behave when the user scrolls back through them. Per-widget overrides below keep their own value.
+                </div>
+              </div>
+            </header>
+            <div className="tsa-anim-grid tsa-anim-grid--compact">
+              {DIRECTION_OPTIONS.map((d) => {
+                const isActive = d.id === state.direction;
+                return (
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => pickDirection(d.id)}
+                    disabled={savingScope === '__direction'}
+                    className={'tsa-anim-card' + (isActive ? ' is-active' : '')}
+                  >
+                    <span className="tsa-anim-card__label">{d.label}</span>
+                    <span className="tsa-anim-card__desc">{d.desc}</span>
+                    {isActive && <span className="tsa-pill tsa-pill--accent tsa-anim-card__badge"><span className="tsa-pill__dot" /> Active</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {state.template_slug && state.widgets.length > 0 && (
             <div className="tsa-card tsa-mt-5">
               <header className="tsa-card__header">
                 <div>
                   <div className="tsa-card__title">Per-widget animations</div>
                   <div className="tsa-card__subtitle">
-                    Each widget in the active template can have its own entrance preset, stagger,
-                    and scroll trigger. Saves automatically.
+                    Each widget can override the global direction + pick its own entrance preset, stagger, and scroll trigger. Saves automatically.
                   </div>
                 </div>
               </header>
@@ -193,9 +244,10 @@ function WidgetRow({
   savedAt?: number;
   onChange: (p: Partial<AnimationPreset>) => void;
 }) {
-  const entrance = preset.entrance || 'fade-up';
-  const stagger  = preset.stagger  ?? 80;
-  const trigger  = preset.trigger  || 'top 85%';
+  const entrance  = preset.entrance  || 'fade-up';
+  const stagger   = preset.stagger   ?? 80;
+  const trigger   = preset.trigger   || 'top 85%';
+  const direction = preset.direction || ''; // empty = inherit global
 
   // Mini live demo — animates a 3-dot row using the chosen preset's
   // visual character. Triggers when entrance changes so the user sees
@@ -261,6 +313,21 @@ function WidgetRow({
           >
             {TRIGGER_OPTIONS.map((t) => (
               <option key={t.id} value={t.id}>{t.label}</option>
+            ))}
+          </select>
+        </label>
+
+        <label className="tsa-anim-row__field">
+          <span className="tsa-anim-row__label">Replay direction</span>
+          <select
+            className="tsa-tk-select"
+            value={direction}
+            onChange={(e) => onChange({ direction: e.target.value })}
+            title="Override the site default for this widget. Empty = use site default."
+          >
+            <option value="">Inherit site default</option>
+            {DIRECTION_OPTIONS.map((d) => (
+              <option key={d.id} value={d.id}>{d.label}</option>
             ))}
           </select>
         </label>
