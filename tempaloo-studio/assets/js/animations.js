@@ -158,22 +158,11 @@
         warn('safety net: forcing visibility on', stuckRoots.length, 'in-viewport roots +',
              stuckSplits.length, 'split-spans', force ? '(manual)' : '(auto)');
 
-        function clean(el) {
-            if (window.gsap && typeof window.gsap.killTweensOf === 'function') {
-                try { window.gsap.killTweensOf(el); } catch (e) {}
-            }
-            el.style.opacity = '';
-            el.style.transform = '';
-            el.style.filter = '';
-            el.style.clipPath = '';
-            el.style.yPercent = '';
-        }
-
-        stuckRoots.forEach(function (el) {
-            clean(el);
-            el.querySelectorAll('.tw-word, .tw-word__inner, .tw-char, .tw-line__inner').forEach(clean);
-        });
-        stuckSplits.forEach(clean);
+        // restoreVisibility is defined later in the file but hoisted via
+        // function declaration. Same routine as the per-preset catch
+        // handler — keeps recovery behavior consistent.
+        stuckRoots.forEach(restoreVisibility);
+        stuckSplits.forEach(restoreVisibility);
     }
     // Schedule the safety net once layout has settled.
     if (document.readyState === 'complete') {
@@ -275,8 +264,9 @@
         'none': function () { /* no-op */ },
 
         'fade': function (targets, opts) {
-            gsap().from(targets, Object.assign({
-                opacity: 0,
+            gsap().set(targets, { opacity: 0 });
+            gsap().to(targets, Object.assign({
+                opacity: 1,
                 duration: opts.duration || 0.45,
                 ease: 'power1.out',
                 stagger: opts.stagger || 0,
@@ -285,9 +275,10 @@
         },
 
         'fade-up': function (targets, opts) {
-            gsap().from(targets, Object.assign({
-                opacity: 0,
-                y: 24 * (opts.lvlFactor || 1),
+            var y = 24 * (opts.lvlFactor || 1);
+            gsap().set(targets, { opacity: 0, y: y });
+            gsap().to(targets, Object.assign({
+                opacity: 1, y: 0,
                 duration: opts.duration || 0.7,
                 ease: 'power3.out',
                 stagger: opts.stagger || 0,
@@ -296,9 +287,10 @@
         },
 
         'fade-down': function (targets, opts) {
-            gsap().from(targets, Object.assign({
-                opacity: 0,
-                y: -24 * (opts.lvlFactor || 1),
+            var y = -24 * (opts.lvlFactor || 1);
+            gsap().set(targets, { opacity: 0, y: y });
+            gsap().to(targets, Object.assign({
+                opacity: 1, y: 0,
                 duration: opts.duration || 0.7,
                 ease: 'power3.out',
                 stagger: opts.stagger || 0,
@@ -307,9 +299,10 @@
         },
 
         'fade-left': function (targets, opts) {
-            gsap().from(targets, Object.assign({
-                opacity: 0,
-                x: -32 * (opts.lvlFactor || 1),
+            var x = -32 * (opts.lvlFactor || 1);
+            gsap().set(targets, { opacity: 0, x: x });
+            gsap().to(targets, Object.assign({
+                opacity: 1, x: 0,
                 duration: opts.duration || 0.7,
                 ease: 'power3.out',
                 stagger: opts.stagger || 0,
@@ -318,9 +311,10 @@
         },
 
         'fade-right': function (targets, opts) {
-            gsap().from(targets, Object.assign({
-                opacity: 0,
-                x: 32 * (opts.lvlFactor || 1),
+            var x = 32 * (opts.lvlFactor || 1);
+            gsap().set(targets, { opacity: 0, x: x });
+            gsap().to(targets, Object.assign({
+                opacity: 1, x: 0,
                 duration: opts.duration || 0.7,
                 ease: 'power3.out',
                 stagger: opts.stagger || 0,
@@ -329,12 +323,15 @@
         },
 
         'scale-in': function (targets, opts) {
-            // scale: 0.92 at lvlFactor=1 (medium); 1.0 at subtle (no scale);
-            // 0.888 at bold. Lerp around 1 with intensity.
             var f = opts.lvlFactor != null ? opts.lvlFactor : 1;
-            gsap().from(targets, Object.assign({
-                opacity: 0,
-                scale: 1 - 0.08 * f,
+            // gsap.set + gsap.to (instead of gsap.from) — avoids a known
+            // GSAP edge-case where `from() + scrollTrigger + transform`
+            // throws "Cannot read properties of undefined (reading 'end')"
+            // on some pages. Explicit start state, explicit animation.
+            gsap().set(targets, { opacity: 0, scale: 1 - 0.08 * f });
+            gsap().to(targets, Object.assign({
+                opacity: 1,
+                scale: 1,
                 duration: opts.duration || 0.7,
                 ease: 'back.out(1.4)',
                 stagger: opts.stagger || 0,
@@ -344,9 +341,13 @@
 
         'blur-in': function (targets, opts) {
             var f = opts.lvlFactor != null ? opts.lvlFactor : 1;
-            gsap().from(targets, Object.assign({
-                opacity: 0,
-                filter: 'blur(' + (20 * f) + 'px)',
+            // Same set/to pattern. The from() variant of this preset
+            // crashed inside ScrollTrigger.refresh — confirmed in user's
+            // debug logs ("preset 'blur-in' threw … reading 'end'").
+            gsap().set(targets, { opacity: 0, filter: 'blur(' + (20 * f) + 'px)' });
+            gsap().to(targets, Object.assign({
+                opacity: 1,
+                filter: 'blur(0px)',
                 duration: opts.duration || 0.85,
                 ease: 'power3.out',
                 stagger: opts.stagger || 0,
@@ -355,18 +356,18 @@
         },
 
         'mask-reveal': function (targets, opts) {
-            // mask-reveal at subtle (lvlFactor 0) collapses to a soft fade
-            // so the user never gets a jarring visual at "subtle" setting.
             var f = opts.lvlFactor != null ? opts.lvlFactor : 1;
             if (f === 0) {
-                gsap().from(targets, Object.assign({
-                    opacity: 0, duration: opts.duration || 0.4, ease: 'power1.out',
+                gsap().set(targets, { opacity: 0 });
+                gsap().to(targets, Object.assign({
+                    opacity: 1, duration: opts.duration || 0.4, ease: 'power1.out',
                     stagger: opts.stagger || 0, clearProps: 'opacity',
                 }, opts.scrollTrigger ? { scrollTrigger: opts.scrollTrigger } : {}));
                 return;
             }
-            gsap().from(targets, Object.assign({
-                clipPath: 'inset(0 100% 0 0)',
+            gsap().set(targets, { clipPath: 'inset(0 100% 0 0)' });
+            gsap().to(targets, Object.assign({
+                clipPath: 'inset(0 0% 0 0)',
                 duration: opts.duration || 0.8,
                 ease: 'power3.out',
                 stagger: opts.stagger || 0,
@@ -768,7 +769,7 @@
         if (TEXT_PRESETS[preset]) {
             if (preset === 'editorial-stack') {
                 try { TEXT_PRESETS[preset](rootEl, opts); }
-                catch (e) { warn('preset "' + preset + '" threw on', rootEl, e); rootEl.style.opacity = '1'; }
+                catch (e) { warn('preset "' + preset + '" threw on', rootEl, e); restoreVisibility(rootEl); }
                 return;
             }
             var textRoot = rootEl.querySelector('h1, h2, h3, h4')
@@ -776,7 +777,7 @@
                         || rootEl;
             log('  text-preset routed to', textRoot.tagName.toLowerCase(), 'in', scope);
             try { TEXT_PRESETS[preset](textRoot, opts); }
-            catch (e) { warn('text preset "' + preset + '" threw on', textRoot, e); textRoot.style.opacity = '1'; }
+            catch (e) { warn('text preset "' + preset + '" threw on', textRoot, e); restoreVisibility(textRoot); }
             return;
         }
 
@@ -789,7 +790,7 @@
             var fn = TEXT_PRESETS[name];
             if (fn) {
                 try { fn(t, opts); }
-                catch (e) { warn('text preset "' + name + '" threw on', t, e); t.style.opacity = '1'; }
+                catch (e) { warn('text preset "' + name + '" threw on', t, e); restoreVisibility(t); }
             }
         });
 
@@ -819,9 +820,36 @@
             log('applied "' + preset + '" to', elemTargets.length, 'targets in scope', scope);
         } catch (e) {
             warn('preset "' + preset + '" threw on', elemTargets, e);
-            // Don't leave widgets invisible if a preset crashed.
-            elemTargets.forEach(function (t) { t.style.opacity = '1'; });
+            // Don't leave widgets invisible — clear ALL inline animation
+            // properties GSAP may have set BEFORE throwing (especially
+            // filter:blur, scale, clipPath which were the actual stuck
+            // values, not just opacity).
+            elemTargets.forEach(restoreVisibility);
         }
+    }
+
+    /**
+     * Force-restore an element's natural state by clearing every inline
+     * style GSAP touches during entrance animations. Used by both the
+     * per-preset catch handlers and the safety net.
+     */
+    function restoreVisibility(el) {
+        if (!el || !el.style) return;
+        if (window.gsap && typeof window.gsap.killTweensOf === 'function') {
+            try { window.gsap.killTweensOf(el); } catch (e) {}
+        }
+        el.style.opacity   = '';
+        el.style.transform = '';
+        el.style.filter    = '';
+        el.style.clipPath  = '';
+        // Also descendants — split-spans share the same problem when a
+        // composite preset's timeline fails mid-creation.
+        el.querySelectorAll && el.querySelectorAll('.tw-word, .tw-word__inner, .tw-char, .tw-line__inner').forEach(function (c) {
+            if (window.gsap) try { window.gsap.killTweensOf(c); } catch (e) {}
+            c.style.opacity = '';
+            c.style.transform = '';
+            c.style.filter = '';
+        });
     }
 
     /* Standalone text-reveal — `data-tw-anim-text` outside any scope.
