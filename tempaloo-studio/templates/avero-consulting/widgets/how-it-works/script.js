@@ -173,18 +173,26 @@
             }
             tweens.push(tl);
 
-            // Use ScrollTrigger normally — including in the editor —
-            // so the author sees the scroll-driven reveal as they
-            // scroll through the preview iframe. If create() throws
-            // for any reason, fall back to playing the tween so the
-            // content still becomes visible.
+            // Use ScrollTrigger in "play-once" mode — `once: true`
+            // makes ScrollTrigger fire onEnter exactly once, then kill
+            // the trigger entirely. No onEnterBack / onLeaveBack ever
+            // fire afterwards, so:
+            //   - the timeline plays the FIRST time the user scrolls
+            //     past the item;
+            //   - it stays at its end state forever after, even when
+            //     the user scrolls back up past the trigger and down
+            //     again (no flicker, no reverse-then-replay yo-yo);
+            //   - one fewer live ScrollTrigger per item — gentler on
+            //     the per-frame refresh cost on long pages.
+            // This matches the central runtime's pattern in
+            // animations.js and is what every Avero entrance preset
+            // uses for the same UX reason.
             try {
                 var trig = ST.create({
-                    trigger:     item,
-                    start:       'top 85%',
-                    onEnter:     function () { dlog('item ' + idx + ' onEnter — tl.play'); tl.play(); },
-                    onEnterBack: function () { dlog('item ' + idx + ' onEnterBack — tl.play'); tl.play(); },
-                    onLeaveBack: function () { dlog('item ' + idx + ' onLeaveBack — tl.reverse'); tl.reverse(); },
+                    trigger: item,
+                    start:   'top 85%',
+                    once:    true,
+                    onEnter: function () { dlog('item ' + idx + ' onEnter — tl.play (once)'); tl.play(); },
                 });
                 triggers.push(trig);
                 // Report the trigger's resolved start position + activity.
