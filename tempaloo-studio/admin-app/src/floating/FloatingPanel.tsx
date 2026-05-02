@@ -1214,15 +1214,46 @@ function InspectOverlay({
     };
 
     const buildSelector = (el: HTMLElement): string => {
-      // Prefer the most specific BEM class (tw-{template}-{widget}__elem),
-      // then the widget root class, then tag. Avoid auto-generated
-      // Elementor classes (.elementor-xxx) since those are unstable.
+      // Strategy — pick the most stable, most-specific class available
+      // so the binding rule targets exactly THIS instance and survives
+      // editor re-renders. Order:
+      //
+      //   1. Tempaloo BEM (`tw-{tpl}-{widget}__elem`) — the gold standard
+      //      because we author these.
+      //   2. Tempaloo root (`tw-{tpl}-{widget}`) — same template family,
+      //      lower specificity.
+      //   3. Elementor's per-element unique class (`elementor-element-{ID}`)
+      //      — assigned 1:1 to every Elementor element (Section / Column /
+      //      Container / Widget). Stable across saves, unique per page,
+      //      a perfect target for "this exact container's background".
+      //   4. Tempaloo `data-tw-anim-scope` ancestor + tag — fallback for
+      //      our own widgets when the inner element has no class.
+      //   5. Plain tag — last-resort, broad.
       const cls = (el.className && typeof el.className === 'string') ? el.className : '';
       const classes = cls.split(/\s+/).filter(Boolean);
+
       const bem = classes.filter((c) => /^tw-/.test(c) && c.includes('__'));
       if (bem.length) return '.' + bem[0];
-      const tw  = classes.filter((c) => /^tw-/.test(c));
-      if (tw.length)  return '.' + tw[0];
+
+      const tw = classes.filter((c) => /^tw-/.test(c));
+      if (tw.length) return '.' + tw[0];
+
+      // Elementor assigns `elementor-element-{8charHash}` to every
+      // Section / Column / Container / Widget. That's our ticket to
+      // editing native containers' backgrounds from the floating panel.
+      // We walk up the ancestor chain too — the user might click on
+      // an inner content element of an Elementor container; binding to
+      // the closest Elementor ancestor (the container itself) is what
+      // they meant.
+      const elementorOnEl = classes.filter((c) => /^elementor-element-[a-z0-9]{6,}$/.test(c));
+      if (elementorOnEl.length) return '.' + elementorOnEl[0];
+      const elementorAncestor = el.closest('.elementor-element[class*="elementor-element-"]') as HTMLElement | null;
+      if (elementorAncestor && elementorAncestor !== el) {
+        const aClasses = (elementorAncestor.className || '').split(/\s+/);
+        const aHit    = aClasses.find((c) => /^elementor-element-[a-z0-9]{6,}$/.test(c));
+        if (aHit) return '.' + aHit;
+      }
+
       const scopeEl = el.closest('[data-tw-anim-scope]') as HTMLElement | null;
       if (scopeEl) {
         const scope = scopeEl.getAttribute('data-tw-anim-scope');
