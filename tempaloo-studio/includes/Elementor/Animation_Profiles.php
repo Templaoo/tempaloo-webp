@@ -30,7 +30,7 @@ final class Animation_Profiles {
 
     /** Read the built-in profiles bundled with the plugin. */
     public static function builtins(): array {
-        $path = TEMPALOO_STUDIO_PATH . 'assets/data/anim-profiles.json';
+        $path = \TEMPALOO_STUDIO_PATH . 'assets/data/anim-profiles.json';
         if ( ! is_readable( $path ) ) return [];
         $raw = file_get_contents( $path );
         $lib = json_decode( (string) $raw, true );
