@@ -1,13 +1,5 @@
 /* ============================================================
- * Tempaloo Studio — Floating Color Editor
- *
- * Mounted at #tempaloo-studio-floating-root on the frontend +
- * Elementor preview iframe (logged-in admins only). All selectors
- * scoped under #tempaloo-studio-floating-root so they never bleed
- * onto the page being edited.
- *
- * z-index: max — must sit above Elementor's editor overlays
- * (Elementor uses up to 999999). 2147483647 is the int32 max.
+ * Tempaloo Studio — Floating Color Editor (Phase 3.1)
  * ============================================================ */
 
 #tempaloo-studio-floating-root,
@@ -31,7 +23,7 @@
   cursor: pointer;
 }
 
-/* ── Toggle button (collapsed state) ───────────────────────── */
+/* ── Toggle button (collapsed) ─────────────────────────── */
 
 .tsa-fp-toggle {
   position: fixed;
@@ -56,21 +48,33 @@
   background: var(--tsa-bg-elev);
 }
 .tsa-fp-toggle__inner {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: var(--tsa-accent);
 }
+.tsa-fp-toggle__badge {
+  position: absolute;
+  top: -16px;
+  right: -16px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--tsa-warning);
+  color: #000;
+  font-size: 10px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 
-/* ── Panel (expanded state) ────────────────────────────────── */
+/* ── Panel ─────────────────────────────────────────────── */
 
 .tsa-fp {
   position: fixed;
-  bottom: 20px;
-  right: 20px;
-  width: 360px;
-  max-width: calc(100vw - 40px);
-  max-height: calc(100vh - 40px);
   background: var(--tsa-bg-strong);
   border: 1px solid var(--tsa-border-strong);
   border-radius: var(--tsa-radius-lg);
@@ -81,20 +85,28 @@
   z-index: 2147483646;
   font-size: 13px;
   animation: tsa-fp-in 200ms ease;
+  user-select: none;
 }
-
 @keyframes tsa-fp-in {
   from { opacity: 0; transform: translateY(8px) scale(0.98); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* Header — also the drag handle */
 .tsa-fp__header {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 14px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--tsa-border);
   background: var(--tsa-bg-soft);
+  flex-shrink: 0;
+  touch-action: none;
+}
+.tsa-fp__grip {
+  display: inline-flex;
+  align-items: center;
+  color: var(--tsa-text-muted);
 }
 .tsa-fp__title {
   font-family: var(--tsa-font-heading);
@@ -103,23 +115,13 @@
   color: var(--tsa-text);
   flex-shrink: 0;
 }
-.tsa-fp__mode {
-  font-family: var(--tsa-font-mono);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--tsa-text-muted);
-  padding: 2px 8px;
-  border: 1px solid var(--tsa-border);
-  border-radius: var(--tsa-radius-pill);
-}
 .tsa-fp__dirty {
   font-size: 10.5px;
   color: var(--tsa-warning);
   font-weight: 500;
+  margin-left: auto;
 }
 .tsa-fp__icon {
-  margin-left: auto;
   width: 26px;
   height: 26px;
   border-radius: var(--tsa-radius-sm);
@@ -129,30 +131,92 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  font-size: 14px;
+  line-height: 1;
 }
 .tsa-fp__icon:hover { background: var(--tsa-bg); color: var(--tsa-text); }
+.tsa-fp__header > .tsa-fp__icon { user-select: none; }
 
-/* ── Toolbar ──────────────────────────────────────────────── */
+/* Mode switcher row */
+.tsa-fp__moderow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--tsa-border);
+  flex-shrink: 0;
+}
+.tsa-fp__modeswitch {
+  display: inline-flex;
+  background: var(--tsa-bg-soft);
+  border: 1px solid var(--tsa-border);
+  border-radius: var(--tsa-radius-pill);
+  padding: 2px;
+  gap: 2px;
+}
+.tsa-fp__modebtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border: none;
+  background: transparent;
+  color: var(--tsa-text-soft);
+  font-size: 11.5px;
+  font-weight: 500;
+  border-radius: var(--tsa-radius-pill);
+  transition: background 140ms ease, color 140ms ease;
+}
+.tsa-fp__modebtn:hover { color: var(--tsa-text); }
+.tsa-fp__modebtn.is-active {
+  background: var(--tsa-bg);
+  color: var(--tsa-text);
+  box-shadow: var(--tsa-shadow-sm);
+}
+.tsa-fp__modebadge {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--tsa-warning);
+  color: #000;
+  font-size: 9.5px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.tsa-fp__follow {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  color: var(--tsa-text-muted);
+  margin-left: auto;
+  user-select: none;
+}
+.tsa-fp__follow input { margin: 0; accent-color: var(--tsa-accent); }
 
+/* Toolbar (Inspect / Reset) */
 .tsa-fp__toolbar {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 10px 14px;
+  padding: 8px 14px;
   border-bottom: 1px solid var(--tsa-border);
+  flex-shrink: 0;
 }
 .tsa-fp__btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 10px;
+  padding: 5px 10px;
   border-radius: var(--tsa-radius-sm);
   border: 1px solid var(--tsa-border);
   background: var(--tsa-bg);
   color: var(--tsa-text-soft);
   font-size: 11.5px;
   font-weight: 500;
-  font-family: inherit;
   transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
 }
 .tsa-fp__btn:hover:not(:disabled) {
@@ -174,22 +238,41 @@
 .tsa-fp__btn--primary:hover:not(:disabled) {
   background: var(--tsa-accent-hover);
   border-color: var(--tsa-accent-hover);
-  color: var(--tsa-accent-text);
 }
-.tsa-fp__count {
-  margin-left: auto;
+.tsa-fp__btn--ghost {
+  border-color: transparent;
+  background: transparent;
+  padding: 5px 8px;
   font-size: 10.5px;
   color: var(--tsa-text-muted);
-  font-family: var(--tsa-font-mono);
+}
+.tsa-fp__btn--ghost:hover:not(:disabled) {
+  background: var(--tsa-bg-soft);
+  border-color: var(--tsa-border);
+  color: var(--tsa-text);
+}
+.tsa-fp__spacer { flex: 1; }
+.tsa-fp__reset {
+  display: inline-flex;
+  gap: 2px;
 }
 
-/* ── Token list (scrollable middle) ─────────────────────── */
+/* Inspect filter banner */
+.tsa-fp__inspect-banner {
+  padding: 6px 14px;
+  background: var(--tsa-accent-soft);
+  color: var(--tsa-accent);
+  font-size: 11px;
+  border-bottom: 1px solid var(--tsa-border);
+}
+.tsa-fp__inspect-banner strong { font-family: var(--tsa-font-mono); }
 
+/* Token list — scrollable middle */
 .tsa-fp__list {
   flex: 1;
   overflow-y: auto;
-  padding: 6px 0;
   scrollbar-width: thin;
+  scrollbar-color: var(--tsa-border-strong) transparent;
 }
 .tsa-fp__list::-webkit-scrollbar { width: 6px; }
 .tsa-fp__list::-webkit-scrollbar-thumb { background: var(--tsa-border-strong); border-radius: 3px; }
@@ -200,16 +283,53 @@
   font-size: 12px;
 }
 
+/* Group — collapsible category */
+.tsa-fp__group {
+  border-bottom: 1px solid var(--tsa-border);
+}
+.tsa-fp__group:last-child { border-bottom: none; }
+.tsa-fp__group-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: transparent;
+  border: none;
+  color: var(--tsa-text-soft);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  text-align: left;
+  font-family: inherit;
+}
+.tsa-fp__group-head:hover { background: var(--tsa-bg-soft); }
+.tsa-fp__chevron {
+  width: 12px;
+  text-align: center;
+  color: var(--tsa-text-muted);
+  font-size: 9px;
+}
+.tsa-fp__group-name { flex: 1; }
+.tsa-fp__group-count {
+  font-family: var(--tsa-font-mono);
+  font-size: 10px;
+  color: var(--tsa-text-muted);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.tsa-fp__group-body { padding-bottom: 4px; }
+
+/* Color row */
 .tsa-fp__row {
   display: grid;
-  grid-template-columns: 32px 1fr auto;
+  grid-template-columns: 28px 1fr auto;
   align-items: center;
-  gap: 10px;
-  padding: 7px 14px;
-  border-bottom: 1px solid var(--tsa-border);
-  min-height: 38px;
+  gap: 8px;
+  padding: 5px 14px 5px 22px;
+  min-height: 36px;
 }
-.tsa-fp__row:last-child { border-bottom: none; }
 .tsa-fp__row:hover { background: var(--tsa-bg-soft); }
 
 .tsa-fp__swatch {
@@ -236,6 +356,13 @@
 .tsa-fp__swatch input[type="color"] {
   position: absolute; inset: 0; opacity: 0; cursor: inherit; border: none;
 }
+
+.tsa-fp__row-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
 .tsa-fp__name {
   font-family: var(--tsa-font-mono);
   font-size: 10.5px;
@@ -243,10 +370,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  letter-spacing: 0;
+  flex-shrink: 0;
+  max-width: 100px;
 }
 .tsa-fp__input {
-  width: 110px;
+  flex: 1;
+  min-width: 80px;
   font-family: var(--tsa-font-mono);
   font-size: 10.5px;
   color: var(--tsa-text);
@@ -259,8 +388,30 @@
 }
 .tsa-fp__input:focus { border-color: var(--tsa-accent); }
 
-/* ── Footer ──────────────────────────────────────────────── */
+.tsa-fp__other {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 5px;
+  border-radius: var(--tsa-radius-sm);
+  background: var(--tsa-bg-soft);
+  border: 1px solid var(--tsa-border);
+  font-size: 10px;
+  color: var(--tsa-text-muted);
+  cursor: help;
+  flex-shrink: 0;
+}
+.tsa-fp__other.is-synced { color: var(--tsa-text-muted); opacity: 0.5; }
+.tsa-fp__other-mode { font-size: 9px; }
+.tsa-fp__other-fill {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--tsa-border-strong);
+}
 
+/* Footer */
 .tsa-fp__footer {
   display: flex;
   align-items: center;
@@ -268,18 +419,35 @@
   padding: 10px 14px;
   border-top: 1px solid var(--tsa-border);
   background: var(--tsa-bg-soft);
+  flex-shrink: 0;
 }
 .tsa-fp__hint {
   font-size: 10.5px;
   color: var(--tsa-text-muted);
   margin-right: auto;
   font-style: italic;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.tsa-fp__footer .tsa-fp__btn { margin-left: auto; }
-.tsa-fp__footer .tsa-fp__btn ~ .tsa-fp__btn { margin-left: 0; }
 
-/* Hide the panel completely on small screens — the "Hidden < 768px"
-   policy from the design discussion. The toggle button is also hidden. */
+/* Resize corner handle */
+.tsa-fp__resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  background:
+    linear-gradient(135deg, transparent 50%, var(--tsa-text-muted) 50%, var(--tsa-text-muted) 60%, transparent 60%, transparent 70%, var(--tsa-text-muted) 70%, var(--tsa-text-muted) 80%, transparent 80%);
+  opacity: 0.5;
+  z-index: 1;
+}
+.tsa-fp__resize:hover { opacity: 1; }
+
+/* Mobile fallback */
 @media (max-width: 767px) {
   #tempaloo-studio-floating-root { display: none; }
 }
