@@ -1262,12 +1262,146 @@
         });
     }
 
+    /* ── v2 Element Rules engine (Plan A) ─────────────────────
+     *
+     * Reads window.tempaloo.studio.animV2.elementRules and applies a
+     * preset to every element matching that type's selector list (h1,
+     * h2, p, img, button, container, link). Excludes elements already
+     * handled by a [data-tw-anim-scope] widget — those run via
+     * applyEntrance with their own widget override. This is what makes
+     * Elementor NATIVE widgets (heading, image, button) animate
+     * automatically without any data-attr in their markup.
+     *
+     * Wraps the pass in gsap.matchMedia() per the gsap-core skill —
+     * `prefers-reduced-motion: reduce` automatically downgrades the
+     * preset to 'fade' (or skips per the user's reduceMotion strategy)
+     * AND auto-reverts every animation it created when the media query
+     * stops matching (e.g. user toggles reduce-motion in OS settings).
+     */
+    function applyElementRules() {
+        var g = gsap();
+        if (!g) return;
+        var v2 = (window.tempaloo && window.tempaloo.studio && window.tempaloo.studio.animV2) || null;
+        if (!v2 || !v2.elementRules) return;
+
+        var rmStrategy = (v2.globals && v2.globals.reduceMotion) || 'subtle';
+
+        var mm;
+        try { mm = g.matchMedia(); } catch (e) { warn('matchMedia unavailable, falling back', e); mm = null; }
+
+        var run = function (reduce) {
+            // Per-element-type pass
+            Object.keys(v2.elementRules).forEach(function (typeId) {
+                var rule = v2.elementRules[typeId];
+                if (!rule || rule.enabled === false) return;
+                if (!rule.preset || rule.preset === 'none') return;
+
+                // Reduce-motion handling per skill: replace by 'fade' or
+                // skip entirely.
+                var preset = rule.preset;
+                if (reduce) {
+                    if (rmStrategy === 'off') return;
+                    if (rmStrategy === 'subtle') preset = 'fade';
+                }
+
+                var typeMeta  = (v2.elementTypes || {})[typeId];
+                var selectors = (typeMeta && typeMeta.selectors) || [];
+                if (!selectors.length) return;
+
+                var sel = selectors.join(',');
+                var nodes = [];
+                try { nodes = Array.prototype.slice.call(document.querySelectorAll(sel)); }
+                catch (e) { warn('Invalid selector for type ' + typeId, e); return; }
+
+                // Exclusions:
+                //  • elements explicitly opted out via data-tw-anim-skip
+                //  • elements inside a [data-tw-anim-scope] (handled by
+                //    applyEntrance with their widget override)
+                //  • elements whose closest scope opted into the
+                //    composite editorial-stack (already orchestrating
+                //    children)
+                nodes = nodes.filter(function (el) {
+                    if (el.hasAttribute && el.hasAttribute('data-tw-anim-skip')) return false;
+                    var scope = el.closest && el.closest('[data-tw-anim-scope]');
+                    if (scope) return false;
+                    return true;
+                });
+                if (!nodes.length) return;
+
+                // Build opts from the rule's params and scrollTrigger.
+                var params = rule.params || {};
+                var st     = rule.scrollTrigger || {};
+                var direction = (rule.direction || defaultDirection()).toLowerCase();
+                if (direction !== 'once' && direction !== 'replay' &&
+                    direction !== 'bidirectional' && direction !== 'scrub') {
+                    direction = 'bidirectional';
+                }
+                var stCfg = (hasST() && st.start && st.start !== 'none')
+                                ? { trigger: null, start: st.start }
+                                : null;
+
+                // Each element gets its own ScrollTrigger (trigger = the
+                // element itself) so animations fire when each element
+                // enters the viewport, not when the first one does.
+                nodes.forEach(function (el) {
+                    var opts = {
+                        stagger:       (typeof params.stagger === 'number' ? params.stagger : 0),
+                        duration:      (typeof params.duration === 'number' ? params.duration : 0.7),
+                        lvlFactor:     intensityFactor(level()),
+                        scrollTrigger: stCfg ? { trigger: el, start: stCfg.start } : null,
+                        direction:     direction,
+                        // Pass typed v2 params through so future presets
+                        // can read e.g. ease, blurFrom, scaleFrom, y, x.
+                        params:        params,
+                    };
+                    if (ts.editAware) opts.scrollTrigger = ts.editAware(opts.scrollTrigger);
+
+                    var fn = TEXT_PRESETS[preset] || PRESETS[preset];
+                    if (!fn) { warn('Element rule: unknown preset', preset, 'for type', typeId); return; }
+
+                    // Idempotent reset for re-applies (matchMedia toggles).
+                    if (el.__tw_anim_ctx) {
+                        try { el.__tw_anim_ctx.revert(); } catch (e) {}
+                        el.__tw_anim_ctx = null;
+                    }
+                    el.__tw_anim_ctx = g.context(function () {
+                        try { fn(el, opts); }
+                        catch (e) { warn('Element-rule preset "' + preset + '" threw on', el, e); restoreVisibility(el); }
+                    }, el);
+                });
+                log('Element rule "' + typeId + '" → "' + preset + '" applied to', nodes.length, 'nodes');
+            });
+        };
+
+        if (mm && typeof mm.add === 'function') {
+            mm.add({
+                isMotion:      '(prefers-reduced-motion: no-preference)',
+                reduceMotion:  '(prefers-reduced-motion: reduce)',
+            }, function (ctx) {
+                run(!!ctx.conditions.reduceMotion);
+                // matchMedia auto-reverts when conditions change — no
+                // explicit cleanup needed (per gsap-core skill).
+            });
+        } else {
+            run(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+        }
+    }
+
     /* ── Boot — runs for every scoped widget on the page ────── */
 
     ts.onReady('[data-tw-anim-scope]', function (rootEl) {
         applyEntrance(rootEl);
         applyBehaviors(rootEl);
     });
+
+    // v2 Element Rules — runs ONCE per page load, after scopes have
+    // been processed (next tick), so the in-scope exclusion check
+    // works against fully-mounted scope nodes.
+    if (document.readyState === 'complete') {
+        setTimeout(applyElementRules, 0);
+    } else {
+        window.addEventListener('load', function () { setTimeout(applyElementRules, 0); });
+    }
 
     // Behaviors can also live on top-level elements outside any scope.
     ts.onReady('[data-tw-anim]:not([data-tw-anim-scope])', function (el) {
@@ -1282,17 +1416,18 @@
     /* ── Public API for power users ─────────────────────────── */
 
     ts.animations = {
-        presets:      PRESETS,
-        textPresets:  TEXT_PRESETS,
-        behaviors:    BEHAVIORS,
-        register:     function (name, fn) { PRESETS[name] = fn; },
-        registerText: function (name, fn) { TEXT_PRESETS[name] = fn; },
-        registerBehavior: function (name, fn) { BEHAVIORS[name] = fn; },
-        apply:        applyEntrance,
-        applyText:    applyStandaloneTextReveal,
-        level:        level,
-        splitWords:   splitWords,
-        splitChars:   splitChars,
-        splitLines:   splitLines,
+        presets:           PRESETS,
+        textPresets:       TEXT_PRESETS,
+        behaviors:         BEHAVIORS,
+        register:          function (name, fn) { PRESETS[name] = fn; },
+        registerText:      function (name, fn) { TEXT_PRESETS[name] = fn; },
+        registerBehavior:  function (name, fn) { BEHAVIORS[name] = fn; },
+        apply:             applyEntrance,
+        applyText:         applyStandaloneTextReveal,
+        applyElementRules: applyElementRules,
+        level:             level,
+        splitWords:        splitWords,
+        splitChars:        splitChars,
+        splitLines:        splitLines,
     };
 })();
