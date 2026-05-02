@@ -16,6 +16,7 @@ use Tempaloo\Studio\Elementor\Breakpoints;
 use Tempaloo\Studio\Elementor\Animation;
 use Tempaloo\Studio\Elementor\Page_Importer;
 use Tempaloo\Studio\Frontend\Assets;
+use Tempaloo\Studio\Frontend\Floating_Panel;
 use Tempaloo\Studio\Admin\Menu;
 use Tempaloo\Studio\Admin\Rest;
 
@@ -42,6 +43,10 @@ final class Plugin {
         ( new Breakpoints( $templates ) )->register();
         ( new Animation( $templates ) )->register();
         ( new Assets( $templates ) )->register();
+
+        // Phase 3.0 — floating color editor for admins. Capability-gated
+        // (manage_options) so visitors / editors never see it.
+        ( new Floating_Panel() )->register();
 
         // Elementor: register the active template's widgets. Hooks
         // fire on every request because Elementor's editor may load

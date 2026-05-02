@@ -1,0 +1,285 @@
+/* ============================================================
+ * Tempaloo Studio — Floating Color Editor
+ *
+ * Mounted at #tempaloo-studio-floating-root on the frontend +
+ * Elementor preview iframe (logged-in admins only). All selectors
+ * scoped under #tempaloo-studio-floating-root so they never bleed
+ * onto the page being edited.
+ *
+ * z-index: max — must sit above Elementor's editor overlays
+ * (Elementor uses up to 999999). 2147483647 is the int32 max.
+ * ============================================================ */
+
+#tempaloo-studio-floating-root,
+#tempaloo-studio-floating-root *,
+#tempaloo-studio-floating-root *::before,
+#tempaloo-studio-floating-root *::after {
+  box-sizing: border-box;
+}
+
+#tempaloo-studio-floating-root {
+  font-family: var(--tsa-font-body);
+  color: var(--tsa-text);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#tempaloo-studio-floating-root button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+/* ── Toggle button (collapsed state) ───────────────────────── */
+
+.tsa-fp-toggle {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid var(--tsa-border-strong);
+  background: var(--tsa-bg-strong);
+  color: var(--tsa-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--tsa-shadow-lg);
+  transition: transform 200ms ease, background 200ms ease;
+  z-index: 2147483646;
+  padding: 0;
+}
+.tsa-fp-toggle:hover {
+  transform: translateY(-2px) scale(1.04);
+  background: var(--tsa-bg-elev);
+}
+.tsa-fp-toggle__inner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--tsa-accent);
+}
+
+/* ── Panel (expanded state) ────────────────────────────────── */
+
+.tsa-fp {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 360px;
+  max-width: calc(100vw - 40px);
+  max-height: calc(100vh - 40px);
+  background: var(--tsa-bg-strong);
+  border: 1px solid var(--tsa-border-strong);
+  border-radius: var(--tsa-radius-lg);
+  box-shadow: var(--tsa-shadow-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 2147483646;
+  font-size: 13px;
+  animation: tsa-fp-in 200ms ease;
+}
+
+@keyframes tsa-fp-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.tsa-fp__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--tsa-border);
+  background: var(--tsa-bg-soft);
+}
+.tsa-fp__title {
+  font-family: var(--tsa-font-heading);
+  font-size: 14px;
+  letter-spacing: -0.01em;
+  color: var(--tsa-text);
+  flex-shrink: 0;
+}
+.tsa-fp__mode {
+  font-family: var(--tsa-font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--tsa-text-muted);
+  padding: 2px 8px;
+  border: 1px solid var(--tsa-border);
+  border-radius: var(--tsa-radius-pill);
+}
+.tsa-fp__dirty {
+  font-size: 10.5px;
+  color: var(--tsa-warning);
+  font-weight: 500;
+}
+.tsa-fp__icon {
+  margin-left: auto;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--tsa-radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--tsa-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.tsa-fp__icon:hover { background: var(--tsa-bg); color: var(--tsa-text); }
+
+/* ── Toolbar ──────────────────────────────────────────────── */
+
+.tsa-fp__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--tsa-border);
+}
+.tsa-fp__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: var(--tsa-radius-sm);
+  border: 1px solid var(--tsa-border);
+  background: var(--tsa-bg);
+  color: var(--tsa-text-soft);
+  font-size: 11.5px;
+  font-weight: 500;
+  font-family: inherit;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+.tsa-fp__btn:hover:not(:disabled) {
+  background: var(--tsa-bg-soft);
+  color: var(--tsa-text);
+  border-color: var(--tsa-border-strong);
+}
+.tsa-fp__btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.tsa-fp__btn.is-active {
+  background: var(--tsa-accent-soft);
+  color: var(--tsa-accent);
+  border-color: var(--tsa-accent);
+}
+.tsa-fp__btn--primary {
+  background: var(--tsa-accent);
+  color: var(--tsa-accent-text);
+  border-color: var(--tsa-accent);
+}
+.tsa-fp__btn--primary:hover:not(:disabled) {
+  background: var(--tsa-accent-hover);
+  border-color: var(--tsa-accent-hover);
+  color: var(--tsa-accent-text);
+}
+.tsa-fp__count {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--tsa-text-muted);
+  font-family: var(--tsa-font-mono);
+}
+
+/* ── Token list (scrollable middle) ─────────────────────── */
+
+.tsa-fp__list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 0;
+  scrollbar-width: thin;
+}
+.tsa-fp__list::-webkit-scrollbar { width: 6px; }
+.tsa-fp__list::-webkit-scrollbar-thumb { background: var(--tsa-border-strong); border-radius: 3px; }
+.tsa-fp__empty {
+  padding: 24px 14px;
+  color: var(--tsa-text-muted);
+  text-align: center;
+  font-size: 12px;
+}
+
+.tsa-fp__row {
+  display: grid;
+  grid-template-columns: 32px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px;
+  border-bottom: 1px solid var(--tsa-border);
+  min-height: 38px;
+}
+.tsa-fp__row:last-child { border-bottom: none; }
+.tsa-fp__row:hover { background: var(--tsa-bg-soft); }
+
+.tsa-fp__swatch {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--tsa-radius-sm);
+  border: 1px solid var(--tsa-border);
+  overflow: hidden;
+  cursor: pointer;
+  display: inline-flex;
+}
+.tsa-fp__swatch-bg {
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(45deg, rgba(255,255,255,0.06) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255,255,255,0.06) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255,255,255,0.06) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255,255,255,0.06) 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 0 4px, 4px -4px, -4px 0;
+}
+.tsa-fp__swatch-fill { position: absolute; inset: 0; }
+.tsa-fp__swatch input[type="color"] {
+  position: absolute; inset: 0; opacity: 0; cursor: inherit; border: none;
+}
+.tsa-fp__name {
+  font-family: var(--tsa-font-mono);
+  font-size: 10.5px;
+  color: var(--tsa-text-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0;
+}
+.tsa-fp__input {
+  width: 110px;
+  font-family: var(--tsa-font-mono);
+  font-size: 10.5px;
+  color: var(--tsa-text);
+  background: var(--tsa-bg);
+  border: 1px solid var(--tsa-border);
+  border-radius: var(--tsa-radius-sm);
+  padding: 4px 6px;
+  outline: none;
+  transition: border-color 140ms ease;
+}
+.tsa-fp__input:focus { border-color: var(--tsa-accent); }
+
+/* ── Footer ──────────────────────────────────────────────── */
+
+.tsa-fp__footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--tsa-border);
+  background: var(--tsa-bg-soft);
+}
+.tsa-fp__hint {
+  font-size: 10.5px;
+  color: var(--tsa-text-muted);
+  margin-right: auto;
+  font-style: italic;
+}
+.tsa-fp__footer .tsa-fp__btn { margin-left: auto; }
+.tsa-fp__footer .tsa-fp__btn ~ .tsa-fp__btn { margin-left: 0; }
+
+/* Hide the panel completely on small screens — the "Hidden < 768px"
+   policy from the design discussion. The toggle button is also hidden. */
+@media (max-width: 767px) {
+  #tempaloo-studio-floating-root { display: none; }
+}
