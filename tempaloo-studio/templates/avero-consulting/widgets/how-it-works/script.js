@@ -173,26 +173,32 @@
             }
             tweens.push(tl);
 
-            // Use ScrollTrigger in "play-once" mode — `once: true`
-            // makes ScrollTrigger fire onEnter exactly once, then kill
-            // the trigger entirely. No onEnterBack / onLeaveBack ever
-            // fire afterwards, so:
-            //   - the timeline plays the FIRST time the user scrolls
-            //     past the item;
-            //   - it stays at its end state forever after, even when
-            //     the user scrolls back up past the trigger and down
-            //     again (no flicker, no reverse-then-replay yo-yo);
-            //   - one fewer live ScrollTrigger per item — gentler on
-            //     the per-frame refresh cost on long pages.
-            // This matches the central runtime's pattern in
-            // animations.js and is what every Avero entrance preset
-            // uses for the same UX reason.
+            // Bidirectional reveal — author intent is "play forward on
+            // scroll DOWN, play backward on scroll UP". The same item
+            // animates in/out as the user moves through the page, so
+            // navigating back up doesn't leave the markers / content
+            // sitting at their end state — they retract, mirroring
+            // the entrance.
+            //
+            // Callback semantics:
+            //   onEnter        scroll DOWN, item crosses start → play
+            //   onEnterBack    scroll UP, item re-crosses end → play
+            //                  (covers the edge case where the user
+            //                  arrives ABOVE the widget then scrolls
+            //                  up further — without this the items
+            //                  would stay hidden at progress:0)
+            //   onLeaveBack    scroll UP, item crosses start backwards
+            //                  → reverse (un-reveal as it leaves below)
+            //
+            // We deliberately keep the timeline live (no `once:true`)
+            // so this works as long as the page is loaded.
             try {
                 var trig = ST.create({
-                    trigger: item,
-                    start:   'top 85%',
-                    once:    true,
-                    onEnter: function () { dlog('item ' + idx + ' onEnter — tl.play (once)'); tl.play(); },
+                    trigger:     item,
+                    start:       'top 85%',
+                    onEnter:     function () { dlog('item ' + idx + ' onEnter — tl.play');     tl.play(); },
+                    onEnterBack: function () { dlog('item ' + idx + ' onEnterBack — tl.play'); tl.play(); },
+                    onLeaveBack: function () { dlog('item ' + idx + ' onLeaveBack — tl.reverse'); tl.reverse(); },
                 });
                 triggers.push(trig);
                 // Report the trigger's resolved start position + activity.
