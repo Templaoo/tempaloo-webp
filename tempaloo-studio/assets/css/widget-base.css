@@ -160,3 +160,66 @@ body.tempaloo-studio-active {
 .elementor-section.tempaloo-studio-sticky-section .elementor-widget-wrap {
     overflow: visible;
 }
+
+/* ============================================================
+ * EDITOR-PREVIEW SAFETY NET — never let live preview show blank
+ *
+ * Every widget that has a scroll-reveal entrance starts its CSS in
+ * a hidden initial state (opacity:0, transform:translate(...) or
+ * scale(0)). On the public frontend, the runtime / per-widget JS
+ * clears those states via GSAP. In the Elementor editor preview
+ * iframe, ScrollTrigger may not fire because the widget can be
+ * outside the iframe viewport at mount time, OR a JS error stops
+ * the cleanup mid-run → users see a blank widget while editing.
+ *
+ * widget-base.js detects edit mode and adds `tempaloo-edit-mode`
+ * to <html> + <body>. The rules below force-clear EVERY known
+ * initial-state pattern under that class, so live preview is
+ * always usable regardless of what the per-widget script does.
+ *
+ * !important is required because most of these properties are
+ * declared by widget-class rules at the same specificity.
+ *
+ * WIDGET AUTHORS — when you add a new widget with a CSS-only
+ * initial-hidden state, add the corresponding selector(s) here.
+ * Or use one of the recognized data-attributes / class patterns
+ * below and the rule will pick it up automatically.
+ * ============================================================ */
+
+/* Generic patterns — anything tagged with these data attributes
+ * counts as an "animation target" and gets forced visible. Future
+ * widgets that follow the data-tw-anim-* convention work for free. */
+.tempaloo-edit-mode [data-tw-anim-target],
+.tempaloo-edit-mode [data-tw-anim-text],
+.tempaloo-edit-mode [data-tw-anim-scope] [data-tw-anim-target] {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+    clip-path: none !important;
+}
+
+/* Per-widget explicit list — for widgets whose initial-state lives
+ * directly on the BEM class (no data-tw-anim-target wrapping). */
+.tempaloo-edit-mode .tw-avero-how-it-works__item-media,
+.tempaloo-edit-mode .tw-avero-how-it-works__item-content,
+.tempaloo-edit-mode .tw-avero-how-it-works__item-marker {
+    opacity: 1 !important;
+    transform: none !important;
+}
+.tempaloo-edit-mode .tw-avero-how-it-works__line-active {
+    transform: translateX(-50%) scaleY(1) !important;
+}
+
+/* Word/char/line splitters used by the central animation runtime —
+ * the spans get opacity:0 / yPercent:110 inline via gsap.set. In edit
+ * mode the runtime skips the trigger and plays immediately, but if
+ * GSAP itself fails to load (CDN block, etc.) these guarantee the
+ * text still renders. */
+.tempaloo-edit-mode .tw-word,
+.tempaloo-edit-mode .tw-word__inner,
+.tempaloo-edit-mode .tw-char,
+.tempaloo-edit-mode .tw-line__inner {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+}

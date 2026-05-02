@@ -832,11 +832,20 @@
         var trig   = widgetCfg.trigger || 'top 85%';
         var lvlF   = intensityFactor(lvl);
 
+        // editAware: in the Elementor editor preview iframe, return null
+        // for the scrollTrigger config so the runtime plays animations
+        // immediately on mount instead of waiting for scroll. This is
+        // the central fix for "widget invisible in live preview" — every
+        // preset routes through this dispatcher, so every widget gets
+        // editor-safe behavior for free.
+        var stCfg = hasST() && trig !== 'none' ? { trigger: rootEl, start: trig, once: true } : null;
+        if (ts.editAware) stCfg = ts.editAware(stCfg);
+
         var opts = {
             stagger: stMs / 1000,
             duration: dur * (lvl === 'bold' ? 1.25 : 1),
             lvlFactor: lvlF,
-            scrollTrigger: hasST() && trig !== 'none' ? { trigger: rootEl, start: trig, once: true } : null,
+            scrollTrigger: stCfg,
         };
 
         log('applyEntrance', { scope: scope, preset: preset, lvl: lvl, opts: opts });

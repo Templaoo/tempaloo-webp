@@ -2,7 +2,7 @@
 
 > **Single source of truth.** Every landing page authored on Stitch / Claude Design / hand-coded HTML+CSS+GSAP **must** follow this spec to be cleanly converted into a Tempaloo Studio widget. Following this spec is not optional — it's the contract that makes the conversion possible (and eventually automatic via the planned converter tool).
 
-> **Status:** v0.5 — 2026-05-02. Living document. Every new constraint discovered during a real conversion is added here.
+> **Status:** v0.6 — 2026-05-02. Living document. Every new constraint discovered during a real conversion is added here.
 >
 > **Plugin identity:**
 > - Display name: `Tempaloo Studio`
@@ -45,9 +45,9 @@ When you design on Stitch / Claude:
 
 ---
 
-## 1. The 15 commandments
+## 1. The 16 commandments
 
-A widget that follows all 15 rules is **conversion-ready**. A widget that misses any one is **not safe to ship**.
+A widget that follows all 16 rules is **conversion-ready**. A widget that misses any one is **not safe to ship**.
 
 ### 1. Top-level wrapper carries the widget identity
 
@@ -510,6 +510,59 @@ ScrollTrigger.create({
 10. **Reference the GSAP skill packs** before adding any new preset: `gsap-core`, `gsap-scrolltrigger`, `gsap-timeline`, `gsap-utils`. They're the source of truth for official patterns.
 
 **Audit (post v0.5):** all 8 element presets + 9 text presets in `animations.js` follow this pattern. New presets that link `animation: tween` will be reverted in code review.
+
+### 16. Live-preview never goes blank — `ts.editAware()` is mandatory for ScrollTrigger
+
+The recurring bug across every new widget: a scroll-reveal entrance sets a CSS initial state (`opacity:0`, `transform: translate(...)`, `scale(0)`). On the public frontend, GSAP clears it via the trigger callback. **In the Elementor editor preview iframe**, the widget is often outside the iframe viewport at mount time → `ScrollTrigger.create` registers the trigger but `onEnter` doesn't fire → the widget stays blank. Users see white boxes while editing and report "live preview is broken" every single time.
+
+**The fix (v0.6):** the runtime exposes a single helper, `ts.editAware(scrollTriggerCfg)`, which returns the cfg unchanged on the public frontend and `null` inside the editor preview. Every widget script that creates a ScrollTrigger MUST route its config through this helper:
+
+```js
+// ❌ WRONG — works on the frontend, blanks the widget in editor
+ScrollTrigger.create({
+    trigger: el,
+    start:   'top 85%',
+    onEnter: () => tl.play(),
+});
+
+// ✅ CORRECT — editor falls through to immediate play
+var cfg = ts.editAware({ trigger: el, start: 'top 85%' });
+if (cfg) {
+    ScrollTrigger.create(Object.assign({}, cfg, { onEnter: () => tl.play() }));
+} else {
+    tl.play(); // editor — show the final state right away
+}
+```
+
+The central runtime (`animations.js::applyEntrance`) already routes its `opts.scrollTrigger` through `editAware`, so any widget that drives its entrance via the `data-tw-anim-scope` convention gets editor-safe behavior **for free**. The pattern only needs to be applied manually in widgets that author their own GSAP scripts (e.g. `how-it-works/script.js` — scroll-driven progress line + per-step reveal).
+
+**Defensive layer 2 — CSS body class.** `widget-base.js` adds `tempaloo-edit-mode` to `<html>` and `<body>` whenever `elementorFrontend.isEditMode()` returns true. `widget-base.css` then force-clears every known initial-hidden state under that class:
+
+```css
+.tempaloo-edit-mode [data-tw-anim-target],
+.tempaloo-edit-mode [data-tw-anim-text],
+.tempaloo-edit-mode .tw-{template}-{widget}__hidden-element {
+    opacity: 1 !important;
+    transform: none !important;
+}
+```
+
+**WIDGET AUTHORS** — when you ship a new widget with a CSS-only initial-hidden state, do ONE of these:
+
+1. **Tag the element with `data-tw-anim-target` / `data-tw-anim-text`.** It picks up the generic CSS rule for free.
+2. **Add the explicit BEM selector** to the per-widget block in `widget-base.css` under the `.tempaloo-edit-mode` scope.
+
+Either way, the live preview is guaranteed to show the final state regardless of whether GSAP runs in the iframe.
+
+**Sub-rules:**
+
+1. **`ts.editAware()` is the single source of truth** — don't roll your own `if (isEditMode) ... else ...` checks per widget; route every ScrollTrigger config through the helper so behavior stays consistent.
+2. **`scrub` triggers** (the §1.15.4 exception) — in editor mode, snap the tween to its final state with `gsap.set(target, finalProps)` and skip the trigger entirely. Scrub doesn't make sense without scroll, and the iframe is rarely scrolled by the author.
+3. **Don't disable animations in editor — *play* them.** The user wants to see what they're building. The pattern is "play immediately on mount" not "show static". Only fall back to static when GSAP itself isn't loaded.
+4. **CSS initial states should default to `opacity: 1`** when possible (use `gsap.set(el, { opacity: 0 })` from JS instead). The CSS-side hide is only a "no-FOUC before script runs" optimization; if the script doesn't run, the user shouldn't be locked out.
+5. **Test live preview as part of widget acceptance** — drag the widget into a fresh Elementor page in the editor, edit a control, confirm the rendered preview matches the saved frontend. Ship is gated on this.
+
+**Audit (post v0.6):** `widget-base.js`, `animations.js`, and `how-it-works/script.js` all use `editAware`. Future widgets that fail to route their ScrollTrigger configs through it will be reverted in code review.
 
 ---
 

@@ -1450,6 +1450,341 @@
 }
 
 /* ============================================================
+ * Widget: tw-avero-how-it-works
+ *
+ * Process timeline with central vertical line that scrolls-fills,
+ * alternating left/right items, marker pop + content slide-in
+ * powered by GSAP ScrollTrigger (script.js).
+ * ============================================================ */
+
+.tw-avero-how-it-works {
+    background: var(--tw-avero-bg);
+    color: var(--tw-avero-text);
+    padding: clamp(80px, 11vw, 160px) clamp(20px, 5vw, 56px);
+    font-family: var(--tw-avero-font-body);
+}
+
+.tw-avero-how-it-works__inner {
+    max-width: 1240px;
+    margin: 0 auto;
+}
+
+/* ── Header ──────────────────────────────────────────────── */
+
+.tw-avero-how-it-works__header {
+    text-align: center;
+    margin-bottom: clamp(56px, 8vw, 120px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+}
+
+.tw-avero-how-it-works__eyebrow {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--tw-avero-accent);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.tw-avero-how-it-works__eyebrow-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--tw-avero-accent);
+}
+
+.tw-avero-how-it-works__title {
+    font-family: var(--tw-avero-font-heading);
+    font-size: clamp(2rem, 4.6vw, 3.5rem);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    font-weight: 400;
+    color: var(--tw-avero-text);
+    margin: 0;
+    text-wrap: balance;
+}
+
+.tw-avero-how-it-works__cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14.5px;
+    font-weight: 500;
+    color: var(--tw-avero-text);
+    text-decoration: none;
+    padding: 10px 16px;
+    border-radius: var(--tw-avero-radius-pill);
+    border: 1px solid var(--tw-avero-border);
+    background: var(--tw-avero-bg-soft);
+    transition: background 200ms ease, color 200ms ease, border-color 200ms ease, gap 200ms ease;
+}
+.tw-avero-how-it-works__cta:hover,
+.tw-avero-how-it-works__cta:focus {
+    background: var(--tw-avero-bg-strong);
+    color: var(--tw-avero-accent);
+    border-color: var(--tw-avero-accent);
+    gap: 12px;
+    outline: none;
+}
+.tw-avero-how-it-works__cta-arrow {
+    line-height: 1;
+    transition: transform 200ms ease;
+}
+.tw-avero-how-it-works__cta:hover .tw-avero-how-it-works__cta-arrow {
+    transform: translateX(2px);
+}
+
+/* ── Timeline + central line ─────────────────────────────── */
+
+.tw-avero-how-it-works__timeline {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(64px, 9vw, 120px);
+}
+
+/* Static guide line (full-height, low contrast). */
+.tw-avero-how-it-works__timeline::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--tw-avero-border);
+    transform: translateX(-50%);
+}
+
+/* Scroll-driven progress line (overlays the static guide). The
+ * initial state (scaleY:0) lives here so SSR shows nothing until
+ * GSAP starts; the runtime sets scaleY:1 in reduced-motion mode. */
+.tw-avero-how-it-works__line-active {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    width: 2px;
+    height: 100%;
+    background: var(--tw-avero-accent);
+    transform: translateX(-50%) scaleY(0);
+    transform-origin: top;
+    z-index: 1;
+}
+
+/* ── Item ────────────────────────────────────────────────── */
+
+.tw-avero-how-it-works__item {
+    display: grid;
+    grid-template-columns: 1fr 120px 1fr;
+    align-items: center;
+    position: relative;
+    z-index: 2;
+}
+
+/* Reverse — flip media/content sides on alternating rows. We use
+ * `direction: rtl` on the wrapper + `direction: ltr` on the
+ * children (the proven trick from the source) so we don't need
+ * extra wrapper markup. */
+.tw-avero-how-it-works__item--reverse {
+    direction: rtl;
+}
+.tw-avero-how-it-works__item--reverse > * {
+    direction: ltr;
+}
+
+/* Marker — sits on the central line with an outer ring matching
+ * the section background (visually punching a hole through the
+ * vertical line so it looks crisp). */
+.tw-avero-how-it-works__item-marker {
+    width: 48px;
+    height: 48px;
+    background: var(--tw-avero-accent);
+    color: var(--tw-avero-btn-primary-text, #ffffff);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 600;
+    justify-self: center;
+    box-shadow: 0 0 0 8px var(--tw-avero-bg);
+}
+
+/* Content side */
+.tw-avero-how-it-works__item-content {
+    padding: 0 20px;
+}
+
+.tw-avero-how-it-works__item-title {
+    font-family: var(--tw-avero-font-body);
+    font-size: clamp(1.375rem, 2.4vw, 2rem);
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--tw-avero-text);
+    margin: 0 0 16px;
+    letter-spacing: -0.015em;
+}
+
+.tw-avero-how-it-works__item-desc {
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--tw-avero-text-soft);
+    margin: 0 0 28px;
+    max-width: 440px;
+}
+
+.tw-avero-how-it-works__link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--tw-avero-text);
+    text-decoration: none;
+    transition: color 200ms ease, gap 200ms ease;
+}
+.tw-avero-how-it-works__link:hover,
+.tw-avero-how-it-works__link:focus {
+    color: var(--tw-avero-accent);
+    gap: 12px;
+    outline: none;
+}
+.tw-avero-how-it-works__link-icon {
+    line-height: 1;
+}
+
+/* Media side */
+.tw-avero-how-it-works__item-media {
+    display: flex;
+    justify-content: center;
+}
+
+.tw-avero-how-it-works__image-box {
+    width: 100%;
+    max-width: 540px;
+    aspect-ratio: 4 / 3;
+    border-radius: clamp(20px, 2.5vw, 40px);
+    overflow: hidden;
+    background: var(--tw-avero-bg-soft);
+    box-shadow: var(--tw-avero-shadow-lg);
+}
+
+.tw-avero-how-it-works__image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform 600ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.tw-avero-how-it-works__item:hover .tw-avero-how-it-works__image {
+    transform: scale(1.05);
+}
+
+/* ── Initial states for the JS reveal ────────────────────── */
+
+.tw-avero-how-it-works__item-media,
+.tw-avero-how-it-works__item-content {
+    opacity: 0;
+    will-change: transform, opacity;
+}
+
+.tw-avero-how-it-works__item-marker {
+    transform: scale(0);
+    will-change: transform;
+}
+
+.tw-avero-how-it-works__item-content {
+    transform: translateX(30px);
+}
+.tw-avero-how-it-works__item--reverse .tw-avero-how-it-works__item-content {
+    transform: translateX(-30px);
+}
+.tw-avero-how-it-works__item-media {
+    transform: translateY(20px);
+}
+
+/* Reduced motion / GSAP-off fallback — show content immediately.
+ * The runtime also clears these with gsap.set when reduced is on,
+ * but this guards the case where the script never loads at all. */
+@media (prefers-reduced-motion: reduce) {
+    .tw-avero-how-it-works__item-media,
+    .tw-avero-how-it-works__item-content {
+        opacity: 1;
+        transform: none;
+    }
+    .tw-avero-how-it-works__item-marker {
+        transform: none;
+    }
+    .tw-avero-how-it-works__line-active {
+        transform: translateX(-50%) scaleY(1);
+    }
+}
+
+/* ── Responsive ──────────────────────────────────────────── */
+
+@media (max-width: 1100px) {
+    .tw-avero-how-it-works__item {
+        grid-template-columns: 1fr 80px 1fr;
+    }
+}
+
+@media (max-width: 992px) {
+    /* Single-column stack with marker rail on the left. */
+    .tw-avero-how-it-works__timeline::before {
+        left: 30px;
+        transform: none;
+    }
+    .tw-avero-how-it-works__line-active {
+        left: 30px;
+        transform: scaleY(0);
+    }
+    .tw-avero-how-it-works__item {
+        grid-template-columns: 1fr;
+        gap: 32px;
+        align-items: start;
+        text-align: left;
+    }
+    .tw-avero-how-it-works__item--reverse {
+        direction: ltr;
+    }
+    .tw-avero-how-it-works__item-marker {
+        position: absolute;
+        left: 6px;
+        top: 0;
+        justify-self: start;
+    }
+    .tw-avero-how-it-works__item-content,
+    .tw-avero-how-it-works__item-media {
+        padding-left: 80px;
+    }
+    .tw-avero-how-it-works__item-content {
+        transform: translateY(20px);
+    }
+    .tw-avero-how-it-works__item--reverse .tw-avero-how-it-works__item-content {
+        transform: translateY(20px);
+    }
+    .tw-avero-how-it-works__item-media {
+        order: -1;
+        margin-bottom: 8px;
+    }
+    .tw-avero-how-it-works__title {
+        font-size: clamp(1.75rem, 5vw, 2.25rem);
+    }
+}
+
+@media (max-width: 600px) {
+    .tw-avero-how-it-works__timeline::before { left: 24px; }
+    .tw-avero-how-it-works__line-active     { left: 24px; }
+    .tw-avero-how-it-works__item-marker     { left: 0; }
+    .tw-avero-how-it-works__item-content,
+    .tw-avero-how-it-works__item-media      { padding-left: 60px; }
+}
+
+/* ============================================================
  * RESPONSIVE HARDENING — anti-overflow safety net
  *
  * Tablet/mobile overflow happens for one of three reasons:
@@ -1476,7 +1811,8 @@
 .tw-avero-faq,
 .tw-avero-cta,
 .tw-avero-footer,
-.tw-avero-header {
+.tw-avero-header,
+.tw-avero-how-it-works {
     max-width: 100vw;
     overflow-x: clip;
 }
@@ -1488,7 +1824,8 @@
     .tw-avero-faq,
     .tw-avero-cta,
     .tw-avero-footer,
-    .tw-avero-header {
+    .tw-avero-header,
+    .tw-avero-how-it-works {
         overflow-x: hidden;
     }
 }
@@ -1503,7 +1840,8 @@
 .tw-avero-faq__list > *,
 .tw-avero-footer__top > *,
 .tw-avero-footer__cols > *,
-.tw-avero-header__inner > * {
+.tw-avero-header__inner > *,
+.tw-avero-how-it-works__item > * {
     min-width: 0;
 }
 
@@ -1580,7 +1918,8 @@
     .tw-avero-services,
     .tw-avero-pricing,
     .tw-avero-faq,
-    .tw-avero-cta {
+    .tw-avero-cta,
+    .tw-avero-how-it-works {
         padding-left: 14px;
         padding-right: 14px;
     }

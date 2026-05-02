@@ -112,4 +112,64 @@
     ts.isEditMode = function () {
         return !!(window.elementorFrontend && window.elementorFrontend.isEditMode && window.elementorFrontend.isEditMode());
     };
+
+    /**
+     * editAware(scrollTriggerCfg)
+     *
+     * Universal helper for any widget script that uses GSAP ScrollTrigger.
+     * Returns the cfg unchanged on the public frontend, OR null when we're
+     * inside Elementor's editor preview iframe — so the caller can skip
+     * `ScrollTrigger.create()` entirely and play the tween immediately.
+     *
+     * The recurring bug this fixes: a widget with scroll-reveal sets
+     * `opacity:0` / `transform: translate(...)` as the CSS initial state,
+     * relying on the ScrollTrigger callback to clear it. In the editor,
+     * the widget is often outside the iframe viewport at mount time →
+     * the trigger never fires → the widget stays blank.
+     *
+     * Pattern (use this in every widget script.js):
+     *
+     *     var cfg = ts.editAware({ trigger: el, start: 'top 85%' });
+     *     if (cfg) {
+     *         ScrollTrigger.create(Object.assign({}, cfg, { onEnter: play }));
+     *     } else {
+     *         play(); // editor — show content immediately
+     *     }
+     *
+     * For animations.js's central applyEntrance, the same gate is wired
+     * via the `opts.scrollTrigger` field — null = play now.
+     */
+    ts.editAware = function (scrollTriggerCfg) {
+        return ts.isEditMode() ? null : scrollTriggerCfg;
+    };
+
+    /**
+     * Mark the document with `tempaloo-edit-mode` class when running
+     * inside the Elementor editor preview. CSS can then target this
+     * class to neutralize CSS-only initial-state hides — a defensive
+     * second line so users always see content even if a widget script
+     * crashes mid-init.
+     *
+     * Idempotent: safe to call multiple times.
+     */
+    function markEditMode() {
+        if (!ts.isEditMode()) return;
+        var html = document.documentElement;
+        var body = document.body;
+        if (html && !html.classList.contains('tempaloo-edit-mode')) html.classList.add('tempaloo-edit-mode');
+        if (body && !body.classList.contains('tempaloo-edit-mode')) body.classList.add('tempaloo-edit-mode');
+    }
+    // elementorFrontend is loaded by Elementor's frontend.js, which
+    // boots after our runtime. Run on every plausible signal so we
+    // catch edit mode whenever it materializes.
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', markEditMode);
+    } else {
+        markEditMode();
+    }
+    window.addEventListener('load', markEditMode);
+    if (window.jQuery) {
+        // Elementor exposes its hooks API via jQuery once it boots.
+        window.jQuery(window).on('elementor/frontend/init', markEditMode);
+    }
 })();
