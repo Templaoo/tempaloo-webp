@@ -204,8 +204,55 @@ export function FloatingPanel() {
   const [bindProperty,  setBindProperty]  = useState<string>('background');
 
   // Save / hint
-  const [saving, setSaving] = useState(false);
-  const [hint,   setHint]   = useState<string>('');
+  const [saving,      setSaving]      = useState(false);
+  const [hint,        setHint]        = useState<string>('');
+  const [saveSuccess, setSaveSuccess] = useState<number>(0);   // timestamp of last successful save → triggers UI "✓ saved" pulse
+
+  // Token list search
+  const [tokenSearch, setTokenSearch] = useState<string>('');
+
+  // Undo/Redo history — stack of `drafts` snapshots.
+  // We push BEFORE every mutation, so the current `drafts` is what we
+  // restore on undo. cap at 50 entries to keep memory bounded.
+  const historyRef     = useRef<Array<Record<Mode, Record<string, string>>>>([]);
+  const historyIdxRef  = useRef<number>(-1);
+  const [historyTick, setHistoryTick] = useState(0); // re-renders enable/disable buttons
+
+  function historySnapshot(d: Record<Mode, Record<string, string>>) {
+    return { light: { ...d.light }, dark: { ...d.dark } };
+  }
+  function historyPush(prev: Record<Mode, Record<string, string>>) {
+    // Truncate any redo branch when a new edit happens.
+    const cap = 50;
+    historyRef.current = historyRef.current.slice(0, historyIdxRef.current + 1);
+    historyRef.current.push(historySnapshot(prev));
+    if (historyRef.current.length > cap) historyRef.current.shift();
+    historyIdxRef.current = historyRef.current.length - 1;
+    setHistoryTick((t) => t + 1);
+  }
+  function historyMark() {
+    // Used after save — forces a synthetic snapshot so undo can
+    // distinguish "before save" from "after save".
+    historyPush(drafts);
+  }
+  function undo() {
+    if (historyIdxRef.current < 0) return;
+    const snap = historyRef.current[historyIdxRef.current];
+    historyIdxRef.current -= 1;
+    setDrafts(snap);
+    setHistoryTick((t) => t + 1);
+    setHintFlash('Undo ✓', 1500);
+  }
+  function redo() {
+    if (historyIdxRef.current >= historyRef.current.length - 1) return;
+    historyIdxRef.current += 1;
+    const snap = historyRef.current[historyIdxRef.current];
+    if (snap) setDrafts(snap);
+    setHistoryTick((t) => t + 1);
+    setHintFlash('Redo ✓', 1500);
+  }
+  const canUndo = historyIdxRef.current >= 0;
+  const canRedo = historyIdxRef.current < historyRef.current.length - 1;
 
   /* ── Responsive guard ──────────────────────────────────── */
   useEffect(() => {
@@ -237,18 +284,49 @@ export function FloatingPanel() {
     return () => observer.disconnect();
   }, [followPage]);
 
-  /* ── Keyboard shortcut Ctrl/Cmd + Shift + C → toggle open ──── */
+  /* ── Keyboard shortcuts ─────────────────────────────────── */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'C' || e.key === 'c')) {
+      const cmd = e.ctrlKey || e.metaKey;
+      // Toggle panel: Ctrl/Cmd+Shift+C
+      if (cmd && e.shiftKey && (e.key === 'C' || e.key === 'c')) {
         e.preventDefault();
         flog('shortcut: toggle open', { wasOpen: open });
         setOpen((v) => !v);
+        return;
+      }
+      // Only fire the editing shortcuts when the panel is open AND
+      // the user isn't typing in an input — typing 'z' in a token
+      // value field shouldn't trigger undo.
+      if (!open) return;
+      const tag = (e.target as HTMLElement | null)?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
+      // Undo: Ctrl/Cmd+Z (no shift) → calls undo() inside callback
+      // so it always picks the freshest historyRef state.
+      if (cmd && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault(); undo(); return;
+      }
+      // Redo: Ctrl/Cmd+Shift+Z OR Ctrl/Cmd+Y
+      if ((cmd && e.shiftKey && (e.key === 'z' || e.key === 'Z'))
+       || (cmd && !e.shiftKey && (e.key === 'y' || e.key === 'Y'))) {
+        e.preventDefault(); redo(); return;
+      }
+      // Save: Ctrl/Cmd+S — save() bails internally if nothing to do.
+      if (cmd && !e.shiftKey && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        if (!saving) save();
+        return;
+      }
+      // Search focus: / (no modifiers)
+      if (!cmd && !e.shiftKey && !e.altKey && e.key === '/') {
+        const input = document.querySelector('#tempaloo-studio-floating-root .tsa-fp__search-input') as HTMLInputElement | null;
+        if (input) { e.preventDefault(); input.focus(); input.select(); }
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, saving]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Boot data ─────────────────────────────────────────── */
   useEffect(() => {
@@ -390,6 +468,7 @@ export function FloatingPanel() {
       const prev = d[mode][name];
       if (prev === value) return d;
       flog('setVal', { mode, token: name, from: prev, to: value });
+      historyPush(d);
       return { ...d, [mode]: { ...d[mode], [name]: value } };
     });
   }
@@ -512,6 +591,152 @@ export function FloatingPanel() {
     setBindings([]);
   }
 
+  /* ── Export / Import (D) ────────────────────────────────── */
+
+  function exportJson() {
+    if (!state || !tpl) return;
+    const slug = state.active_slug ?? '';
+    const baseL = tpl.tokens?.light ?? {};
+    const baseD = tpl.tokens?.dark  ?? {};
+    const overridesL: Record<string, string> = {};
+    const overridesD: Record<string, string> = {};
+    Object.keys(drafts.light).forEach((k) => { if (drafts.light[k] !== baseL[k]) overridesL[k] = drafts.light[k]; });
+    Object.keys(drafts.dark).forEach((k)  => { if (drafts.dark[k]  !== baseD[k]) overridesD[k] = drafts.dark[k]; });
+    const payload = {
+      _meta: {
+        kind:       'tempaloo-studio-floating-export',
+        version:    1,
+        exported:   new Date().toISOString(),
+        template:   slug,
+        tplVersion: tpl.version ?? '',
+      },
+      overrides: { light: overridesL, dark: overridesD },
+      bindings:  bindings,
+    };
+    const blob = new Blob([ JSON.stringify(payload, null, 2) ], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `tempaloo-${slug}-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    flog('export', payload._meta);
+    setHintFlash(`Exported ${Object.keys(overridesL).length + Object.keys(overridesD).length} overrides + ${bindings.length} bindings`, 3500);
+  }
+
+  function importJson() {
+    if (!tpl) return;
+    const inp = document.createElement('input');
+    inp.type   = 'file';
+    inp.accept = 'application/json,.json';
+    inp.onchange = async () => {
+      const f = inp.files?.[0]; if (!f) return;
+      try {
+        const text = await f.text();
+        const data = JSON.parse(text);
+        if (data?._meta?.kind !== 'tempaloo-studio-floating-export') {
+          setHintFlash('Not a Tempaloo export file.', 3000); return;
+        }
+        if (data._meta.template && state?.active_slug && data._meta.template !== state.active_slug) {
+          if (!window.confirm(`Import was made for "${data._meta.template}" but the active template is "${state.active_slug}". Apply anyway?`)) return;
+        }
+        const replace = window.confirm(
+          `Import will REPLACE all current drafts (${dirty.total} unsaved values) and ${bindings.length} bindings.\n\nClick OK to replace, Cancel to merge instead.`
+        );
+        const baseL = tpl.tokens?.light ?? {};
+        const baseD = tpl.tokens?.dark  ?? {};
+        const oL = data.overrides?.light ?? {};
+        const oD = data.overrides?.dark  ?? {};
+        historyPush(drafts);
+        setDrafts((d) => {
+          if (replace) return {
+            light: { ...baseL, ...oL },
+            dark:  { ...baseD, ...oD },
+          };
+          return {
+            light: { ...d.light, ...oL },
+            dark:  { ...d.dark,  ...oD },
+          };
+        });
+        if (Array.isArray(data.bindings)) {
+          if (replace) setBindings(data.bindings);
+          else         setBindings((arr) => {
+            const ids = new Set(arr.map((b: Binding) => b.id));
+            return [...arr, ...data.bindings.filter((b: Binding) => !ids.has(b.id))];
+          });
+        }
+        flog('import: ok', { replace, overrides: oL, bindings: data.bindings });
+        setHintFlash('Import applied. Click Save to persist.', 4000);
+      } catch (err) {
+        fwarn('import: parse failed', err);
+        setHintFlash('Import failed: invalid JSON.', 3500);
+      }
+    };
+    inp.click();
+  }
+
+  /* ── WCAG contrast (C) — relative luminance + contrast ratio ─
+   *
+   * Used by ColorRow to display a small badge per token showing its
+   * accessibility against the most likely paired token (text vs bg,
+   * bg vs text). Algorithm follows WCAG 2.x:
+   *   ratio = (L1 + 0.05) / (L2 + 0.05)
+   *   AAA (normal text)  ≥ 7
+   *   AA  (normal text)  ≥ 4.5
+   *   AA  (large text)   ≥ 3
+   */
+  function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+    const s = hex.trim().replace('#', '');
+    if (!/^[0-9a-f]{3,8}$/i.test(s)) return null;
+    const expand = s.length === 3 ? s.split('').map((c) => c + c).join('') : s;
+    if (expand.length < 6) return null;
+    return {
+      r: parseInt(expand.slice(0, 2), 16),
+      g: parseInt(expand.slice(2, 4), 16),
+      b: parseInt(expand.slice(4, 6), 16),
+    };
+  }
+  function relLum({ r, g, b }: { r: number; g: number; b: number }): number {
+    const channel = (v: number) => {
+      const c = v / 255;
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    };
+    return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+  }
+  function contrastRatio(fgHex: string, bgHex: string): number | null {
+    const fg = hexToRgb(fgHex); const bg = hexToRgb(bgHex);
+    if (!fg || !bg) return null;
+    const L1 = relLum(fg); const L2 = relLum(bg);
+    const [hi, lo] = L1 >= L2 ? [L1, L2] : [L2, L1];
+    return (hi + 0.05) / (lo + 0.05);
+  }
+  /** For a token, find its "natural pair" (text→bg, bg→text, accent→bg)
+   *  in the active mode's drafts and return contrast ratio + WCAG grade. */
+  function tokenContrast(tokenName: string, mode: Mode): { ratio: number; grade: string; pair: string } | null {
+    const v = drafts[mode][tokenName];
+    if (!v || !/^#[0-9a-f]{3,8}$/i.test(v)) return null;
+    const slug = (state?.active_slug ?? '').split('-')[0] || (state?.active_slug ?? '');
+    let pairName = '';
+    if (/-text(-|$)/.test(tokenName) || /-accent(-|$)/.test(tokenName) || /-cta-/.test(tokenName)) {
+      pairName = `--tw-${slug}-bg`;
+    } else if (/-bg(-|$)/.test(tokenName)) {
+      pairName = `--tw-${slug}-text`;
+    } else if (/-border(-|$)/.test(tokenName)) {
+      pairName = `--tw-${slug}-bg`;
+    } else {
+      return null;
+    }
+    const pairHex = drafts[mode][pairName];
+    if (!pairHex) return null;
+    const ratio = contrastRatio(v, pairHex);
+    if (ratio === null) return null;
+    let grade = 'Fail';
+    if (ratio >= 7)        grade = 'AAA';
+    else if (ratio >= 4.5) grade = 'AA';
+    else if (ratio >= 3)   grade = 'AA-large';
+    return { ratio, grade, pair: pairName };
+  }
+
   /**
    * Build a context-aware default name for the "Add color" form when
    * an inspect target is active. The user clicked on say a services
@@ -585,6 +810,11 @@ export function FloatingPanel() {
     try {
       const baseL = tpl.tokens?.light ?? {};
       const baseD = tpl.tokens?.dark  ?? {};
+      // Send the COMPLETE override delta — every draft value that
+      // differs from the template default. The REST handler does a
+      // full replace per (slug, mode), so any token NOT in this map
+      // is implicitly removed from saved overrides. That correctly
+      // handles custom-token deletions without a separate API call.
       const deltaL: Record<string, string> = {};
       const deltaD: Record<string, string> = {};
       Object.keys(drafts.light).forEach((k) => { if (drafts.light[k] !== baseL[k]) deltaL[k] = drafts.light[k]; });
@@ -593,8 +823,12 @@ export function FloatingPanel() {
       let next = await api.saveTokens(state.active_slug, 'light', deltaL);
       next     = await api.saveTokens(state.active_slug, 'dark',  deltaD);
       setState(next);
+      // History snapshot — saved successfully, mark this point so
+      // undo/redo doesn't cross over saved boundaries silently.
+      historyMark();
       flog('save: ok');
-      setHintFlash('Saved ✓');
+      setSaveSuccess(Date.now());
+      setHintFlash(`Saved ✓ — ${Object.keys(deltaL).length + Object.keys(deltaD).length} value(s) persisted`, 2800);
     } catch (e) {
       fwarn('save: failed', e);
       setHintFlash(`Save failed: ${(e as Error).message}`, 5000);
@@ -605,41 +839,54 @@ export function FloatingPanel() {
 
   /* ── Diff counts (per mode) ─────────────────────────────── */
 
+  // Compare drafts against the EFFECTIVE saved state (template defaults
+  // + persisted user overrides), not just the template defaults. After
+  // save() the API returns the new state with the freshly-persisted
+  // overrides — diff'ing against that gives 0 dirty until the user
+  // edits again. Previously we compared vs template defaults forever,
+  // so the "X unsaved" badge stayed lit even immediately after save.
   const dirty = useMemo(() => {
     if (!tpl) return { light: 0, dark: 0, total: 0 };
+    const slug    = state?.active_slug ?? '';
+    const savedL  = state?.overrides?.[slug]?.light ?? {};
+    const savedD  = state?.overrides?.[slug]?.dark  ?? {};
+    const effL    = { ...(tpl.tokens?.light ?? {}), ...savedL };
+    const effD    = { ...(tpl.tokens?.dark  ?? {}), ...savedD };
     let l = 0, d = 0;
-    const baseL = tpl.tokens?.light ?? {};
-    const baseD = tpl.tokens?.dark  ?? {};
-    Object.keys(drafts.light).forEach((k) => { if (drafts.light[k] !== baseL[k]) l++; });
-    Object.keys(drafts.dark).forEach((k)  => { if (drafts.dark[k]  !== baseD[k]) d++; });
+    // Edits + new keys that don't match saved state.
+    Object.keys(drafts.light).forEach((k) => { if (drafts.light[k] !== effL[k]) l++; });
+    Object.keys(drafts.dark).forEach((k)  => { if (drafts.dark[k]  !== effD[k]) d++; });
+    // Deletions — keys that EXIST in saved state but were removed from
+    // drafts (custom token deletion case). Each missing key is "dirty".
+    Object.keys(savedL).forEach((k) => { if (drafts.light[k] === undefined) l++; });
+    Object.keys(savedD).forEach((k) => { if (drafts.dark[k]  === undefined) d++; });
     return { light: l, dark: d, total: l + d };
-  }, [drafts, tpl]);
+  }, [drafts, tpl, state]);
 
   /* ── Token grouping for the active mode ──────────────────── */
 
   const grouped = useMemo(() => {
     if (!tpl) return {} as Record<string, string[]>;
     const out: Record<string, string[]> = {};
-    // Dual = union of all token names from light + dark (so a token
-    // declared only in dark still shows up). Single mode = just that mode.
     const keys = activeMode === 'dual'
       ? Array.from(new Set([...Object.keys(drafts.light), ...Object.keys(drafts.dark)]))
       : Object.keys(drafts[activeMode]);
+    const search = tokenSearch.trim().toLowerCase();
     keys
       .filter((k) => {
-        // A token is shown if EITHER mode has a color value for it.
         const lv = drafts.light[k] || '';
         const dv = drafts.dark[k]  || '';
         return isColorValue(lv) || isColorValue(dv);
       })
       .filter((k) => !inspectFilter || inspectFilter.includes(k))
+      .filter((k) => !search || k.toLowerCase().includes(search))
       .sort()
       .forEach((k) => {
         const cat = categoryOf(k);
         (out[cat] ||= []).push(k);
       });
     return out;
-  }, [drafts, activeMode, tpl, inspectFilter]);
+  }, [drafts, activeMode, tpl, inspectFilter, tokenSearch]);
 
   function toggleCat(id: string) {
     setOpenCats((set) => {
@@ -775,7 +1022,7 @@ export function FloatingPanel() {
         </label>
       </div>
 
-      {/* ── Toolbar: Inspect + Add + Reset ────────────────── */}
+      {/* ── Toolbar: Inspect + Add + Undo/Redo + Reset + … ─── */}
       <div className="tsa-fp__toolbar">
         <button
           type="button"
@@ -801,11 +1048,65 @@ export function FloatingPanel() {
           </button>
         )}
         <span className="tsa-fp__spacer" />
+        <div className="tsa-fp__undoredo" data-history-tick={historyTick}>
+          <button
+            type="button"
+            className="tsa-fp__btn tsa-fp__btn--ghost"
+            onClick={undo}
+            disabled={!canUndo}
+            title="Undo (Ctrl/Cmd+Z)"
+            aria-label="Undo"
+          >↶</button>
+          <button
+            type="button"
+            className="tsa-fp__btn tsa-fp__btn--ghost"
+            onClick={redo}
+            disabled={!canRedo}
+            title="Redo (Ctrl/Cmd+Shift+Z)"
+            aria-label="Redo"
+          >↷</button>
+        </div>
         <div className="tsa-fp__reset">
           <button type="button" className="tsa-fp__btn tsa-fp__btn--ghost" onClick={() => resetMode('light')} title="Reset light mode to template defaults">↻ L</button>
           <button type="button" className="tsa-fp__btn tsa-fp__btn--ghost" onClick={() => resetMode('dark')}  title="Reset dark mode to template defaults">↻ D</button>
           <button type="button" className="tsa-fp__btn tsa-fp__btn--ghost" onClick={resetAll} title="Reset both modes to template defaults">↻ All</button>
         </div>
+        <button
+          type="button"
+          className="tsa-fp__btn tsa-fp__btn--ghost"
+          onClick={exportJson}
+          title="Export overrides + bindings as JSON"
+          aria-label="Export"
+        >⤓</button>
+        <button
+          type="button"
+          className="tsa-fp__btn tsa-fp__btn--ghost"
+          onClick={importJson}
+          title="Import a previously exported JSON"
+          aria-label="Import"
+        >⤒</button>
+      </div>
+
+      {/* ── Search bar (above the token list) ────────────── */}
+      <div className="tsa-fp__search">
+        <span className="tsa-fp__search-icon" aria-hidden="true">🔍</span>
+        <input
+          type="text"
+          className="tsa-fp__search-input"
+          placeholder="Search tokens… (press / to focus, Esc to clear)"
+          value={tokenSearch}
+          onChange={(e) => setTokenSearch(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Escape') setTokenSearch(''); }}
+        />
+        {tokenSearch && (
+          <button
+            type="button"
+            className="tsa-fp__search-clear"
+            onClick={() => setTokenSearch('')}
+            title="Clear search"
+            aria-label="Clear search"
+          >×</button>
+        )}
       </div>
 
       {/* ── Add color form (collapsible) ─────────────────── */}
@@ -996,6 +1297,8 @@ export function FloatingPanel() {
                         lightValue={drafts.light[name] ?? ''}
                         darkValue={drafts.dark[name]   ?? ''}
                         isCustom={isCustomToken(name)}
+                        contrastLight={tokenContrast(name, 'light')}
+                        contrastDark={tokenContrast(name, 'dark')}
                         onChangeLight={(v) => setValByMode('light', name, v)}
                         onChangeDark={(v)  => setValByMode('dark',  name, v)}
                         onDelete={() => removeToken(name)}
@@ -1008,6 +1311,7 @@ export function FloatingPanel() {
                         otherValue={drafts[activeMode === 'light' ? 'dark' : 'light'][name]}
                         otherMode={activeMode === 'light' ? 'dark' : 'light'}
                         isCustom={isCustomToken(name)}
+                        contrast={tokenContrast(name, activeMode as Mode)}
                         onChange={(v) => setVal(name, v)}
                         onDelete={() => removeToken(name)}
                       />
@@ -1023,10 +1327,29 @@ export function FloatingPanel() {
       {/* ── Footer ────────────────────────────────────────── */}
       <footer className="tsa-fp__footer">
         {hint && <span className="tsa-fp__hint">{hint}</span>}
-        {!hint && dirty.total === 0 && <span className="tsa-fp__hint" style={{ opacity: 0.6 }}>Edits are previewed live. Save to persist.</span>}
-        <button type="button" className="tsa-fp__btn" onClick={discard} disabled={dirty.total === 0}>Discard</button>
-        <button type="button" className="tsa-fp__btn tsa-fp__btn--primary" onClick={save} disabled={saving || dirty.total === 0}>
-          {saving ? 'Saving…' : (dirty.total > 0 ? `Save ${dirty.total}` : 'Saved')}
+        {!hint && dirty.total === 0 && (
+          <span className="tsa-fp__hint" style={{ opacity: 0.65 }}>
+            {saveSuccess && (Date.now() - saveSuccess) < 4000
+              ? '✓ All changes saved'
+              : 'Edits previewed live · ⌘S to save · ⌘Z undo'}
+          </span>
+        )}
+        <button
+          type="button"
+          className="tsa-fp__btn"
+          onClick={discard}
+          disabled={dirty.total === 0}
+          title="Revert all unsaved drafts to their saved state"
+        >Discard</button>
+        <button
+          type="button"
+          className={'tsa-fp__btn tsa-fp__btn--primary' + (saving ? ' is-saving' : '') + (dirty.total === 0 && saveSuccess && (Date.now() - saveSuccess) < 4000 ? ' is-just-saved' : '')}
+          onClick={save}
+          disabled={saving || dirty.total === 0}
+        >
+          {saving
+            ? '⏳ Saving…'
+            : (dirty.total > 0 ? `Save ${dirty.total}` : (saveSuccess ? '✓ Saved' : 'Saved'))}
         </button>
       </footer>
 
@@ -1048,14 +1371,33 @@ export function FloatingPanel() {
 /* ─── Color row — shows active mode value editable + small
  *     readonly preview of the OTHER mode for context. */
 
+type ContrastInfo = { ratio: number; grade: string; pair: string } | null;
+
+function ContrastBadge({ info }: { info: ContrastInfo }) {
+  if (!info) return null;
+  const { ratio, grade, pair } = info;
+  const cls =
+    grade === 'AAA'      ? 'tsa-fp__wcag tsa-fp__wcag--aaa' :
+    grade === 'AA'       ? 'tsa-fp__wcag tsa-fp__wcag--aa'  :
+    grade === 'AA-large' ? 'tsa-fp__wcag tsa-fp__wcag--lg'  :
+                           'tsa-fp__wcag tsa-fp__wcag--fail';
+  const short = grade === 'AA-large' ? 'AA·L' : grade;
+  return (
+    <span className={cls} title={`Contrast ratio ${ratio.toFixed(2)} : 1 vs ${pair} — ${grade}`}>
+      {short}
+    </span>
+  );
+}
+
 function ColorRow({
-  name, value, otherValue, otherMode, isCustom, onChange, onDelete,
+  name, value, otherValue, otherMode, isCustom, contrast, onChange, onDelete,
 }: {
   name:       string;
   value:      string;
   otherValue: string;
   otherMode:  Mode;
   isCustom:   boolean;
+  contrast:   ContrastInfo;
   onChange:   (v: string) => void;
   onDelete:   () => void;
 }) {
@@ -1079,6 +1421,7 @@ function ColorRow({
         <span className="tsa-fp__name" title={name}>
           {isCustom && <span className="tsa-fp__custom-badge" title="Custom token (added via + Add color)">●</span>}
           {display}
+          <ContrastBadge info={contrast} />
         </span>
         <input
           type="text"
@@ -1120,12 +1463,14 @@ function ColorRow({
  * color in both modes. */
 
 function DualColorRow({
-  name, lightValue, darkValue, isCustom, onChangeLight, onChangeDark, onDelete,
+  name, lightValue, darkValue, isCustom, contrastLight, contrastDark, onChangeLight, onChangeDark, onDelete,
 }: {
   name:          string;
   lightValue:    string;
   darkValue:     string;
   isCustom:      boolean;
+  contrastLight: ContrastInfo;
+  contrastDark:  ContrastInfo;
   onChangeLight: (v: string) => void;
   onChangeDark:  (v: string) => void;
   onDelete:      () => void;
@@ -1138,6 +1483,8 @@ function DualColorRow({
       <span className="tsa-fp__name tsa-fp__name--dual" title={name}>
         {isCustom && <span className="tsa-fp__custom-badge" title="Custom token">●</span>}
         {display}
+        <ContrastBadge info={contrastLight} />
+        <ContrastBadge info={contrastDark} />
         {isCustom && (
           <button type="button" className="tsa-fp__row-delete tsa-fp__row-delete--inline" onClick={onDelete} title={`Delete ${name}`} aria-label={`Delete ${name}`}>🗑</button>
         )}

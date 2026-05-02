@@ -1172,6 +1172,115 @@
   margin-top: 6px;
 }
 
+/* ── Search bar ────────────────────────────────────────── */
+
+.tsa-fp__search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin: 6px 14px 4px;
+}
+.tsa-fp__search-icon {
+  position: absolute;
+  left: 8px;
+  font-size: 11px;
+  color: var(--tsa-text-muted);
+  pointer-events: none;
+}
+#tempaloo-studio-floating-root .tsa-fp__search-input {
+  flex: 1;
+  padding: 6px 28px !important;
+  font-family: var(--tsa-font-mono, ui-monospace, monospace) !important;
+  font-size: 11px !important;
+  background: var(--tsa-bg-soft) !important;
+  border: 1px solid var(--tsa-border) !important;
+  border-radius: var(--tsa-radius-sm) !important;
+  color: var(--tsa-text) !important;
+}
+#tempaloo-studio-floating-root .tsa-fp__search-input:focus {
+  outline: none;
+  border-color: var(--tsa-accent) !important;
+  background: var(--tsa-bg) !important;
+}
+#tempaloo-studio-floating-root .tsa-fp__search-input::placeholder {
+  color: var(--tsa-text-muted);
+}
+.tsa-fp__search-clear {
+  position: absolute;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--tsa-text-muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 50%;
+}
+.tsa-fp__search-clear:hover {
+  background: var(--tsa-bg);
+  color: var(--tsa-text);
+}
+
+/* ── Undo/Redo button cluster ──────────────────────────── */
+
+.tsa-fp__undoredo {
+  display: inline-flex;
+  gap: 2px;
+  margin-right: 6px;
+}
+.tsa-fp__undoredo .tsa-fp__btn {
+  width: 26px;
+  padding: 4px 0 !important;
+  text-align: center;
+  font-size: 14px !important;
+  line-height: 1;
+}
+.tsa-fp__undoredo .tsa-fp__btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ── WCAG contrast badges ──────────────────────────────── */
+
+.tsa-fp__wcag {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  vertical-align: middle;
+  cursor: help;
+}
+.tsa-fp__wcag--aaa  { background: #064e3b; color: #34d399; }
+.tsa-fp__wcag--aa   { background: #14532d; color: #86efac; }
+.tsa-fp__wcag--lg   { background: #422006; color: #fbbf24; }
+.tsa-fp__wcag--fail { background: #450a0a; color: #fca5a5; }
+
+/* ── Save button — pulse on success, spinner on saving ── */
+
+#tempaloo-studio-floating-root .tsa-fp__btn--primary.is-saving {
+  opacity: 0.8;
+  cursor: progress;
+}
+#tempaloo-studio-floating-root .tsa-fp__btn--primary.is-just-saved {
+  animation: tsa-fp-saved-pulse 800ms ease;
+  background: #10b981 !important;
+  border-color: #10b981 !important;
+  color: #ffffff !important;
+}
+@keyframes tsa-fp-saved-pulse {
+  0%   { box-shadow: 0 0 0 0   rgba(16, 185, 129, 0.5); }
+  60%  { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+  100% { box-shadow: 0 0 0 0   rgba(16, 185, 129, 0); }
+}
+
 /* Mobile fallback */
 @media (max-width: 767px) {
   #tempaloo-studio-floating-root { display: none; }

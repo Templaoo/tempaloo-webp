@@ -1,36 +1,37 @@
 /* ============================================================
  * Avero Consulting — How it works scroll choreography
  *
- * Two animations stitched together via ScrollTrigger:
+ * Reliability-hardened per GSAP-ScrollTrigger best practices:
  *
- *   1. PROGRESS LINE — the central vertical guide line scales
- *      from scaleY:0 to scaleY:1 as the user scrolls through the
- *      timeline section. Uses scrub:true (the §1.15.4 exception
- *      in WIDGET-SPEC) because scroll-linked progress requires
- *      the tween↔trigger linkage. Wrapped in try/catch with a
- *      static fallback so a refresh crash can't blank the line.
+ *   1. PROGRESS LINE — central scrub-tied vertical line that
+ *      grows from scaleY:0 → 1 as the user scrolls through the
+ *      whole timeline section.
  *
- *   2. PER-STEP REVEAL — for each item we use the standalone
- *      ScrollTrigger pattern (§1.15) — ScrollTrigger.create with
- *      onEnter / onLeaveBack callbacks that play / reverse a
- *      paused timeline. This avoids the `animation:tween` link
- *      crash for the multi-target reveal (marker pop +
- *      content/media slide) on filter/transform combos.
+ *   2. PER-STEP REVEAL — each step's marker pops in (scale 0→1
+ *      with back ease) while content + media slide into place,
+ *      with a back-and-forth (forward on scroll DOWN, reverse
+ *      on scroll UP).
  *
- * Live-preview strategy
- *   Initial states are SET BY JS (gsap.set) instead of CSS, so
- *   the CSS default is opacity:1 — if the script never runs at
- *   all (GSAP fails to load, syntax error, intensity = off), the
- *   widget is fully visible by default. ScrollTrigger then runs
- *   normally in BOTH frontend AND editor preview, so the author
- *   sees the actual scroll-driven reveal as they scroll the
- *   iframe. Earlier versions short-circuited in editor mode and
- *   played all animations on mount, which prevented the user
- *   from seeing the choreography in live preview.
+ * Best practices applied (per gsap-scrolltrigger skill):
+ *   - `invalidateOnRefresh: true` on every trigger so positions
+ *     recompute when layout changes (image load, font swap,
+ *     Elementor editor re-render, viewport resize).
+ *   - `refreshPriority` set to item DOM order so triggers refresh
+ *     top-to-bottom (avoids first-item being computed against a
+ *     not-yet-laid-out third-item layout).
+ *   - Refresh hooks on document.fonts.ready + window.load + every
+ *     image inside the widget loading. The #1 cause of "sometimes
+ *     works, sometimes doesn't" is layout shifting after first
+ *     paint — this catches every shift point.
+ *   - `gsap.fromTo()` on the timeline with explicit start states
+ *     instead of `gsap.set + gsap.to` chained — gsap.fromTo's
+ *     immediateRender behavior is deterministic and well-defined
+ *     in the docs.
+ *   - `gsap.context()` for cleanup — kills every tween + trigger
+ *     created inside the context in one call, no manual bookkeeping.
  *
- * Idempotent: prior ScrollTriggers and timelines tied to this
- * root are killed before re-init, so editor re-renders don't
- * stack up zombie animations.
+ * Idempotent: every (re-)init kills the prior context, so editor
+ * re-mounts and undo/redo can never stack zombie animations.
  * ============================================================ */
 (function () {
     'use strict';
@@ -38,24 +39,7 @@
     var ts = (window.tempaloo && window.tempaloo.studio) || {};
     if (!ts.onReady) return;
 
-    /* ── Debug tracer — opt-in via ?tw_debug=1 OR localStorage(tw_debug=1)
-     *
-     * Activate from DevTools console inside the editor preview iframe:
-     *
-     *     localStorage.setItem('tw_debug', '1'); location.reload();
-     *
-     * Or visit /avero-home/?tw_debug=1 once on the public frontend
-     * (sets the flag in localStorage for the same origin), then open
-     * the editor.
-     *
-     * Logs every decision the script makes:
-     *   - did GSAP / ScrollTrigger load
-     *   - is edit mode detected (and how)
-     *   - how many items we found
-     *   - did gsap.set apply
-     *   - did ScrollTrigger.create succeed
-     *   - is the trigger marked as inactive (off-viewport at create)
-     */
+    /* ── Debug tracer (?tw_debug=1) ─────────────────────── */
     var DEBUG = (function () {
         try {
             var qs = location.search.match(/[?&]tw_debug=([^&]*)/);
@@ -80,198 +64,202 @@
     }
 
     function init(rootEl) {
-        if (!rootEl) {
-            dwarn('init called with no rootEl');
-            return;
-        }
-        dlog('init start', rootEl);
+        if (!rootEl) return;
         var gsap = window.gsap;
         var ST   = window.ScrollTrigger;
-        if (!gsap) { dwarn('GSAP MISSING — animation skipped, content stays at CSS default (visible)'); return; }
-        if (!ST)   { dwarn('ScrollTrigger MISSING — animation skipped, content stays at CSS default (visible)'); return; }
-        dlog('GSAP', gsap.version, '+ ScrollTrigger', ST.version, 'OK');
+        if (!gsap || !ST) {
+            dwarn('GSAP or ScrollTrigger missing — bail (CSS default = visible)');
+            return;
+        }
+        dlog('init start', rootEl, 'GSAP', gsap.version, 'ST', ST.version);
 
-        // ── Idempotent reset ──────────────────────────────────
-        if (rootEl.__tw_hiw_cleanup) {
-            dlog('cleanup previous init');
-            try { rootEl.__tw_hiw_cleanup(); } catch (e) { dwarn('cleanup threw', e); }
-            rootEl.__tw_hiw_cleanup = null;
+        // ── Idempotent reset via gsap.context().revert() ─────
+        // Replaces the manual cleanup loop. context.revert() kills
+        // every tween + trigger created INSIDE the context AND reverts
+        // their inline styles, so the next gsap.fromTo can compute
+        // starting values from a clean slate.
+        if (rootEl.__tw_hiw_ctx) {
+            dlog('cleanup previous context.revert()');
+            try { rootEl.__tw_hiw_ctx.revert(); } catch (e) { dwarn('revert threw', e); }
+            rootEl.__tw_hiw_ctx = null;
         }
 
         var timeline   = rootEl.querySelector('.tw-avero-how-it-works__timeline');
         var activeLine = rootEl.querySelector('.tw-avero-how-it-works__line-active');
         var items      = rootEl.querySelectorAll('.tw-avero-how-it-works__item');
-        dlog('queries', { timeline: !!timeline, activeLine: !!activeLine, items: items.length });
-        if (!timeline || !items.length) { dwarn('missing timeline or items, bail'); return; }
+        if (!timeline || !items.length) { dwarn('missing timeline or items'); return; }
+        dlog('queries', { items: items.length });
 
         // ── Reduced motion / off → static reveal ──────────────
         var ns      = (window.tempaloo && window.tempaloo.avero) || {};
         var level   = ns.animationLevel ? ns.animationLevel() : 'medium';
         var prefRM  = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-        var reduced = level === 'subtle' || level === 'off' || prefRM;
-        var inEditor = ts.isEditMode && ts.isEditMode();
-        var hasEditClass = !!(document.body && document.body.classList && document.body.classList.contains('tempaloo-studio-edit-mode'));
-        dlog('mode', { level: level, prefersReducedMotion: prefRM, isEditor: inEditor, bodyHasEditClass: hasEditClass, intent: reduced ? 'static' : 'animated' });
-
-        if (reduced) {
-            dlog('reduced/off — snapping line scaleY:1 and bailing (CSS default = visible)');
+        if (level === 'subtle' || level === 'off' || prefRM) {
+            dlog('reduced/off — snapping line + bailing');
             if (activeLine) gsap.set(activeLine, { scaleY: 1 });
             return;
         }
 
-        var triggers = [];
-        var tweens   = [];
+        /* ── Build everything inside a gsap.context() so revert()
+         *    cleans the slate atomically on next init. */
+        var ctx = gsap.context(function () {
 
-        // ── Apply initial hidden states via gsap.set (NOT CSS) ─
-        // CSS default for these elements is opacity:1, so if anything
-        // below this point throws, the widget stays visible. The set()
-        // calls hide each element just before its tween is wired up.
-        if (activeLine) {
-            try { gsap.set(activeLine, { scaleY: 0 }); dlog('set line scaleY:0'); }
-            catch (e) { dwarn('gsap.set(line) threw', e); }
+            /* PER-STEP TIMELINES — bidirectional ScrollTrigger
+             * with toggleActions semantics manually implemented via
+             * onEnter / onEnterBack / onLeaveBack callbacks because
+             * we want the timeline to play, replay, and reverse
+             * cleanly without the §1.15-banned `animation:` link.
+             */
+            items.forEach(function (item, idx) {
+                var marker  = item.querySelector('.tw-avero-how-it-works__item-marker');
+                var content = item.querySelector('.tw-avero-how-it-works__item-content');
+                var media   = item.querySelector('.tw-avero-how-it-works__item-media');
+                if (!marker && !content && !media) return;
+
+                var reverse = item.classList.contains('tw-avero-how-it-works__item--reverse');
+
+                // Build a paused timeline using fromTo so each tween
+                // declares its OWN start state. This is more robust
+                // than gsap.set + gsap.to because if the context
+                // reverts mid-animation, fromTo recomputes from the
+                // declared "from" instead of a possibly-half-animated
+                // current style.
+                var tl = gsap.timeline({ paused: true });
+                if (marker) {
+                    tl.fromTo(marker,
+                        { scale: 0 },
+                        {
+                            scale:     1,
+                            duration:  0.6,
+                            ease:      'back.out(1.7)',
+                            overwrite: 'auto',
+                        }
+                    );
+                }
+                if (content) {
+                    tl.fromTo(content,
+                        { opacity: 0, x: reverse ? -30 : 30 },
+                        {
+                            opacity:   1,
+                            x:         0,
+                            duration:  1,
+                            ease:      'power4.out',
+                            overwrite: 'auto',
+                        },
+                        '-=0.4'
+                    );
+                }
+                if (media) {
+                    tl.fromTo(media,
+                        { opacity: 0, y: 20 },
+                        {
+                            opacity:   1,
+                            y:         0,
+                            duration:  1,
+                            ease:      'power4.out',
+                            overwrite: 'auto',
+                        },
+                        '<+0.1'  // staggered behind content by 0.1s
+                    );
+                }
+
+                // ScrollTrigger configured with two reliability flags:
+                //   - invalidateOnRefresh: true → start/end recompute
+                //     when ST.refresh() runs (image load, font swap,
+                //     resize). Without this, a trigger created BEFORE
+                //     a hero image loaded would have a stale start
+                //     position and fire too early or too late.
+                //   - refreshPriority: idx → guarantees top-to-bottom
+                //     refresh order so item 1's geometry is computed
+                //     against an already-finalized item 0.
+                ST.create({
+                    trigger:             item,
+                    start:               'top 85%',
+                    invalidateOnRefresh: true,
+                    refreshPriority:     idx,
+                    onEnter:             function () { dlog('item ' + idx + ' onEnter');     tl.play(); },
+                    onEnterBack:         function () { dlog('item ' + idx + ' onEnterBack'); tl.play(); },
+                    onLeaveBack:         function () { dlog('item ' + idx + ' onLeaveBack'); tl.reverse(); },
+                });
+            });
+
+            /* PROGRESS LINE — scrub-tied to the whole timeline
+             * section. invalidateOnRefresh ensures the start/end
+             * positions track image-load and font-swap shifts that
+             * are common in editor mode. */
+            if (activeLine) {
+                gsap.fromTo(activeLine,
+                    { scaleY: 0 },
+                    {
+                        scaleY: 1,
+                        ease:   'none',
+                        scrollTrigger: {
+                            trigger:             timeline,
+                            start:               'top 70%',
+                            end:                 'bottom 70%',
+                            scrub:               true,
+                            invalidateOnRefresh: true,
+                            refreshPriority:     -1,  // ahead of items so the line is laid out first
+                        },
+                    }
+                );
+            }
+
+        }, rootEl); // scope the context to this root for query selectors
+
+        rootEl.__tw_hiw_ctx = ctx;
+
+        /* ── Refresh hooks — catch late layout shifts ──────────
+         *
+         * The #1 cause of "animation sometimes doesn't fire" is
+         * that ScrollTrigger computed its start/end positions
+         * BEFORE the image / font / sibling-widget finished
+         * laying out. Forcing a refresh on every realistic
+         * "layout might have shifted" signal makes the triggers
+         * always accurate.
+         *
+         * ScrollTrigger.refresh() is debounced internally (200ms)
+         * so calling it many times back-to-back is cheap.
+         */
+        var doRefresh = function (why) {
+            try {
+                ST.refresh();
+                dlog('refresh:', why, '— total triggers on page:', ST.getAll().length);
+            } catch (e) { dwarn('refresh threw', e); }
+        };
+
+        // 1. Microtask after init — catch synchronous post-build shifts.
+        Promise.resolve().then(function () { doRefresh('post-init microtask'); });
+
+        // 2. After fonts swap (web fonts cause noticeable shifts).
+        if (document.fonts && document.fonts.ready) {
+            document.fonts.ready.then(function () { doRefresh('fonts.ready'); });
         }
 
-        items.forEach(function (item, idx) {
-            var marker  = item.querySelector('.tw-avero-how-it-works__item-marker');
-            var content = item.querySelector('.tw-avero-how-it-works__item-content');
-            var media   = item.querySelector('.tw-avero-how-it-works__item-media');
-            var reverse = item.classList.contains('tw-avero-how-it-works__item--reverse');
-            dlog('item ' + idx, { marker: !!marker, content: !!content, media: !!media, reverse: reverse });
-
-            try {
-                if (marker)  gsap.set(marker,  { scale: 0 });
-                if (content) gsap.set(content, { opacity: 0, x: reverse ? -30 : 30 });
-                if (media)   gsap.set(media,   { opacity: 0, y: 20 });
-            } catch (e) {
-                dwarn('gsap.set on item ' + idx + ' threw', e);
-            }
-
-            // Build a paused timeline that animates each piece into
-            // its final state. We don't use animation:tween linkage on
-            // ScrollTrigger.create — onEnter/onLeaveBack callbacks
-            // play/reverse the timeline (§1.15 standalone pattern).
-            var tl = gsap.timeline({ paused: true });
-            if (marker) {
-                tl.to(marker, {
-                    scale:     1,
-                    duration:  0.6,
-                    ease:      'back.out(1.7)',
-                    overwrite: 'auto',
-                });
-            }
-            if (content || media) {
-                var targets = [content, media].filter(Boolean);
-                tl.to(targets, {
-                    opacity:   1,
-                    x:         0,
-                    y:         0,
-                    duration:  1,
-                    stagger:   0.1,
-                    ease:      'power4.out',
-                    overwrite: 'auto',
-                }, '-=0.4');
-            }
-            tweens.push(tl);
-
-            // Bidirectional reveal — author intent is "play forward on
-            // scroll DOWN, play backward on scroll UP". The same item
-            // animates in/out as the user moves through the page, so
-            // navigating back up doesn't leave the markers / content
-            // sitting at their end state — they retract, mirroring
-            // the entrance.
-            //
-            // Callback semantics:
-            //   onEnter        scroll DOWN, item crosses start → play
-            //   onEnterBack    scroll UP, item re-crosses end → play
-            //                  (covers the edge case where the user
-            //                  arrives ABOVE the widget then scrolls
-            //                  up further — without this the items
-            //                  would stay hidden at progress:0)
-            //   onLeaveBack    scroll UP, item crosses start backwards
-            //                  → reverse (un-reveal as it leaves below)
-            //
-            // We deliberately keep the timeline live (no `once:true`)
-            // so this works as long as the page is loaded.
-            try {
-                var trig = ST.create({
-                    trigger:     item,
-                    start:       'top 85%',
-                    onEnter:     function () { dlog('item ' + idx + ' onEnter — tl.play');     tl.play(); },
-                    onEnterBack: function () { dlog('item ' + idx + ' onEnterBack — tl.play'); tl.play(); },
-                    onLeaveBack: function () { dlog('item ' + idx + ' onLeaveBack — tl.reverse'); tl.reverse(); },
-                });
-                triggers.push(trig);
-                // Report the trigger's resolved start position + activity.
-                // If `isActive` is true at create time, GSAP fires onEnter
-                // synchronously on the next refresh — content reveals
-                // without needing a scroll gesture.
-                dlog('item ' + idx + ' ST created', {
-                    start:    trig.start,
-                    end:      trig.end,
-                    isActive: trig.isActive,
-                    progress: typeof trig.progress === 'function' ? trig.progress() : undefined,
-                });
-            } catch (e) {
-                dwarn('item ' + idx + ' ST.create threw, falling back to tl.play()', e);
-                tl.play();
-            }
+        // 3. After every image inside the widget finishes loading.
+        rootEl.querySelectorAll('img').forEach(function (img) {
+            if (img.complete) return;
+            img.addEventListener('load',  function () { doRefresh('img load:'  + (img.alt || img.src)); }, { once: true });
+            img.addEventListener('error', function () { doRefresh('img error:' + (img.alt || img.src)); }, { once: true });
         });
 
-        // ── Progress line scrub (frontend AND editor) ─────────
-        // Same reasoning as the per-item triggers — keep ScrollTrigger
-        // active in editor so the user can see the line fill as they
-        // scroll. try/catch fallback ensures the line still ends in
-        // its full state if create() fails.
-        if (activeLine) {
-            try {
-                var lineTween = gsap.to(activeLine, {
-                    scaleY: 1,
-                    ease:   'none',
-                    scrollTrigger: {
-                        trigger: timeline,
-                        start:   'top 70%',
-                        end:     'bottom 70%',
-                        scrub:   true,
-                    },
-                });
-                tweens.push(lineTween);
-                if (lineTween.scrollTrigger) {
-                    triggers.push(lineTween.scrollTrigger);
-                    dlog('line scrub ST created', {
-                        start: lineTween.scrollTrigger.start,
-                        end:   lineTween.scrollTrigger.end,
-                        progress: typeof lineTween.scrollTrigger.progress === 'function' ? lineTween.scrollTrigger.progress() : undefined,
-                    });
-                }
-            } catch (e) {
-                dwarn('line scrub setup threw — snapping line to scaleY:1', e);
-                gsap.set(activeLine, { scaleY: 1 });
-            }
+        // 4. window.load — the canonical "everything's done" hook.
+        if (document.readyState !== 'complete') {
+            window.addEventListener('load', function () { doRefresh('window-load'); }, { once: true });
         }
 
-        // ── Refresh — recalculates positions for the newly-created
-        //    triggers. ScrollTrigger queues this debounced internally
-        //    so calling it multiple times in quick succession is fine.
-        try {
-            ST.refresh();
-            dlog('ST.refresh() done — total ScrollTriggers on page:', ST.getAll().length);
-        } catch (e) { dwarn('ST.refresh threw', e); }
+        // 5. Final safety net — 600ms after init for slow async work
+        //    (lazy-loaded scripts, late style injection by other
+        //    plugins).
+        setTimeout(function () { doRefresh('600ms safety net'); }, 600);
 
-        // Expose the per-root state on a debug global so the user can
-        // poke at it from DevTools: `window.tempaloo.studio.__hiw[0]`.
+        // Debug API in DevTools.
         if (DEBUG) {
             window.tempaloo = window.tempaloo || {};
             window.tempaloo.studio = window.tempaloo.studio || {};
             window.tempaloo.studio.__hiw = window.tempaloo.studio.__hiw || [];
-            window.tempaloo.studio.__hiw.push({ rootEl: rootEl, triggers: triggers, tweens: tweens });
+            window.tempaloo.studio.__hiw.push({ rootEl: rootEl, ctx: ctx });
         }
-
-        // ── Cleanup hook for idempotent re-init ──────────────
-        rootEl.__tw_hiw_cleanup = function () {
-            dlog('cleanup running — killing', triggers.length, 'triggers +', tweens.length, 'tweens');
-            triggers.forEach(function (t)  { try { t.kill();  } catch (e) {} });
-            tweens.forEach(function (tw)   { try { tw.kill(); } catch (e) {} });
-        };
     }
 
     window.tempaloo = window.tempaloo || {};
