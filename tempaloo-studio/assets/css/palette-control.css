@@ -1,0 +1,137 @@
+/* ============================================================
+ * Tempaloo Studio — Palette control styles (Elementor editor only)
+ *
+ * Renders the custom `tempaloo_palette` control as a clean grid of
+ * swatches with split light/dark previews. Compact enough to fit
+ * Elementor's 240px-ish panel width.
+ * ============================================================ */
+
+.tps-palette {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 8px 0 4px;
+}
+
+.tps-palette-group__label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #b4bbc1;
+    margin-bottom: 6px;
+}
+
+.tps-palette-group__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
+    gap: 6px;
+}
+
+/* Each swatch is a small clickable card with the split-color chip on top
+ * and the token name underneath. */
+.tps-palette-swatch {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid #d5d8dd;
+    border-radius: 4px;
+    background: #fff;
+    cursor: pointer;
+    transition: border-color 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+    min-width: 0;
+}
+.tps-palette-swatch:hover {
+    border-color: #818cf8;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px -4px rgba(99, 102, 241, 0.3);
+}
+.tps-palette-swatch.is-active {
+    border-color: #6c5ce7;
+    box-shadow: 0 0 0 2px rgba(108, 92, 231, 0.25);
+    background: #f3f0ff;
+}
+
+/* Split-color chip: a 28×28 box with a diagonal line, light hex on the
+ * upper-left half and dark hex on the lower-right half. The clip-path
+ * on the dark half cuts diagonally so both colors are visible at once. */
+.tps-palette-swatch__chip {
+    position: relative;
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    flex-shrink: 0;
+}
+.tps-palette-swatch__chip-light,
+.tps-palette-swatch__chip-dark {
+    position: absolute;
+    inset: 0;
+}
+.tps-palette-swatch__chip-dark {
+    /* Diagonal split: dark fills the lower-right triangle. */
+    clip-path: polygon(100% 0, 100% 100%, 0 100%);
+}
+
+.tps-palette-swatch__name {
+    font-size: 9.5px;
+    line-height: 1.2;
+    color: #495157;
+    text-align: center;
+    word-break: break-word;
+    max-width: 100%;
+    font-weight: 500;
+}
+
+.tps-palette-swatch.is-active .tps-palette-swatch__name {
+    color: #5c44d6;
+    font-weight: 600;
+}
+
+/* Clear button — visually demoted, sits at the bottom of the picker. */
+.tps-palette-clear {
+    align-self: flex-start;
+    background: transparent;
+    border: 1px dashed #c8ccd1;
+    color: #828d97;
+    font-size: 10.5px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 4px;
+}
+.tps-palette-clear:hover {
+    border-color: #ef4444;
+    color: #ef4444;
+    background: #fff5f5;
+}
+
+/* Edit-Heading style note: Elementor's panel uses a dark theme by
+ * default; flip swatch card bg + name color so they stay legible. */
+body.elementor-panel-mode-dark .tps-palette-swatch,
+[data-elementor-mode="dark"] .tps-palette-swatch {
+    background: #2a2c34;
+    border-color: #3d4049;
+}
+body.elementor-panel-mode-dark .tps-palette-swatch:hover,
+[data-elementor-mode="dark"] .tps-palette-swatch:hover {
+    border-color: #818cf8;
+}
+body.elementor-panel-mode-dark .tps-palette-swatch.is-active,
+[data-elementor-mode="dark"] .tps-palette-swatch.is-active {
+    background: rgba(108, 92, 231, 0.18);
+    border-color: #818cf8;
+}
+body.elementor-panel-mode-dark .tps-palette-swatch__name,
+[data-elementor-mode="dark"] .tps-palette-swatch__name {
+    color: #d4d8dd;
+}
+body.elementor-panel-mode-dark .tps-palette-clear,
+[data-elementor-mode="dark"] .tps-palette-clear {
+    border-color: #4a4d56;
+    color: #aab1b9;
+}
