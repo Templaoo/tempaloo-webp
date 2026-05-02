@@ -582,6 +582,55 @@ The `class-{widget}.php` extends a shared `Tempaloo\Elementor\Widget_Base` (our 
 
 ---
 
+## 2.b Public PHP filters (extension API)
+
+The plugin exposes 5 filters that white-label forks, premium add-ons or per-site theming can hook to without forking the codebase:
+
+```php
+// Modify the discovered slug → template manifest map (e.g. inject a custom template).
+add_filter( 'tempaloo_studio_templates', function ( $templates ) {
+    $templates['my-custom-tpl'] = [ /* manifest */ ];
+    return $templates;
+} );
+
+// Tweak a single template's data right before consumers read it.
+add_filter( 'tempaloo_studio_template', function ( $tpl, $slug ) {
+    if ( $slug === 'avero-consulting' ) {
+        $tpl['name'] = 'Avero (My Custom Build)';
+    }
+    return $tpl;
+}, 10, 2 );
+
+// Whitelist / blacklist widgets that get registered for a template.
+add_filter( 'tempaloo_studio_widgets', function ( $widgets, $tpl_slug ) {
+    if ( $tpl_slug === 'avero-consulting' ) {
+        $widgets = array_diff( $widgets, [ 'pricing' ] ); // remove pricing
+    }
+    return $widgets;
+}, 10, 2 );
+
+// Final say on the (template, mode) token map right before CSS compilation.
+add_filter( 'tempaloo_studio_tokens', function ( $merged, $tpl_slug, $mode, $defaults, $overrides ) {
+    if ( $mode === 'dark' && date( 'F' ) === 'December' ) {
+        $merged['--tw-avero-accent'] = '#c0392b'; // Red accent in December
+    }
+    return $merged;
+}, 10, 5 );
+
+// Override per-widget animation config at runtime.
+add_filter( 'tempaloo_studio_anims', function ( $anims, $tpl_slug, $intensity ) {
+    // Force "none" preset on every widget if the post has a "no-motion" tag.
+    if ( has_term( 'no-motion', 'post_tag' ) ) {
+        foreach ( $anims as $w => &$cfg ) $cfg['entrance'] = 'none';
+    }
+    return $anims;
+}, 10, 3 );
+```
+
+**Stability promise:** filter names + signatures are part of the **public API** and will follow semver. New optional args may be appended (backwards-compatible); never removed or renamed without a major bump.
+
+---
+
 ## 3. Anatomy of a template — the file layout
 
 ```

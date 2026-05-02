@@ -53,6 +53,16 @@ final class Template_Manager {
 
         $this->cache = $this->scan();
 
+        /**
+         * Filter — let third-party plugins inject additional templates
+         * or modify discovered ones. Receives the slug→manifest map,
+         * must return the same shape. Use sparingly: this runs on most
+         * page loads (cached), so heavy work here will hurt perf.
+         *
+         * @param array $templates  slug → manifest data
+         */
+        $this->cache = (array) apply_filters( 'tempaloo_studio_templates', $this->cache );
+
         if ( ! $debug ) {
             set_transient( self::CACHE_KEY,       $this->cache,        self::CACHE_TTL );
             set_transient( self::FINGERPRINT_KEY, $this->fingerprint(), self::CACHE_TTL );
@@ -62,7 +72,16 @@ final class Template_Manager {
 
     public function get( string $slug ): ?array {
         $all = $this->all();
-        return $all[ $slug ] ?? null;
+        $tpl = $all[ $slug ] ?? null;
+        if ( $tpl === null ) return null;
+        /**
+         * Filter — modify a single template's data before consumers
+         * receive it. Useful for whitelabel forks or per-site theming.
+         *
+         * @param array  $tpl   parsed template.json + dir_path / dir_url
+         * @param string $slug  template slug
+         */
+        return (array) apply_filters( 'tempaloo_studio_template', $tpl, $slug );
     }
 
     public function active(): ?array {

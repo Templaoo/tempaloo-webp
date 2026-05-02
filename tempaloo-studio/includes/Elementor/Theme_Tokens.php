@@ -107,8 +107,20 @@ final class Theme_Tokens {
     private function merge_overrides( array $defaults, string $template_slug, string $mode ): array {
         $all = get_option( self::OVERRIDES_OPTION, [] );
         $overrides = $all[ $template_slug ][ $mode ] ?? [];
-        if ( ! is_array( $overrides ) || empty( $overrides ) ) return $defaults;
-        return array_merge( $defaults, $overrides );
+        if ( ! is_array( $overrides ) ) $overrides = [];
+        $merged = $overrides ? array_merge( $defaults, $overrides ) : $defaults;
+        /**
+         * Filter — final say on the token map for a (template, mode)
+         * pair right before it's compiled to CSS. Use cases: temporary
+         * branding on holidays, A/B-testing colors, white-label forks.
+         *
+         * @param array  $merged          var_name => value
+         * @param string $template_slug   active template slug
+         * @param string $mode            "light" | "dark"
+         * @param array  $defaults        template's shipped defaults (no overrides)
+         * @param array  $overrides       user-saved overrides only
+         */
+        return (array) apply_filters( 'tempaloo_studio_tokens', $merged, $template_slug, $mode, $defaults, $overrides );
     }
 
     /**

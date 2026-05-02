@@ -61,6 +61,15 @@ final class Widget_Registry {
         if ( ! is_dir( $widgets_dir ) ) return;
 
         $declared = is_array( $template['widgets'] ?? null ) ? $template['widgets'] : [];
+        /**
+         * Filter — modify which widgets get registered for a template.
+         * Useful for white-label forks that want to hide certain
+         * widgets, OR for premium add-ons that ship extra widgets.
+         *
+         * @param array  $declared       array of widget slugs
+         * @param string $template_slug  active template slug
+         */
+        $declared = (array) apply_filters( 'tempaloo_studio_widgets', $declared, $template_slug );
 
         foreach ( $declared as $widget_slug ) {
             $widget_slug = sanitize_key( $widget_slug );

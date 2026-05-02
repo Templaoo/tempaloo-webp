@@ -141,12 +141,26 @@ final class Animation {
 
         // Resolve per-widget config for the active template (if any).
         $anims = [];
+        $active_slug = '';
         if ( $this->templates ) {
             $active = $this->templates->active();
             if ( $active ) {
-                $anims = $this->presets_for( $active['slug'] );
+                $active_slug = (string) $active['slug'];
+                $anims       = $this->presets_for( $active_slug );
             }
         }
+
+        /**
+         * Filter — modify per-widget animation config before it's
+         * serialized to the runtime. Lets a plugin override the
+         * preset / stagger / trigger of any widget at runtime
+         * (e.g. force `entrance: 'none'` on a banner page).
+         *
+         * @param array  $anims         widget_slug => { entrance, stagger, trigger, duration }
+         * @param string $active_slug   active template slug (or '')
+         * @param string $intensity     resolved intensity (off|subtle|medium|bold)
+         */
+        $anims = (array) apply_filters( 'tempaloo_studio_anims', $anims, $active_slug, $intensity );
 
         $payloadIntensity = wp_json_encode( [ 'intensity' => $intensity ] );
         $payloadAnims     = wp_json_encode( (object) $anims );

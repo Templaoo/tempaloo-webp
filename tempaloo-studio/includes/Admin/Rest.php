@@ -37,6 +37,18 @@ final class Rest {
     }
 
     public function routes(): void {
+        // Args declarations below add type hints + sanitize_callbacks
+        // for self-documenting endpoints. We deliberately AVOID strict
+        // validate_callbacks here — handlers already do defensive
+        // filtering and rejecting payloads earlier would break the
+        // current React admin contract.
+        $slug_arg = [
+            'required'          => true,
+            'type'              => 'string',
+            'sanitize_callback' => 'sanitize_key',
+            'description'       => 'Template slug (a-z 0-9 hyphens only).',
+        ];
+
         register_rest_route( self::NS, '/templates', [
             'methods'             => 'GET',
             'callback'            => [ $this, 'list_templates' ],
@@ -46,12 +58,13 @@ final class Rest {
             'methods'             => 'GET',
             'callback'            => [ $this, 'get_template' ],
             'permission_callback' => [ $this, 'can_manage' ],
+            'args'                => [ 'slug' => $slug_arg ],
         ] );
         register_rest_route( self::NS, '/activate', [
             'methods'             => 'POST',
             'callback'            => [ $this, 'activate' ],
             'permission_callback' => [ $this, 'can_manage' ],
-            'args'                => [ 'slug' => [ 'required' => true, 'type' => 'string' ] ],
+            'args'                => [ 'slug' => $slug_arg ],
         ] );
         register_rest_route( self::NS, '/deactivate', [
             'methods'             => 'POST',
@@ -67,12 +80,33 @@ final class Rest {
             'methods'             => 'POST',
             'callback'            => [ $this, 'save_tokens' ],
             'permission_callback' => [ $this, 'can_manage' ],
+            'args'                => [
+                'slug' => $slug_arg,
+                'mode' => [
+                    'required'    => true,
+                    'type'        => 'string',
+                    'enum'        => [ 'light', 'dark' ],
+                    'description' => 'Theme mode this override applies to.',
+                ],
+                'vars' => [
+                    'required'    => true,
+                    'type'        => 'object',
+                    'description' => 'Map of CSS custom property names → values. Server-side allowlist filters bad keys/values.',
+                ],
+            ],
         ] );
         register_rest_route( self::NS, '/import-pages', [
             'methods'             => 'POST',
             'callback'            => [ $this, 'import_pages' ],
             'permission_callback' => [ $this, 'can_manage' ],
-            'args'                => [ 'slug' => [ 'required' => true, 'type' => 'string' ] ],
+            'args'                => [
+                'slug'    => $slug_arg,
+                'replace' => [
+                    'type'        => 'boolean',
+                    'default'     => false,
+                    'description' => 'When true, overwrite existing pages of the same slug.',
+                ],
+            ],
         ] );
         register_rest_route( self::NS, '/animation', [
             'methods'             => 'GET',
@@ -83,7 +117,22 @@ final class Rest {
             'methods'             => 'POST',
             'callback'            => [ $this, 'set_animation' ],
             'permission_callback' => [ $this, 'can_manage' ],
-            // intensity OR presets — at least one. Validation in handler.
+            'args'                => [
+                'intensity'     => [
+                    'type'        => 'string',
+                    'enum'        => Animation::ALLOWED,
+                    'description' => 'Global animation intensity: off | subtle | medium | bold.',
+                ],
+                'template_slug' => [
+                    'type'              => 'string',
+                    'sanitize_callback' => 'sanitize_key',
+                    'description'       => 'Template these per-widget presets belong to.',
+                ],
+                'presets'       => [
+                    'type'        => 'object',
+                    'description' => 'widget_slug → { entrance, stagger, duration, trigger }.',
+                ],
+            ],
         ] );
     }
 
