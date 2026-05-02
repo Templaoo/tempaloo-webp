@@ -14,6 +14,7 @@ use Tempaloo\Studio\Elementor\Widget_Registry;
 use Tempaloo\Studio\Elementor\Theme_Tokens;
 use Tempaloo\Studio\Elementor\Breakpoints;
 use Tempaloo\Studio\Elementor\Animation;
+use Tempaloo\Studio\Elementor\Native_Widget_Controls;
 use Tempaloo\Studio\Elementor\Page_Importer;
 use Tempaloo\Studio\Frontend\Assets;
 use Tempaloo\Studio\Frontend\Floating_Panel;
@@ -52,6 +53,11 @@ final class Plugin {
         // fire on every request because Elementor's editor may load
         // even on otherwise-public requests (preview, REST).
         ( new Widget_Registry( $templates ) )->register();
+
+        // Inject a "Theme palette" Style-tab section into every native
+        // Elementor widget. Authors picking a Tempaloo token get
+        // light+dark coverage in one click via CSS variables.
+        ( new Native_Widget_Controls( $templates ) )->register();
 
         // REST routes must be registered on every request — wp-json
         // requests do NOT pass through is_admin(). Permission_callback
