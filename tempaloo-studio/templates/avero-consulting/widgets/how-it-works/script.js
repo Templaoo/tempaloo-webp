@@ -38,32 +38,83 @@
     var ts = (window.tempaloo && window.tempaloo.studio) || {};
     if (!ts.onReady) return;
 
+    /* ── Debug tracer — opt-in via ?tw_debug=1 OR localStorage(tw_debug=1)
+     *
+     * Activate from DevTools console inside the editor preview iframe:
+     *
+     *     localStorage.setItem('tw_debug', '1'); location.reload();
+     *
+     * Or visit /avero-home/?tw_debug=1 once on the public frontend
+     * (sets the flag in localStorage for the same origin), then open
+     * the editor.
+     *
+     * Logs every decision the script makes:
+     *   - did GSAP / ScrollTrigger load
+     *   - is edit mode detected (and how)
+     *   - how many items we found
+     *   - did gsap.set apply
+     *   - did ScrollTrigger.create succeed
+     *   - is the trigger marked as inactive (off-viewport at create)
+     */
+    var DEBUG = (function () {
+        try {
+            var qs = location.search.match(/[?&]tw_debug=([^&]*)/);
+            if (qs) {
+                if (qs[1] === '1' || qs[1] === 'true')  { localStorage.setItem('tw_debug', '1'); return true; }
+                if (qs[1] === '0' || qs[1] === 'false') { localStorage.removeItem('tw_debug');   return false; }
+            }
+            return localStorage.getItem('tw_debug') === '1';
+        } catch (e) { return false; }
+    })();
+    function dlog() {
+        if (!DEBUG || !window.console) return;
+        var args = Array.prototype.slice.call(arguments);
+        args.unshift('%c[hiw]', 'color:#a78bfa;font-weight:bold');
+        try { console.log.apply(console, args); } catch (e) {}
+    }
+    function dwarn() {
+        if (!window.console) return;
+        var args = Array.prototype.slice.call(arguments);
+        args.unshift('[hiw]');
+        try { console.warn.apply(console, args); } catch (e) {}
+    }
+
     function init(rootEl) {
-        if (!rootEl) return;
+        if (!rootEl) {
+            dwarn('init called with no rootEl');
+            return;
+        }
+        dlog('init start', rootEl);
         var gsap = window.gsap;
         var ST   = window.ScrollTrigger;
-        if (!gsap || !ST) return;
+        if (!gsap) { dwarn('GSAP MISSING — animation skipped, content stays at CSS default (visible)'); return; }
+        if (!ST)   { dwarn('ScrollTrigger MISSING — animation skipped, content stays at CSS default (visible)'); return; }
+        dlog('GSAP', gsap.version, '+ ScrollTrigger', ST.version, 'OK');
 
         // ── Idempotent reset ──────────────────────────────────
         if (rootEl.__tw_hiw_cleanup) {
-            try { rootEl.__tw_hiw_cleanup(); } catch (e) {}
+            dlog('cleanup previous init');
+            try { rootEl.__tw_hiw_cleanup(); } catch (e) { dwarn('cleanup threw', e); }
             rootEl.__tw_hiw_cleanup = null;
         }
 
         var timeline   = rootEl.querySelector('.tw-avero-how-it-works__timeline');
         var activeLine = rootEl.querySelector('.tw-avero-how-it-works__line-active');
         var items      = rootEl.querySelectorAll('.tw-avero-how-it-works__item');
-        if (!timeline || !items.length) return;
+        dlog('queries', { timeline: !!timeline, activeLine: !!activeLine, items: items.length });
+        if (!timeline || !items.length) { dwarn('missing timeline or items, bail'); return; }
 
         // ── Reduced motion / off → static reveal ──────────────
         var ns      = (window.tempaloo && window.tempaloo.avero) || {};
         var level   = ns.animationLevel ? ns.animationLevel() : 'medium';
-        var reduced = level === 'subtle' || level === 'off'
-                      || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+        var prefRM  = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+        var reduced = level === 'subtle' || level === 'off' || prefRM;
+        var inEditor = ts.isEditMode && ts.isEditMode();
+        var hasEditClass = !!(document.body && document.body.classList && document.body.classList.contains('tempaloo-studio-edit-mode'));
+        dlog('mode', { level: level, prefersReducedMotion: prefRM, isEditor: inEditor, bodyHasEditClass: hasEditClass, intent: reduced ? 'static' : 'animated' });
 
         if (reduced) {
-            // CSS default opacity:1 already shows everything; just snap
-            // the progress line to its end state for a complete look.
+            dlog('reduced/off — snapping line scaleY:1 and bailing (CSS default = visible)');
             if (activeLine) gsap.set(activeLine, { scaleY: 1 });
             return;
         }
@@ -75,17 +126,25 @@
         // CSS default for these elements is opacity:1, so if anything
         // below this point throws, the widget stays visible. The set()
         // calls hide each element just before its tween is wired up.
-        if (activeLine) gsap.set(activeLine, { scaleY: 0 });
+        if (activeLine) {
+            try { gsap.set(activeLine, { scaleY: 0 }); dlog('set line scaleY:0'); }
+            catch (e) { dwarn('gsap.set(line) threw', e); }
+        }
 
-        items.forEach(function (item) {
+        items.forEach(function (item, idx) {
             var marker  = item.querySelector('.tw-avero-how-it-works__item-marker');
             var content = item.querySelector('.tw-avero-how-it-works__item-content');
             var media   = item.querySelector('.tw-avero-how-it-works__item-media');
             var reverse = item.classList.contains('tw-avero-how-it-works__item--reverse');
+            dlog('item ' + idx, { marker: !!marker, content: !!content, media: !!media, reverse: reverse });
 
-            if (marker)  gsap.set(marker,  { scale: 0 });
-            if (content) gsap.set(content, { opacity: 0, x: reverse ? -30 : 30 });
-            if (media)   gsap.set(media,   { opacity: 0, y: 20 });
+            try {
+                if (marker)  gsap.set(marker,  { scale: 0 });
+                if (content) gsap.set(content, { opacity: 0, x: reverse ? -30 : 30 });
+                if (media)   gsap.set(media,   { opacity: 0, y: 20 });
+            } catch (e) {
+                dwarn('gsap.set on item ' + idx + ' threw', e);
+            }
 
             // Build a paused timeline that animates each piece into
             // its final state. We don't use animation:tween linkage on
@@ -123,12 +182,23 @@
                 var trig = ST.create({
                     trigger:     item,
                     start:       'top 85%',
-                    onEnter:     function () { tl.play(); },
-                    onEnterBack: function () { tl.play(); },
-                    onLeaveBack: function () { tl.reverse(); },
+                    onEnter:     function () { dlog('item ' + idx + ' onEnter — tl.play'); tl.play(); },
+                    onEnterBack: function () { dlog('item ' + idx + ' onEnterBack — tl.play'); tl.play(); },
+                    onLeaveBack: function () { dlog('item ' + idx + ' onLeaveBack — tl.reverse'); tl.reverse(); },
                 });
                 triggers.push(trig);
+                // Report the trigger's resolved start position + activity.
+                // If `isActive` is true at create time, GSAP fires onEnter
+                // synchronously on the next refresh — content reveals
+                // without needing a scroll gesture.
+                dlog('item ' + idx + ' ST created', {
+                    start:    trig.start,
+                    end:      trig.end,
+                    isActive: trig.isActive,
+                    progress: typeof trig.progress === 'function' ? trig.progress() : undefined,
+                });
             } catch (e) {
+                dwarn('item ' + idx + ' ST.create threw, falling back to tl.play()', e);
                 tl.play();
             }
         });
@@ -151,8 +221,16 @@
                     },
                 });
                 tweens.push(lineTween);
-                if (lineTween.scrollTrigger) triggers.push(lineTween.scrollTrigger);
+                if (lineTween.scrollTrigger) {
+                    triggers.push(lineTween.scrollTrigger);
+                    dlog('line scrub ST created', {
+                        start: lineTween.scrollTrigger.start,
+                        end:   lineTween.scrollTrigger.end,
+                        progress: typeof lineTween.scrollTrigger.progress === 'function' ? lineTween.scrollTrigger.progress() : undefined,
+                    });
+                }
             } catch (e) {
+                dwarn('line scrub setup threw — snapping line to scaleY:1', e);
                 gsap.set(activeLine, { scaleY: 1 });
             }
         }
@@ -160,10 +238,23 @@
         // ── Refresh — recalculates positions for the newly-created
         //    triggers. ScrollTrigger queues this debounced internally
         //    so calling it multiple times in quick succession is fine.
-        try { ST.refresh(); } catch (e) {}
+        try {
+            ST.refresh();
+            dlog('ST.refresh() done — total ScrollTriggers on page:', ST.getAll().length);
+        } catch (e) { dwarn('ST.refresh threw', e); }
+
+        // Expose the per-root state on a debug global so the user can
+        // poke at it from DevTools: `window.tempaloo.studio.__hiw[0]`.
+        if (DEBUG) {
+            window.tempaloo = window.tempaloo || {};
+            window.tempaloo.studio = window.tempaloo.studio || {};
+            window.tempaloo.studio.__hiw = window.tempaloo.studio.__hiw || [];
+            window.tempaloo.studio.__hiw.push({ rootEl: rootEl, triggers: triggers, tweens: tweens });
+        }
 
         // ── Cleanup hook for idempotent re-init ──────────────
         rootEl.__tw_hiw_cleanup = function () {
+            dlog('cleanup running — killing', triggers.length, 'triggers +', tweens.length, 'tweens');
             triggers.forEach(function (t)  { try { t.kill();  } catch (e) {} });
             tweens.forEach(function (tw)   { try { tw.kill(); } catch (e) {} });
         };
