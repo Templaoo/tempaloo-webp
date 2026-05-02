@@ -2,7 +2,7 @@
 
 > **Single source of truth.** Every landing page authored on Stitch / Claude Design / hand-coded HTML+CSS+GSAP **must** follow this spec to be cleanly converted into a Tempaloo Studio widget. Following this spec is not optional — it's the contract that makes the conversion possible (and eventually automatic via the planned converter tool).
 
-> **Status:** v0.4 — 2026-05-01. Living document. Every new constraint discovered during a real conversion is added here.
+> **Status:** v0.5 — 2026-05-02. Living document. Every new constraint discovered during a real conversion is added here.
 >
 > **Plugin identity:**
 > - Display name: `Tempaloo Studio`
@@ -45,9 +45,9 @@ When you design on Stitch / Claude:
 
 ---
 
-## 1. The 14 commandments
+## 1. The 15 commandments
 
-A widget that follows all 14 rules is **conversion-ready**. A widget that misses any one is **not safe to ship**.
+A widget that follows all 15 rules is **conversion-ready**. A widget that misses any one is **not safe to ship**.
 
 ### 1. Top-level wrapper carries the widget identity
 
@@ -461,6 +461,55 @@ ts.onReady('.tw-{template}-mywidget', function (rootEl) {
 | pricing, footer | no | no | no script.js needed |
 
 **Future widgets that don't follow this pattern will be reverted in code review** — there is no scenario where direct element binding is acceptable inside a Tempaloo Studio widget.
+
+### 15. GSAP + ScrollTrigger — standalone-trigger pattern, never `animation: tween` link
+
+The plugin's central animation runtime (`assets/js/animations.js`) and any widget-level GSAP code MUST use the **standalone ScrollTrigger** pattern when scheduling scroll-into-view tweens. Do NOT link a paused tween via `ScrollTrigger.create({ animation: tween })`, and do NOT inline `scrollTrigger:` inside a `gsap.to()` / `gsap.from()` config that targets multiple elements with `filter`, `clipPath`, `scale`, or any other property combo that touches the CSSPlugin's transform/filter parser.
+
+**Why** — reproducible bug: blur-in / scale-in / mask-reveal applied to an array of 4+ targets at intensity=bold reproducibly crashes inside `ScrollTrigger.refresh` with `Cannot read properties of undefined (reading 'end')`. The crash happens because ScrollTrigger inspects the linked tween's properties during refresh and trips on multi-target filter/clipPath state. Standalone trigger + `onEnter` callback bypasses the inspection entirely.
+
+```js
+// ❌ WRONG — tween linked via animation:, ScrollTrigger inspects it on refresh
+var tween = gsap.to(targets, { opacity: 1, filter: 'blur(0)', paused: true });
+ScrollTrigger.create({ trigger: rootEl, start: 'top 85%', animation: tween });
+
+// ❌ WRONG — same crash surface, scrollTrigger inlined in tween config
+gsap.to(targets, {
+    opacity: 1, filter: 'blur(0)',
+    scrollTrigger: { trigger: rootEl, start: 'top 85%', once: true },
+});
+
+// ✅ CORRECT — standalone ScrollTrigger + onEnter runs the tween
+gsap.set(targets, { opacity: 0, filter: 'blur(20px)' });
+ScrollTrigger.create({
+    trigger: rootEl,
+    start:   'top 85%',
+    once:    true,
+    onEnter: function () {
+        gsap.to(targets, { opacity: 1, filter: 'blur(0)', overwrite: 'auto' });
+    },
+});
+```
+
+**Implementation reference** — `assets/js/animations.js` ships two helpers built on this pattern:
+
+- **`scheduleAnim(targets, fromState, toState, scrollTriggerCfg)`** — for element entrance presets. Always use this (or build the same pattern) instead of inlining `scrollTrigger:`.
+- **`withScroll(opts, runFn)`** — wraps any `gsap.to()` / `gsap.timeline()` call in a standalone ScrollTrigger.onEnter. Used by every text preset.
+
+**Sub-rules:**
+
+1. **`gsap.set(targets, fromState)` BEFORE the trigger is created.** Elements must be at their start state immediately so they're hidden while waiting for scroll. If the trigger creation throws, `set` already ran — element is at known state, recoverable by `restoreVisibility`.
+2. **`overwrite: 'auto'`** on every `gsap.to()` so re-triggers (Elementor editor re-render, manual replay) don't stack.
+3. **Timelines with scrollTrigger are OK if built INSIDE `onEnter`.** Build the timeline lazily in the standalone-trigger callback — never pre-build a paused timeline and pass it via `animation:`.
+4. **`scrub: true` is the ONE exception.** It REQUIRES tween↔trigger linking (no callback can express "tie progress to scroll position"). Use inline `scrollTrigger:` for scrub, but wrap creation in try/catch with a fade fallback (see `scroll-words-fill` preset).
+5. **Always `gsap.registerPlugin(ScrollTrigger)` at the top of the file**, idempotent via a flag (`window.gsap.__twSTRegistered`). Don't rely on global.js / load order.
+6. **Multi-stage `ScrollTrigger.refresh()`** — call on `DOMContentLoaded`, `window.load`, `document.fonts.ready`, and debounced `resize`. Web fonts shifting layout after first paint is the #1 cause of triggers firing at the wrong scroll offset.
+7. **Per-preset try/catch with `restoreVisibility(el)`** — if any preset throws mid-execution, clear inline `opacity` / `transform` / `filter` / `clipPath` so the widget never stays invisible. Animations are nice-to-have, content visibility is non-negotiable.
+8. **Viewport-aware safety net** at 4s post-load — force visibility ONLY on elements currently in viewport. Below-fold elements at opacity 0 are intentional (waiting for ScrollTrigger); forcing them visible breaks the scroll reveal entirely.
+9. **`prefers-reduced-motion`** — `level()` returns `'subtle'` automatically when the OS pref is set, which collapses transform distances to 0 (opacity-only motion). Don't hardcode reduced-motion checks per preset; rely on `intensityFactor(level())`.
+10. **Reference the GSAP skill packs** before adding any new preset: `gsap-core`, `gsap-scrolltrigger`, `gsap-timeline`, `gsap-utils`. They're the source of truth for official patterns.
+
+**Audit (post v0.5):** all 8 element presets + 9 text presets in `animations.js` follow this pattern. New presets that link `animation: tween` will be reverted in code review.
 
 ---
 
@@ -1310,6 +1359,10 @@ class {Widget_Class} extends Widget_Base {
 | `widescreen` declared with `direction: "max"` | It's a `min-width` breakpoint in Elementor | Use `"direction": "min"` in `responsive_overrides` |
 | Hardcoded breakpoint px in widget JS | Ignores Site Settings → Layout → Breakpoints | Read via `window.tempaloo.studio.bpQuery(alias)` / `bpMatches(alias)` |
 | Text widget without `_content_template` | Each keystroke = full iframe reload, awful UX | Mirror `render()` as Underscore template (§1.13) |
+| `ScrollTrigger.create({ animation: tween })` linking a paused multi-target tween | Crashes `ScrollTrigger.refresh` (`reading 'end'`) on filter/clipPath/scale combos | Standalone trigger + `onEnter` callback that calls `gsap.to(...)` (§1.15) |
+| `gsap.to(targets, { ..., scrollTrigger: { trigger, start } })` for entrance | Same crash surface as `animation:` link on multi-target tweens | `gsap.set` + `withScroll(opts, () => gsap.to(...))` helper (§1.15) |
+| Pre-built paused timeline passed to `ScrollTrigger.create({ animation: tl })` | Same — refresh inspects timeline children | Build timeline inside the `onEnter` callback (§1.15.3) |
+| Per-preset `prefers-reduced-motion` checks scattered across animations.js | Easy to drift / forget | Use the central `level()` + `intensityFactor()` only (§1.15.9) |
 
 ---
 

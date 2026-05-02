@@ -253,60 +253,84 @@
         return 1;                              // medium = 1
     }
 
-    /* ── scheduleAnim — GSAP-recommended pattern for animations
-     *    that must wait for ScrollTrigger.
+    /* ── scheduleAnim — standalone-ScrollTrigger pattern (GSAP official) ─
      *
-     * Why a helper instead of inlining `gsap.to(targets, { ...,
-     * scrollTrigger })`: when the scrollTrigger option is attached
-     * INSIDE the tween config, GSAP's CSSPlugin tries to interpret
-     * the tween's property values during ScrollTrigger.refresh — and
-     * crashes on certain combos (e.g. filter:blur, complex transforms)
-     * with "Cannot read properties of undefined (reading 'end')".
+     * Earlier attempts linked a paused tween via `animation: tween` on
+     * `ScrollTrigger.create`. GSAP/ScrollTrigger then tried to compute
+     * the tween's "end" during refresh and crashed for multi-target
+     * tweens animating `filter`/`clipPath` (services widget @ blur-in
+     * bold reproducibly hit `Cannot read properties of undefined
+     * (reading 'end')` inside Te.refresh).
      *
-     * The fix recommended in GSAP's docs: create the tween PAUSED, then
-     * create ScrollTrigger with `animation: tween` so the trigger
-     * controls play/pause without interpreting the tween internally.
+     * Per the gsap-scrolltrigger skill: use a **standalone ScrollTrigger**
+     * (no `animation:` link) and run the actual tween from the `onEnter`
+     * callback. ScrollTrigger never inspects the tween's internals, so
+     * the refresh path can't crash on it.
      *
      * Lifecycle:
      *   1. gsap.set(targets, fromState) — apply start values immediately
-     *   2. gsap.to(targets, toState, paused:true) — schedule end values
-     *   3. ScrollTrigger.create({ ..., animation: tween }) — wires it up
-     *   4. If no scrollTrigger config → play now (still controllable)
-     *   5. If ScrollTrigger.create itself fails → play tween immediately
-     *      so the widget still animates instead of staying invisible
+     *      so the element is hidden before any scroll happens.
+     *   2. ScrollTrigger.create({ trigger, start, once, onEnter }) — when
+     *      the trigger enters viewport, fire gsap.to(targets, toState).
+     *   3. No scrollTrigger or no ScrollTrigger plugin → run immediately.
+     *   4. ScrollTrigger.create throws → fall back to immediate play.
      */
     function scheduleAnim(targets, fromState, toState, scrollTriggerCfg) {
         var g = gsap();
         if (!g) return null;
 
-        // Always set the start state explicitly so even if everything below
-        // fails, we know the element's "from" state vs "to" state.
+        // Always set the start state explicitly so if anything later fails,
+        // the element is at a known starting point — never half-styled.
         try { g.set(targets, fromState); } catch (e) { warn('gsap.set failed', e); }
 
-        // Pause the tween — ScrollTrigger (or our manual play) will run it.
-        var tween;
-        try {
-            tween = g.to(targets, Object.assign({ paused: true }, toState));
-        } catch (e) {
-            warn('gsap.to failed', e);
-            return null;
-        }
-
-        if (scrollTriggerCfg && window.ScrollTrigger) {
+        var run = function () {
             try {
-                window.ScrollTrigger.create(Object.assign({}, scrollTriggerCfg, {
-                    animation: tween,
-                }));
-                return tween;
+                return g.to(targets, Object.assign({ overwrite: 'auto' }, toState));
             } catch (e) {
-                warn('ScrollTrigger.create failed — playing tween immediately to avoid invisibility', e);
-                tween.play();
-                return tween;
+                warn('gsap.to failed — restoring visibility', e);
+                Array.prototype.forEach.call(targets, restoreVisibility);
+                return null;
             }
+        };
+
+        if (!scrollTriggerCfg || !window.ScrollTrigger) return run();
+
+        try {
+            window.ScrollTrigger.create({
+                trigger: scrollTriggerCfg.trigger,
+                start:   scrollTriggerCfg.start || 'top 85%',
+                end:     scrollTriggerCfg.end,
+                once:    scrollTriggerCfg.once !== false,
+                onEnter: run,
+            });
+            return null;
+        } catch (e) {
+            warn('ScrollTrigger.create failed — running tween immediately', e);
+            return run();
         }
-        // No scroll trigger — play now.
-        tween.play();
-        return tween;
+    }
+
+    /* ── withScroll — same standalone-ScrollTrigger pattern for tweens
+     *    built ad-hoc (text presets, behavioral animations).
+     *
+     * Lets a preset write `gsap.set(splits, from); withScroll(opts, fn);`
+     * instead of inlining `scrollTrigger:` in the tween config (which
+     * has the same crash surface as scheduleAnim's old path).
+     */
+    function withScroll(opts, runFn) {
+        if (!opts || !opts.scrollTrigger || !window.ScrollTrigger) { runFn(); return; }
+        try {
+            window.ScrollTrigger.create({
+                trigger: opts.scrollTrigger.trigger,
+                start:   opts.scrollTrigger.start || 'top 85%',
+                end:     opts.scrollTrigger.end,
+                once:    opts.scrollTrigger.once !== false,
+                onEnter: runFn,
+            });
+        } catch (e) {
+            warn('withScroll: ScrollTrigger.create failed — running immediately', e);
+            runFn();
+        }
     }
 
     /* ── Entrance presets ────────────────────────────────────── */
@@ -500,39 +524,57 @@
 
     /* ── Text-reveal presets (9, registered alongside element presets) */
 
-    function withST(opts) {
-        return opts && opts.scrollTrigger ? { scrollTrigger: opts.scrollTrigger } : {};
-    }
+    /* All text presets follow the same shape now:
+     *   1. Split the headline into spans (words/chars/lines).
+     *   2. gsap.set(spans, fromState) — hide them immediately.
+     *   3. withScroll(opts, () => gsap.to(spans, toState)) — defer the
+     *      reveal to the standalone ScrollTrigger's onEnter (or run now
+     *      if no scrollTrigger is configured).
+     *
+     * The previous implementation used gsap.from(spans, { scrollTrigger })
+     * which has the same crash surface as scheduleAnim's old `animation:
+     * tween` link — ScrollTrigger.refresh tried to compute the linked
+     * tween's end and threw on multi-target / filter / clipPath combos.
+     */
 
     var TEXT_PRESETS = {
 
         // 1. Word fade-up — DEFAULT for editorial headlines.
         'word-fade-up': function (el, opts) {
             var words = splitWords(el, false);
-            gsap().from(words, Object.assign({
-                opacity: 0, y: 16 * (opts.lvlFactor || 1),
-                duration: 0.6, ease: 'power3.out',
-                stagger: 0.03, clearProps: 'opacity,transform',
-            }, withST(opts)));
+            var y = 16 * (opts.lvlFactor || 1);
+            gsap().set(words, { opacity: 0, y: y });
+            withScroll(opts, function () {
+                gsap().to(words, {
+                    opacity: 1, y: 0, duration: 0.6, ease: 'power3.out',
+                    stagger: 0.03, clearProps: 'opacity,transform', overwrite: 'auto',
+                });
+            });
         },
 
         // 2. Word fade-blur — premium / editorial.
         'word-fade-blur': function (el, opts) {
             var words = splitWords(el, false);
-            gsap().from(words, Object.assign({
-                opacity: 0, filter: 'blur(8px)',
-                duration: 0.7, ease: 'power2.out',
-                stagger: 0.04, clearProps: 'opacity,filter',
-            }, withST(opts)));
+            gsap().set(words, { opacity: 0, filter: 'blur(8px)' });
+            withScroll(opts, function () {
+                gsap().to(words, {
+                    opacity: 1, filter: 'blur(0px)',
+                    duration: 0.7, ease: 'power2.out',
+                    stagger: 0.04, clearProps: 'opacity,filter', overwrite: 'auto',
+                });
+            });
         },
 
         // 3. Word slide-up (overflow) — cinematic Stripe-style.
         'word-slide-up-overflow': function (el, opts) {
             var inners = splitWords(el, true);
-            gsap().from(inners, Object.assign({
-                yPercent: 110, duration: 0.7, ease: 'power4.out',
-                stagger: 0.04, clearProps: 'transform',
-            }, withST(opts)));
+            gsap().set(inners, { yPercent: 110 });
+            withScroll(opts, function () {
+                gsap().to(inners, {
+                    yPercent: 0, duration: 0.7, ease: 'power4.out',
+                    stagger: 0.04, clearProps: 'transform', overwrite: 'auto',
+                });
+            });
         },
 
         // 4. Char up — short headlines only (auto-fallback if too long).
@@ -540,21 +582,27 @@
             var text = (el.textContent || '').trim();
             if (text.length > 60) return TEXT_PRESETS['word-fade-up'](el, opts);
             var chars = splitChars(el);
-            gsap().from(chars, Object.assign({
-                opacity: 0, y: 8 * (opts.lvlFactor || 1),
-                duration: 0.5, ease: 'power3.out',
-                stagger: 0.018, clearProps: 'opacity,transform',
-            }, withST(opts)));
+            var y = 8 * (opts.lvlFactor || 1);
+            gsap().set(chars, { opacity: 0, y: y });
+            withScroll(opts, function () {
+                gsap().to(chars, {
+                    opacity: 1, y: 0, duration: 0.5, ease: 'power3.out',
+                    stagger: 0.018, clearProps: 'opacity,transform', overwrite: 'auto',
+                });
+            });
         },
 
         // 5. Line fade-up stagger — multi-line headlines (split on <br>).
         'line-fade-up-stagger': function (el, opts) {
             var lines = splitLines(el);
-            gsap().from(lines, Object.assign({
-                opacity: 0, y: 24 * (opts.lvlFactor || 1),
-                duration: 0.7, ease: 'power3.out',
-                stagger: 0.1, clearProps: 'opacity,transform',
-            }, withST(opts)));
+            var y = 24 * (opts.lvlFactor || 1);
+            gsap().set(lines, { opacity: 0, y: y });
+            withScroll(opts, function () {
+                gsap().to(lines, {
+                    opacity: 1, y: 0, duration: 0.7, ease: 'power3.out',
+                    stagger: 0.1, clearProps: 'opacity,transform', overwrite: 'auto',
+                });
+            });
         },
 
         // 6. Text typing — typewriter chars instant-reveal sequentially.
@@ -565,9 +613,11 @@
             var chars = splitChars(el);
             var stagger = Math.min(0.045, chars.length > 0 ? 1.5 / chars.length : 0.045);
             gsap().set(chars, { opacity: 0 });
-            gsap().to(chars, Object.assign({
-                opacity: 1, duration: 0.001, stagger: stagger, ease: 'none',
-            }, withST(opts)));
+            withScroll(opts, function () {
+                gsap().to(chars, {
+                    opacity: 1, duration: 0.001, stagger: stagger, ease: 'none', overwrite: 'auto',
+                });
+            });
         },
 
         // 7. Text fill sweep — wave from dim to full opacity, char-by-char.
@@ -576,38 +626,45 @@
         //    or color-mix() — those have spotty Safari support).
         'text-fill-sweep': function (el, opts) {
             var text = (el.textContent || '').trim();
-            // Auto-fallback to word-level for long text (paragraphs).
             if (text.length > 80) {
                 var words = splitWords(el, false);
-                gsap().fromTo(words,
-                    { opacity: 0.22 },
-                    Object.assign({
+                gsap().set(words, { opacity: 0.22 });
+                withScroll(opts, function () {
+                    gsap().to(words, {
                         opacity: 1, duration: 0.4, stagger: 0.05,
-                        ease: 'power2.out', clearProps: 'opacity',
-                    }, withST(opts))
-                );
+                        ease: 'power2.out', clearProps: 'opacity', overwrite: 'auto',
+                    });
+                });
                 return;
             }
             var chars = splitChars(el);
-            gsap().fromTo(chars,
-                { opacity: 0.22 },
-                Object.assign({
+            gsap().set(chars, { opacity: 0.22 });
+            withScroll(opts, function () {
+                gsap().to(chars, {
                     opacity: 1, duration: 0.3, stagger: 0.022,
-                    ease: 'power2.out', clearProps: 'opacity',
-                }, withST(opts))
-            );
+                    ease: 'power2.out', clearProps: 'opacity', overwrite: 'auto',
+                });
+            });
         },
 
         // 8. Scroll-linked words fill — Apple/Stripe-Tax style.
-        //    Requires ScrollTrigger; falls back to simple fade if absent.
+        //    Uses scrub:true (scroll-driven progress, not onEnter), so
+        //    we keep the inline scrollTrigger here — scrub requires the
+        //    tween to be linked, and a single-element trigger animating
+        //    .tw-word spans is the well-tested case (no filter/clipPath).
         'scroll-words-fill': function (el, opts) {
             var words = splitWords(el, false);
             gsap().set(words, { opacity: 0.18 });
             if (hasST()) {
-                gsap().to(words, {
-                    opacity: 1, ease: 'none', stagger: 0.1,
-                    scrollTrigger: { trigger: el, start: 'top 80%', end: 'top 30%', scrub: true },
-                });
+                try {
+                    gsap().to(words, {
+                        opacity: 1, ease: 'none', stagger: 0.1,
+                        scrollTrigger: { trigger: el, start: 'top 80%', end: 'top 30%', scrub: true },
+                    });
+                } catch (e) {
+                    warn('scroll-words-fill: scrub setup failed — running fade fallback', e);
+                    gsap().to(words, { opacity: 1, duration: 0.6, stagger: 0.05, ease: 'power2.out', clearProps: 'opacity' });
+                }
             } else {
                 gsap().to(words, { opacity: 1, duration: 0.6, stagger: 0.05, ease: 'power2.out', clearProps: 'opacity' });
             }
@@ -616,39 +673,52 @@
         // 9. Editorial stack — composite, orchestrates the children
         //    (eyebrow / headline / lead / cta-row) of a scope. Headline
         //    auto-receives word-fade-up, others fade up sequentially.
-        //    Falls back to fade-up of the root if no targets declared,
-        //    so picking this preset on a non-editorial widget still
-        //    plays SOMETHING rather than silently no-op'ing.
+        //    Built as a paused timeline + standalone ScrollTrigger.onEnter
+        //    so the timeline isn't inspected during ScrollTrigger.refresh.
         'editorial-stack': function (rootEl, opts) {
+            var g = gsap();
             var targets = rootEl.querySelectorAll('[data-tw-anim-target]');
             if (!targets.length) {
                 // Graceful fallback — the widget didn't mark its children,
                 // so just fade the whole widget root in.
-                gsap().from(rootEl, Object.assign({
-                    opacity: 0, y: 16 * (opts.lvlFactor || 1),
-                    duration: 0.7, ease: 'power3.out',
-                    clearProps: 'opacity,transform',
-                }, withST(opts)));
+                var y0 = 16 * (opts.lvlFactor || 1);
+                g.set(rootEl, { opacity: 0, y: y0 });
+                withScroll(opts, function () {
+                    g.to(rootEl, {
+                        opacity: 1, y: 0, duration: 0.7, ease: 'power3.out',
+                        clearProps: 'opacity,transform', overwrite: 'auto',
+                    });
+                });
                 return;
             }
-            var tl = gsap().timeline(withST(opts));
-            Array.prototype.slice.call(targets).forEach(function (t, i) {
+            // Pre-set all targets to their fromState, then assemble a
+            // paused timeline that runs onEnter.
+            var prepared = Array.prototype.slice.call(targets).map(function (t) {
                 var tag = (t.tagName || '').toLowerCase();
                 var isHeadline = tag === 'h1' || tag === 'h2' || tag === 'h3';
                 if (isHeadline) {
                     var words = splitWords(t, false);
-                    tl.from(words, {
-                        opacity: 0, y: 16 * (opts.lvlFactor || 1),
-                        duration: 0.65, ease: 'power3.out', stagger: 0.03,
-                        clearProps: 'opacity,transform',
-                    }, i === 0 ? 0 : 0.15);
-                } else {
-                    tl.from(t, {
-                        opacity: 0, y: 14 * (opts.lvlFactor || 1),
-                        duration: 0.55, ease: 'power3.out',
-                        clearProps: 'opacity,transform',
-                    }, i === 0 ? 0 : '<0.08');
+                    g.set(words, { opacity: 0, y: 16 * (opts.lvlFactor || 1) });
+                    return { kind: 'headline', el: t, words: words };
                 }
+                g.set(t, { opacity: 0, y: 14 * (opts.lvlFactor || 1) });
+                return { kind: 'el', el: t };
+            });
+            withScroll(opts, function () {
+                var tl = g.timeline();
+                prepared.forEach(function (p, i) {
+                    if (p.kind === 'headline') {
+                        tl.to(p.words, {
+                            opacity: 1, y: 0, duration: 0.65, ease: 'power3.out',
+                            stagger: 0.03, clearProps: 'opacity,transform', overwrite: 'auto',
+                        }, i === 0 ? 0 : 0.15);
+                    } else {
+                        tl.to(p.el, {
+                            opacity: 1, y: 0, duration: 0.55, ease: 'power3.out',
+                            clearProps: 'opacity,transform', overwrite: 'auto',
+                        }, i === 0 ? 0 : '<0.08');
+                    }
+                });
             });
         },
     };
