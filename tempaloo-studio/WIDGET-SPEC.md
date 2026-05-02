@@ -2,7 +2,7 @@
 
 > **Single source of truth.** Every landing page authored on Stitch / Claude Design / hand-coded HTML+CSS+GSAP **must** follow this spec to be cleanly converted into a Tempaloo Studio widget. Following this spec is not optional — it's the contract that makes the conversion possible (and eventually automatic via the planned converter tool).
 
-> **Status:** v0.6 — 2026-05-02. Living document. Every new constraint discovered during a real conversion is added here.
+> **Status:** v0.7 — 2026-05-02. Living document. Every new constraint discovered during a real conversion is added here.
 >
 > **Plugin identity:**
 > - Display name: `Tempaloo Studio`
@@ -45,9 +45,9 @@ When you design on Stitch / Claude:
 
 ---
 
-## 1. The 16 commandments
+## 1. The 17 commandments
 
-A widget that follows all 16 rules is **conversion-ready**. A widget that misses any one is **not safe to ship**.
+A widget that follows all 17 rules is **conversion-ready**. A widget that misses any one is **not safe to ship**.
 
 ### 1. Top-level wrapper carries the widget identity
 
@@ -563,6 +563,78 @@ Either way, the live preview is guaranteed to show the final state regardless of
 5. **Test live preview as part of widget acceptance** — drag the widget into a fresh Elementor page in the editor, edit a control, confirm the rendered preview matches the saved frontend. Ship is gated on this.
 
 **Audit (post v0.6):** `widget-base.js`, `animations.js`, and `how-it-works/script.js` all use `editAware`. Future widgets that fail to route their ScrollTrigger configs through it will be reverted in code review.
+
+### 17. NEVER bind to `elementorFrontend.hooks` directly — always go through `ts.onReady()`
+
+The fix that finally killed the editor live-preview bug for good (v0.7).
+
+**The race condition** — every widget that needed per-instance setup
+(GSAP timelines, scroll listeners, custom Plyr/Splide instances, etc.)
+used to do this:
+
+```js
+// ❌ BROKEN — silently no-ops in the editor preview iframe
+if (window.elementorFrontend && window.elementorFrontend.hooks) {
+    window.elementorFrontend.hooks.addAction(
+        'frontend/element_ready/global',
+        function ($el) { /* init */ }
+    );
+}
+```
+
+`window.elementorFrontend` is loaded by Elementor's `frontend.js`. Inside
+the editor preview iframe that script can boot **after** our widget
+scripts. The `if` check then evaluates to false → handler never
+registered → when Elementor later mounts the widget (drag-and-drop,
+control edit, undo/redo), `frontend/element_ready/global` fires into
+the void → `init()` never runs → opacity:0 from `gsap.set` stays →
+**live preview blank, no [hiw] / [widget] logs at all**.
+
+This was the actual root cause of "le live preview ne marche pas" for
+how-it-works after we'd already shipped `editAware`. `editAware` only
+helps once `init()` runs — but `init()` was never running.
+
+**The fix — `ts.onReady()` handles deferred registration centrally**
+([widget-base.js:71-126](assets/js/widget-base.js#L71-L126)). The
+helper:
+
+1. Tries to register the hook immediately.
+2. If `elementorFrontend` isn't ready, listens for the canonical
+   `elementor/frontend/init` jQuery event.
+3. AND polls every 100ms for up to 10s as a fallback (in case jQuery
+   isn't ready when we bind, or the event fires between checks).
+4. Self-cancels as soon as registration succeeds.
+
+```js
+// ✅ CORRECT — works on frontend AND in editor preview iframe
+ts.onReady('.tw-{template}-{widget}', function (rootEl) {
+    // GSAP timeline, ScrollTrigger setup, behavioral listeners…
+    // Runs ONCE per instance, on initial page load AND every time
+    // Elementor mounts the widget after an edit.
+});
+```
+
+**Sub-rules:**
+
+1. **One init per widget**, takes `rootEl` as parameter — same as §9.
+2. **Idempotent** — `ts.onReady` can fire multiple times (Elementor
+   re-mounts on every control edit). Cleanup prior state before
+   rebuilding (see how-it-works's `__tw_hiw_cleanup` pattern).
+3. **Never reach for `window.elementorFrontend` directly.** If you
+   think you need an Elementor hook other than `frontend/element_ready/global`,
+   wrap it in a similar deferred pattern — or better, request a new
+   helper added to the central runtime.
+4. **Test in the editor as part of widget acceptance.** Drag the
+   widget into a fresh page, edit any control, confirm the script's
+   debug logs (or behavior) confirm `init()` ran. Ship is gated on
+   this.
+
+**Audit (post v0.7):** `widget-base.js::ts.onReady()` ships the
+deferred-registration logic. Every existing widget that uses
+`ts.onReady` (header, services, testimonials, faq, how-it-works)
+benefits automatically — no per-widget changes needed. Future widgets
+must use `ts.onReady`; direct `elementorFrontend.hooks.addAction`
+calls will be reverted in code review.
 
 ---
 
