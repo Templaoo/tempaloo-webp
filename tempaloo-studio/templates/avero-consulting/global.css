@@ -948,127 +948,219 @@
 
 /* ============================================================
  * Widget: tw-avero-testimonials
+ *
+ * Editorial header (rating + serif headline) over an infinite
+ * horizontal marquee of testimonial cards. The marquee track is
+ * driven by GSAP (script.js) — the only CSS animation here is
+ * the fallback @keyframes for browsers without GSAP loaded.
  * ============================================================ */
 
 .tw-avero-testimonials {
     background: var(--tw-avero-bg);
-    padding: clamp(80px, 11vw, 160px) clamp(20px, 5vw, 56px);
+    padding: clamp(80px, 11vw, 160px) 0;
+    overflow: hidden;
     font-family: var(--tw-avero-font-body);
-}
-
-.tw-avero-testimonials__container {
-    max-width: 980px;
-    margin: 0 auto;
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 28px;
-}
-
-.tw-avero-testimonials__stage {
-    position: relative;
     width: 100%;
-    min-height: 280px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
 }
 
-.tw-avero-testimonials__quote {
-    position: absolute;
-    inset: 0;
+.tw-avero-testimonials__inner {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(48px, 6vw, 96px);
+}
+
+/* ── Header (centered) ───────────────────────────────────── */
+
+.tw-avero-testimonials__header {
+    text-align: center;
+    padding: 0 clamp(20px, 5vw, 56px);
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
     gap: 24px;
-    opacity: 0;
-    pointer-events: none;
-    padding: 0 12px;
-}
-.tw-avero-testimonials__quote.is-active {
-    opacity: 1;
-    pointer-events: auto;
-    position: relative;
-    inset: auto;
 }
 
-.tw-avero-testimonials__mark {
-    width: 36px;
-    height: 28px;
-    color: var(--tw-avero-accent);
-    opacity: 0.55;
-}
-
-.tw-avero-testimonials__text {
-    font-family: var(--tw-avero-font-heading);
-    font-style: italic;
-    font-size: clamp(1.5rem, 2.8vw, 2.25rem);
-    line-height: 1.3;
-    letter-spacing: -0.015em;
-    color: var(--tw-avero-text);
-    margin: 0;
-    max-width: 760px;
-    text-wrap: balance;
-}
-
-.tw-avero-testimonials__cite {
+.tw-avero-testimonials__rating {
     display: inline-flex;
     align-items: center;
     gap: 12px;
 }
 
-.tw-avero-testimonials__photo {
-    width: 44px;
-    height: 44px;
+.tw-avero-testimonials__stars {
+    display: inline-flex;
+    gap: 4px;
+}
+
+.tw-avero-testimonials__star {
+    width: 20px;
+    height: 20px;
+    color: var(--tw-avero-text);
+}
+.tw-avero-testimonials__star--empty {
+    color: var(--tw-avero-border-strong);
+}
+
+.tw-avero-testimonials__rating-text {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--tw-avero-text-soft);
+    letter-spacing: 0.005em;
+}
+
+.tw-avero-testimonials__intro {
+    font-family: var(--tw-avero-font-heading);
+    font-size: clamp(1.75rem, 4vw, 3rem);
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+    color: var(--tw-avero-text);
+    font-weight: 400;
+    margin: 0;
+    max-width: 900px;
+    text-wrap: balance;
+}
+
+/* ── Marquee track ───────────────────────────────────────── */
+
+.tw-avero-testimonials__track-wrap {
+    width: 100%;
+    position: relative;
+    padding: clamp(8px, 2vw, 24px) 0;
+    /* Soft fade at left/right edges so cards drift in/out gracefully
+     * instead of hard-cropping. SVG mask-image is widely supported. */
+    -webkit-mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+            mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+}
+
+.tw-avero-testimonials__track {
+    display: flex;
+    width: max-content;
+    gap: clamp(16px, 2vw, 24px);
+    padding-left: clamp(16px, 2vw, 24px);
+    will-change: transform;
+}
+
+/* CSS-only fallback — only kicks in when GSAP isn't present. The
+ * widget script clears any inline transform before installing its
+ * tween, so once GSAP runs this animation has no effect. */
+@media (prefers-reduced-motion: no-preference) {
+    .tw-avero-testimonials__track {
+        animation: tw-avero-testimonials-marquee 50s linear infinite;
+    }
+}
+@keyframes tw-avero-testimonials-marquee {
+    from { transform: translateX(0); }
+    to   { transform: translateX(-50%); }
+}
+
+/* ── Card ────────────────────────────────────────────────── */
+
+.tw-avero-testimonials__item {
+    width: clamp(300px, 30vw, 460px);
+    flex-shrink: 0;
+    padding: clamp(28px, 3vw, 56px);
+    background: var(--tw-avero-bg-strong);
+    border: 1px solid var(--tw-avero-border);
+    border-radius: clamp(16px, 1.5vw, 24px);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: clamp(28px, 3vw, 48px);
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.02);
+    transition: border-color 0.4s ease, box-shadow 0.4s ease, background-color 0.4s ease;
+}
+[data-theme="dark"] .tw-avero-testimonials__item {
+    background: color-mix(in srgb, var(--tw-avero-bg-strong) 92%, transparent);
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+}
+.tw-avero-testimonials__item:hover {
+    border-color: color-mix(in srgb, var(--tw-avero-accent) 30%, var(--tw-avero-border));
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.06);
+}
+[data-theme="dark"] .tw-avero-testimonials__item:hover {
+    background: color-mix(in srgb, var(--tw-avero-bg-strong) 88%, transparent);
+    border-color: color-mix(in srgb, var(--tw-avero-accent) 30%, var(--tw-avero-border));
+}
+
+.tw-avero-testimonials__quote {
+    font-family: var(--tw-avero-font-heading);
+    font-size: clamp(1.125rem, 1.5vw, 1.5rem);
+    line-height: 1.4;
+    color: var(--tw-avero-text);
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    margin: 0;
+}
+
+.tw-avero-testimonials__author {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+}
+
+.tw-avero-testimonials__avatar {
+    width: 56px;
+    height: 56px;
     border-radius: 50%;
     object-fit: cover;
+    border: 1px solid var(--tw-avero-border);
+    flex-shrink: 0;
     background: var(--tw-avero-bg-soft);
     color: var(--tw-avero-accent);
     display: inline-flex;
     align-items: center;
     justify-content: center;
+}
+.tw-avero-testimonials__avatar--initial {
     font-family: var(--tw-avero-font-heading);
-    font-size: 18px;
-    flex-shrink: 0;
+    font-size: 24px;
+    line-height: 1;
 }
 
-.tw-avero-testimonials__cite-text {
+.tw-avero-testimonials__meta {
     display: flex;
     flex-direction: column;
-    text-align: left;
-    line-height: 1.3;
+    gap: 6px;
+    min-width: 0;
 }
-.tw-avero-testimonials__name { font-weight: 600; font-size: 14px; color: var(--tw-avero-text); }
-.tw-avero-testimonials__role { font-size: 12.5px; color: var(--tw-avero-text-muted); }
 
-.tw-avero-testimonials__dots {
+.tw-avero-testimonials__name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--tw-avero-text);
+    line-height: 1.2;
+}
+
+.tw-avero-testimonials__badges {
     display: flex;
     gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 2px;
 }
-.tw-avero-testimonials__dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    border: none;
-    background: var(--tw-avero-border-strong);
-    cursor: pointer;
-    transition: background 200ms ease, width 200ms ease;
-    padding: 0;
+
+.tw-avero-testimonials__badge {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--tw-avero-accent);
+    background: color-mix(in srgb, var(--tw-avero-accent) 8%, transparent);
+    padding: 5px 12px;
+    border-radius: var(--tw-avero-radius-pill, 100px);
+    letter-spacing: 0.02em;
+    white-space: nowrap;
 }
-.tw-avero-testimonials__dot:hover,
-.tw-avero-testimonials__dot:focus {
-    background: var(--tw-avero-text-muted);
-    outline: none;
+[data-theme="dark"] .tw-avero-testimonials__badge {
+    background: color-mix(in srgb, var(--tw-avero-accent) 15%, transparent);
 }
-.tw-avero-testimonials__dot.is-active {
-    width: 28px;
-    border-radius: var(--tw-avero-radius-pill);
-    background: var(--tw-avero-accent);
+
+@media (max-width: 1024px) {
+    .tw-avero-testimonials__intro { font-size: 2.25rem; max-width: 700px; }
+    .tw-avero-testimonials__item  { width: 380px; padding: 40px 36px; }
 }
-.tw-avero-testimonials__dot.is-active:hover,
-.tw-avero-testimonials__dot.is-active:focus {
-    background: var(--tw-avero-accent-hover);
+@media (max-width: 767px) {
+    .tw-avero-testimonials        { padding: clamp(56px, 12vw, 96px) 0; }
+    .tw-avero-testimonials__inner { gap: 40px; }
+    .tw-avero-testimonials__intro { font-size: 1.75rem; }
+    .tw-avero-testimonials__item  { width: 300px; padding: 32px 28px; gap: 32px; }
+    .tw-avero-testimonials__quote { font-size: 1.0625rem; }
 }
 
 /* ============================================================
@@ -1355,4 +1447,141 @@
 }
 @media (max-width: 640px) {
     .tw-avero-footer__cols { grid-template-columns: 1fr 1fr; gap: 24px; }
+}
+
+/* ============================================================
+ * RESPONSIVE HARDENING — anti-overflow safety net
+ *
+ * Tablet/mobile overflow happens for one of three reasons:
+ *   1. A widget root lets a child (halo, marquee, absolute card)
+ *      escape its bounds → horizontal scroll appears on <body>.
+ *   2. A grid track has a fixed `1fr` column whose content is
+ *      wider than the column (long unbreakable URLs, code blocks)
+ *      → grid blowout pushes the whole row past 100%.
+ *   3. A media element (img / iframe / video) without max-width
+ *      sits at its intrinsic size and forces the parent wider.
+ *
+ * This block is a defensive sweep applied AT THE END so it wins
+ * over any earlier rule that forgot one of the three:
+ * ============================================================ */
+
+/* 1. Every widget root clips its overflow. `overflow: clip` is
+ *    preferred (modern, doesn't create a containing block for
+ *    fixed-position children like the sticky header), with
+ *    `overflow-x: hidden` as a fallback for older browsers. */
+.tw-avero-hero,
+.tw-avero-services,
+.tw-avero-pricing,
+.tw-avero-testimonials,
+.tw-avero-faq,
+.tw-avero-cta,
+.tw-avero-footer,
+.tw-avero-header {
+    max-width: 100vw;
+    overflow-x: clip;
+}
+@supports not (overflow: clip) {
+    .tw-avero-hero,
+    .tw-avero-services,
+    .tw-avero-pricing,
+    .tw-avero-testimonials,
+    .tw-avero-faq,
+    .tw-avero-cta,
+    .tw-avero-footer,
+    .tw-avero-header {
+        overflow-x: hidden;
+    }
+}
+
+/* 2. Grid blowout fix — every grid container in the template
+ *    gets `min-width: 0` on its children so flex/grid can shrink
+ *    below the content's intrinsic size. Without this, long words
+ *    or icon-text combinations push the column wider than 1fr. */
+.tw-avero-hero__container > *,
+.tw-avero-services__grid > *,
+.tw-avero-pricing__grid > *,
+.tw-avero-faq__list > *,
+.tw-avero-footer__top > *,
+.tw-avero-footer__cols > *,
+.tw-avero-header__inner > * {
+    min-width: 0;
+}
+
+/* 3. Media safety — never let an image/video/iframe overflow
+ *    its parent. Scoped to template descendants only. */
+[class^="tw-avero-"] img,
+[class^="tw-avero-"] video,
+[class^="tw-avero-"] iframe,
+[class*=" tw-avero-"] img,
+[class*=" tw-avero-"] video,
+[class*=" tw-avero-"] iframe {
+    max-width: 100%;
+    height: auto;
+}
+
+/* 4. CTA halo — fixed 720×720px square overflowed into the
+ *    viewport on phones (the parent clipped it but layout
+ *    calculation still ran on the full size, hurting paint
+ *    perf). Cap at 90vw so the ring scales with the viewport. */
+.tw-avero-cta__halo {
+    width: min(720px, 90vw);
+    height: min(720px, 90vw);
+    aspect-ratio: 1 / 1;
+}
+
+/* 5. Header at <880px — when the burger menu kicks in, the
+ *    flex layout sometimes pushed the brand off-screen because
+ *    the drawer's `flex: 1` reserved space before the brand
+ *    rendered. Lock the brand's flex-shrink and let the menu
+ *    button handle whatever remains. */
+@media (max-width: 880px) {
+    .tw-avero-header__brand { flex-shrink: 0; }
+    .tw-avero-header__inner { padding: 14px clamp(16px, 4vw, 32px); }
+    .tw-avero-header__drawer { flex: 0 0 auto; }
+}
+
+/* 6. Long words — testimonials quotes, FAQ answers, footer
+ *    links all break gracefully instead of forcing horizontal
+ *    overflow if a user pastes a long unbreakable URL. */
+.tw-avero-testimonials__quote,
+.tw-avero-faq__a,
+.tw-avero-footer__col a {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+/* 7. Marquee belt-and-suspenders — the track-wrap clips, the
+ *    parent section clips (rule 1 above), and the track itself
+ *    is positioned, so it can't escape. Confirmed via overflow:
+ *    clip on root + overflow: hidden on track-wrap. */
+.tw-avero-testimonials__track-wrap {
+    overflow: hidden;
+}
+
+/* 8. Footer bottom row — at very narrow viewports, the legal
+ *    line and the "powered by" label sit on the same row and
+ *    can overflow. Stack them with a small gap when needed. */
+@media (max-width: 480px) {
+    .tw-avero-footer__bottom { flex-direction: column; align-items: flex-start; gap: 8px; }
+}
+
+/* 9. Pricing tier with `transform: scale(1.05)` (featured) added
+ *    horizontal overflow at narrow widths. Reset transform on
+ *    mobile (already done in rule above) AND ensure the grid
+ *    parent doesn't track the scaled child's bounding box. */
+@media (max-width: 1024px) {
+    .tw-avero-pricing__tier { transform: none; }
+}
+
+/* 10. Small phones — extra breathing room inside section padding
+ *     so 16px content has 16px gutter instead of 0. */
+@media (max-width: 380px) {
+    .tw-avero-hero,
+    .tw-avero-services,
+    .tw-avero-pricing,
+    .tw-avero-faq,
+    .tw-avero-cta {
+        padding-left: 14px;
+        padding-right: 14px;
+    }
 }
