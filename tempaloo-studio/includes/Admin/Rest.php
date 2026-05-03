@@ -215,6 +215,40 @@ final class Rest {
             ],
         ] );
 
+        // ── Niveau 4 — selector-targeted overrides (Animate Mode) ──
+        register_rest_route( self::NS, '/animation/v2/selector-override', [
+            'methods'             => 'POST',
+            'callback'            => [ $this, 'set_selector_override' ],
+            'permission_callback' => [ $this, 'can_manage' ],
+            'args'                => [
+                'selector' => [
+                    'required'    => true,
+                    'type'        => 'string',
+                    'description' => 'CSS selector to target (sanitised server-side).',
+                ],
+                'rule' => [
+                    'required'    => true,
+                    'type'        => 'object',
+                    'description' => '{ preset, params, scrollTrigger, direction? }',
+                ],
+                'label' => [
+                    'type'        => 'string',
+                    'description' => 'Human-friendly label for the audit list.',
+                ],
+            ],
+        ] );
+        register_rest_route( self::NS, '/animation/v2/selector-override/delete', [
+            'methods'             => 'POST',
+            'callback'            => [ $this, 'delete_selector_override' ],
+            'permission_callback' => [ $this, 'can_manage' ],
+            'args'                => [
+                'selector' => [
+                    'required' => true,
+                    'type'     => 'string',
+                ],
+            ],
+        ] );
+
         // ── Plan B — profiles ───────────────────────────────────
         register_rest_route( self::NS, '/animation/profiles', [
             'methods'             => 'GET',
@@ -485,14 +519,15 @@ final class Rest {
                             : [];
 
         return rest_ensure_response( [
-            'version'         => $v2['__version'] ?? '2.0.0',
-            'globals'         => $v2['globals'],
-            'elementRules'    => $v2['elementRules'],
-            'widgetOverrides' => (object) $widget_overrides_resolved,
-            'templateSlug'    => $slug,
-            'widgets'         => $widget_list,
-            'activeProfile'   => Animation_Profiles::active_id(),
-            'allowed'         => [
+            'version'           => $v2['__version'] ?? '2.0.0',
+            'globals'           => $v2['globals'],
+            'elementRules'      => $v2['elementRules'],
+            'widgetOverrides'   => (object) $widget_overrides_resolved,
+            'selectorOverrides' => (object) Animation::selector_overrides(),
+            'templateSlug'      => $slug,
+            'widgets'           => $widget_list,
+            'activeProfile'     => Animation_Profiles::active_id(),
+            'allowed'           => [
                 'intensity'    => Animation::ALLOWED,
                 'direction'    => Animation::DIRECTIONS,
                 'reduceMotion' => Animation::REDUCE_MOTION,
@@ -567,6 +602,31 @@ final class Rest {
         $animation = new Animation( $this->templates );
         if ( ! $animation->set_widget_override( $slug, $widget, $rule ) ) {
             return new \WP_Error( 'bad_widget', 'Invalid template / widget slug', [ 'status' => 400 ] );
+        }
+        return $this->get_animation_v2();
+    }
+
+    /* ─────────────────────────────────────────────────────────────
+     * Niveau 4 — selector-targeted overrides (click-driven Animate)
+     * ──────────────────────────────────────────────────────────── */
+
+    public function set_selector_override( \WP_REST_Request $req ) {
+        $selector = (string) $req->get_param( 'selector' );
+        $rule     = $req->get_param( 'rule' );
+        $label    = (string) ( $req->get_param( 'label' ) ?? '' );
+        if ( ! is_array( $rule ) ) {
+            return new \WP_Error( 'bad_rule', 'rule must be an object', [ 'status' => 400 ] );
+        }
+        if ( ! Animation::set_selector_override( $selector, [ 'rule' => $rule, 'label' => $label ] ) ) {
+            return new \WP_Error( 'bad_selector', 'Invalid selector or rule', [ 'status' => 400 ] );
+        }
+        return $this->get_animation_v2();
+    }
+
+    public function delete_selector_override( \WP_REST_Request $req ) {
+        $selector = (string) $req->get_param( 'selector' );
+        if ( ! Animation::delete_selector_override( $selector ) ) {
+            return new \WP_Error( 'not_found', 'Selector override not found', [ 'status' => 404 ] );
         }
         return $this->get_animation_v2();
     }

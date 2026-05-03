@@ -115,10 +115,15 @@ final class Animation {
         ], $globals );
 
         return [
-            '__version'       => '2.0.0',
-            'globals'         => $globals,
-            'elementRules'    => is_array( $v2['elementRules']    ?? null ) ? $v2['elementRules']    : self::default_element_rules(),
-            'widgetOverrides' => is_array( $v2['widgetOverrides'] ?? null ) ? $v2['widgetOverrides'] : [],
+            '__version'         => '2.0.0',
+            'globals'           => $globals,
+            'elementRules'      => is_array( $v2['elementRules']      ?? null ) ? $v2['elementRules']      : self::default_element_rules(),
+            'widgetOverrides'   => is_array( $v2['widgetOverrides']   ?? null ) ? $v2['widgetOverrides']   : [],
+            // Niveau 4 (Plan A++) — selector-targeted overrides set via
+            // the click-driven Animate Mode in the floating panel.
+            // Map shape: { "<css selector>": { rule, label?, savedAt? } }.
+            // Always wins over Niveau 1/2 because it's the most specific.
+            'selectorOverrides' => is_array( $v2['selectorOverrides'] ?? null ) ? $v2['selectorOverrides'] : new \stdClass(),
         ];
     }
 
@@ -337,6 +342,68 @@ final class Animation {
         return $out;
     }
 
+    /* ─────────────────────────────────────────────────────────────
+     * Selector Overrides — Niveau 4 (click-driven Animate Mode)
+     * ──────────────────────────────────────────────────────────── */
+
+    public static function selector_overrides(): array {
+        $v2 = self::config_v2();
+        $so = $v2['selectorOverrides'] ?? [];
+        if ( $so instanceof \stdClass ) $so = (array) $so;
+        return is_array( $so ) ? $so : [];
+    }
+
+    /**
+     * Save (or replace) a selector-targeted rule.
+     * @param string $selector  CSS selector (free-form, sanitised below).
+     * @param array  $payload   { rule, label? }
+     */
+    public static function set_selector_override( string $selector, array $payload ): bool {
+        $sel = self::sanitize_selector( $selector );
+        if ( $sel === '' ) return false;
+        $rule = is_array( $payload['rule'] ?? null ) ? self::sanitize_rule( $payload['rule'] ) : null;
+        if ( ! is_array( $rule ) || empty( $rule['preset'] ) ) return false;
+
+        $v2 = self::config_v2();
+        $map = is_array( $v2['selectorOverrides'] ?? null ) ? $v2['selectorOverrides'] : [];
+        $map[ $sel ] = [
+            'rule'    => $rule,
+            'label'   => isset( $payload['label'] ) ? sanitize_text_field( (string) $payload['label'] ) : '',
+            'savedAt' => time(),
+        ];
+        $v2['selectorOverrides'] = $map;
+        self::save_v2( $v2 );
+        return true;
+    }
+
+    public static function delete_selector_override( string $selector ): bool {
+        $sel = self::sanitize_selector( $selector );
+        if ( $sel === '' ) return false;
+        $v2 = self::config_v2();
+        $map = is_array( $v2['selectorOverrides'] ?? null ) ? $v2['selectorOverrides'] : [];
+        if ( ! isset( $map[ $sel ] ) ) return false;
+        unset( $map[ $sel ] );
+        $v2['selectorOverrides'] = $map;
+        self::save_v2( $v2 );
+        return true;
+    }
+
+    /**
+     * Sanitise a CSS selector. Allowed: letters, digits, classes, ids,
+     * descendant combinators, attribute selectors, :nth-child(...).
+     * Rejects anything that smells like JS injection (<>, {}, ;, /*).
+     */
+    public static function sanitize_selector( string $sel ): string {
+        $sel = trim( $sel );
+        if ( $sel === '' ) return '';
+        if ( strlen( $sel ) > 500 ) return '';
+        if ( preg_match( '/[<>{};]/', $sel ) ) return '';
+        if ( strpos( $sel, '/*' ) !== false || strpos( $sel, '*/' ) !== false ) return '';
+        // Allow common selector chars: a-z 0-9 . # _ - * > + ~ , space [ ] = " ' : ( )
+        if ( ! preg_match( '/^[a-zA-Z0-9_\-.#\s>+~,*\[\]=\'":()]+$/', $sel ) ) return '';
+        return $sel;
+    }
+
     public function set_widget_override( string $template_slug, string $widget, array $cfg ): bool {
         $template_slug = sanitize_key( $template_slug );
         $widget        = sanitize_key( $widget );
@@ -498,13 +565,14 @@ final class Animation {
         // + the slim element-types selector map. Capped to active template
         // to avoid leaking unrelated slugs to the front-end.
         $payload_v2 = wp_json_encode( [
-            'globals'         => $v2['globals'],
-            'elementRules'    => $v2['elementRules'],
-            'widgetOverrides' => $active_slug !== '' && isset( $v2['widgetOverrides'][ $active_slug ] )
-                                    ? $v2['widgetOverrides'][ $active_slug ]
-                                    : new \stdClass(),
-            'elementTypes'    => (object) $element_types,
-            'templateSlug'    => $active_slug,
+            'globals'           => $v2['globals'],
+            'elementRules'      => $v2['elementRules'],
+            'widgetOverrides'   => $active_slug !== '' && isset( $v2['widgetOverrides'][ $active_slug ] )
+                                        ? $v2['widgetOverrides'][ $active_slug ]
+                                        : new \stdClass(),
+            'selectorOverrides' => self::selector_overrides() ?: new \stdClass(),
+            'elementTypes'      => (object) $element_types,
+            'templateSlug'      => $active_slug,
         ] );
 
         if ( ! is_string( $payload_legacy ) || ! is_string( $payload_anims ) || ! is_string( $payload_v2 ) ) return;
