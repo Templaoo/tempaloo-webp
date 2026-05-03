@@ -110,38 +110,6 @@ final class Rest {
                 ],
             ],
         ] );
-        register_rest_route( self::NS, '/animation', [
-            'methods'             => 'GET',
-            'callback'            => [ $this, 'get_animation' ],
-            'permission_callback' => [ $this, 'can_manage' ],
-        ] );
-        register_rest_route( self::NS, '/animation', [
-            'methods'             => 'POST',
-            'callback'            => [ $this, 'set_animation' ],
-            'permission_callback' => [ $this, 'can_manage' ],
-            'args'                => [
-                'intensity'     => [
-                    'type'        => 'string',
-                    'enum'        => Animation::ALLOWED,
-                    'description' => 'Global animation intensity: off | subtle | medium | bold.',
-                ],
-                'direction'     => [
-                    'type'        => 'string',
-                    'enum'        => Animation::DIRECTIONS,
-                    'description' => 'Default scroll-replay direction: once | replay | bidirectional | scrub.',
-                ],
-                'template_slug' => [
-                    'type'              => 'string',
-                    'sanitize_callback' => 'sanitize_key',
-                    'description'       => 'Template these per-widget presets belong to.',
-                ],
-                'presets'       => [
-                    'type'        => 'object',
-                    'description' => 'widget_slug → { entrance, stagger, duration, trigger, direction }.',
-                ],
-            ],
-        ] );
-
         // ── v2 endpoints — typed schema-driven config (Plan A) ──────
         register_rest_route( self::NS, '/animation/library', [
             'methods'             => 'GET',
@@ -153,94 +121,6 @@ final class Rest {
             'callback'            => [ $this, 'get_animation_v2' ],
             'permission_callback' => [ $this, 'can_manage' ],
         ] );
-        register_rest_route( self::NS, '/animation/v2/globals', [
-            'methods'             => 'POST',
-            'callback'            => [ $this, 'set_globals' ],
-            'permission_callback' => [ $this, 'can_manage' ],
-            'args'                => [
-                'intensity'    => [ 'type' => 'string', 'enum' => Animation::ALLOWED ],
-                'direction'    => [ 'type' => 'string', 'enum' => Animation::DIRECTIONS ],
-                'reduceMotion' => [ 'type' => 'string', 'enum' => Animation::REDUCE_MOTION ],
-            ],
-        ] );
-        register_rest_route( self::NS, '/animation/v2/element-rule', [
-            'methods'             => 'POST',
-            'callback'            => [ $this, 'set_element_rule' ],
-            'permission_callback' => [ $this, 'can_manage' ],
-            'args'                => [
-                'type_id' => [
-                    'required'    => true,
-                    'type'        => 'string',
-                    'enum'        => Animation_Presets::element_type_ids(),
-                    'description' => 'Element type id (h1, h2, p, img, button, container, link).',
-                ],
-                'rule' => [
-                    'required'    => true,
-                    'type'        => 'object',
-                    'description' => '{ enabled, preset, params, scrollTrigger, direction }',
-                ],
-            ],
-        ] );
-        register_rest_route( self::NS, '/animation/v2/element-rule/reset', [
-            'methods'             => 'POST',
-            'callback'            => [ $this, 'reset_element_rule' ],
-            'permission_callback' => [ $this, 'can_manage' ],
-            'args'                => [
-                'type_id' => [
-                    'required' => true,
-                    'type'     => 'string',
-                    'enum'     => Animation_Presets::element_type_ids(),
-                ],
-            ],
-        ] );
-        register_rest_route( self::NS, '/animation/v2/widget-override', [
-            'methods'             => 'POST',
-            'callback'            => [ $this, 'set_widget_override' ],
-            'permission_callback' => [ $this, 'can_manage' ],
-            'args'                => [
-                'template_slug' => [
-                    'required'          => true,
-                    'type'              => 'string',
-                    'sanitize_callback' => 'sanitize_key',
-                ],
-                'widget' => [
-                    'required'          => true,
-                    'type'              => 'string',
-                    'sanitize_callback' => 'sanitize_key',
-                ],
-                'rule' => [
-                    'required' => true,
-                    'type'     => 'object',
-                ],
-            ],
-        ] );
-
-        // ── Sprint 2 — cursor + scroll site-wide settings ───────────
-        register_rest_route( self::NS, '/animation/v2/cursor', [
-            'methods'             => 'POST',
-            'callback'            => [ $this, 'set_cursor' ],
-            'permission_callback' => [ $this, 'can_manage' ],
-            'args'                => [
-                'patch' => [
-                    'required'    => true,
-                    'type'        => 'object',
-                    'description' => '{ type, smooth, accent, bg, size, mixBlendMode, hover.scale }',
-                ],
-            ],
-        ] );
-        register_rest_route( self::NS, '/animation/v2/scroll', [
-            'methods'             => 'POST',
-            'callback'            => [ $this, 'set_scroll' ],
-            'permission_callback' => [ $this, 'can_manage' ],
-            'args'                => [
-                'patch' => [
-                    'required'    => true,
-                    'type'        => 'object',
-                    'description' => '{ engine, duration, lerp, wheelMultiplier, excludePages, gsapSource }',
-                ],
-            ],
-        ] );
-
         // ── Niveau 4 — selector-targeted overrides (Animate Mode) ──
         register_rest_route( self::NS, '/animation/v2/selector-override', [
             'methods'             => 'POST',
@@ -452,66 +332,6 @@ final class Rest {
         return rest_ensure_response( [ 'pages' => $pages, 'menus' => $menus ] );
     }
 
-    public function get_animation(): \WP_REST_Response {
-        $active = $this->templates->active();
-        $slug   = $active ? (string) $active['slug'] : '';
-
-        $animation = new Animation( $this->templates );
-        $presets   = $slug !== '' ? $animation->presets_for( $slug ) : [];
-
-        // Group preset names by category for nicer dropdowns in the admin.
-        $entrance_text = [
-            'word-fade-up', 'word-fade-blur', 'word-slide-up-overflow',
-            'char-up', 'line-fade-up-stagger', 'text-typing', 'text-fill-sweep',
-            'scroll-words-fill', 'editorial-stack',
-        ];
-        $entrance_element = array_values( array_diff( Animation::PRESETS, $entrance_text ) );
-
-        return rest_ensure_response( [
-            'intensity'           => Animation::intensity(),
-            'direction'           => Animation::direction(),
-            'allowed'             => Animation::ALLOWED,
-            'directions_allowed'  => Animation::DIRECTIONS,
-            'presets_allowed'     => Animation::PRESETS,
-            'presets_grouped'     => [
-                'element' => $entrance_element,
-                'text'    => $entrance_text,
-            ],
-            'template_slug'       => $slug,
-            'widgets'             => $active && is_array( $active['widgets'] ?? null ) ? array_values( $active['widgets'] ) : [],
-            'presets'             => (object) $presets,
-        ] );
-    }
-
-    public function set_animation( \WP_REST_Request $req ) {
-        $intensity     = $req->get_param( 'intensity' );
-        $direction     = $req->get_param( 'direction' );
-        $presets       = $req->get_param( 'presets' );
-        $template_slug = sanitize_key( (string) ( $req->get_param( 'template_slug' ) ?? '' ) );
-
-        if ( $intensity !== null && $intensity !== '' ) {
-            if ( ! Animation::set_intensity( (string) $intensity ) ) {
-                return new \WP_Error( 'bad_intensity', 'Allowed values: ' . implode( ', ', Animation::ALLOWED ), [ 'status' => 400 ] );
-            }
-        }
-
-        if ( $direction !== null && $direction !== '' ) {
-            if ( ! Animation::set_direction( (string) $direction ) ) {
-                return new \WP_Error( 'bad_direction', 'Allowed values: ' . implode( ', ', Animation::DIRECTIONS ), [ 'status' => 400 ] );
-            }
-        }
-
-        if ( is_array( $presets ) && $template_slug !== '' ) {
-            $animation = new Animation( $this->templates );
-            foreach ( $presets as $widget => $cfg ) {
-                if ( ! is_array( $cfg ) ) continue;
-                $animation->set_preset( $template_slug, (string) $widget, $cfg );
-            }
-        }
-
-        return $this->get_animation();
-    }
-
     /* ─────────────────────────────────────────────────────────────
      * v2 endpoints — Plan A typed schema
      * ──────────────────────────────────────────────────────────── */
@@ -527,18 +347,12 @@ final class Rest {
 
     /**
      * GET /animation/v2 — full v2 config (globals + element rules +
-     * widget overrides for active template) plus context the admin
-     * needs (active slug, widget list).
+     * selector overrides) plus context the admin needs.
      */
     public function get_animation_v2(): \WP_REST_Response {
         $v2     = Animation::config_v2();
         $active = $this->templates->active();
         $slug   = $active ? (string) $active['slug'] : '';
-
-        $animation = new Animation( $this->templates );
-        $widget_overrides_resolved = $slug !== ''
-            ? $animation->widget_overrides_for( $slug )
-            : [];
 
         $widget_list = ( $active && is_array( $active['widgets'] ?? null ) )
                             ? array_values( $active['widgets'] )
@@ -548,10 +362,7 @@ final class Rest {
             'version'           => $v2['__version'] ?? '2.0.0',
             'globals'           => $v2['globals'],
             'elementRules'      => $v2['elementRules'],
-            'widgetOverrides'   => (object) $widget_overrides_resolved,
             'selectorOverrides' => (object) Animation::selector_overrides(),
-            'cursor'            => Animation::cursor_settings(),
-            'scroll'            => Animation::scroll_settings(),
             'templateSlug'      => $slug,
             'widgets'           => $widget_list,
             'activeProfile'     => Animation_Profiles::active_id(),
@@ -561,102 +372,8 @@ final class Rest {
                 'reduceMotion' => Animation::REDUCE_MOTION,
                 'elementTypes' => Animation_Presets::element_type_ids(),
                 'presets'      => Animation_Presets::preset_ids(),
-                'cursorTypes'  => Animation::CURSOR_TYPES,
-                'scrollEngines'=> Animation::SCROLL_ENGINES,
-                'gsapSources'  => Animation::GSAP_SOURCES,
             ],
         ] );
-    }
-
-    /**
-     * POST /animation/v2/globals — set intensity / direction / reduceMotion.
-     */
-    public function set_globals( \WP_REST_Request $req ) {
-        $intensity = $req->get_param( 'intensity' );
-        $direction = $req->get_param( 'direction' );
-        $reduce    = $req->get_param( 'reduceMotion' );
-
-        if ( $intensity !== null && $intensity !== '' ) {
-            if ( ! Animation::set_intensity( (string) $intensity ) ) {
-                return new \WP_Error( 'bad_intensity', 'Invalid intensity', [ 'status' => 400 ] );
-            }
-        }
-        if ( $direction !== null && $direction !== '' ) {
-            if ( ! Animation::set_direction( (string) $direction ) ) {
-                return new \WP_Error( 'bad_direction', 'Invalid direction', [ 'status' => 400 ] );
-            }
-        }
-        if ( $reduce !== null && $reduce !== '' ) {
-            if ( ! Animation::set_reduce_motion( (string) $reduce ) ) {
-                return new \WP_Error( 'bad_reduce_motion', 'Invalid reduceMotion', [ 'status' => 400 ] );
-            }
-        }
-        return $this->get_animation_v2();
-    }
-
-    /**
-     * POST /animation/v2/element-rule — { type_id, rule }.
-     */
-    public function set_element_rule( \WP_REST_Request $req ) {
-        $type_id = (string) $req->get_param( 'type_id' );
-        $rule    = $req->get_param( 'rule' );
-        if ( ! is_array( $rule ) ) {
-            return new \WP_Error( 'bad_rule', 'rule must be an object', [ 'status' => 400 ] );
-        }
-        if ( ! Animation::set_element_rule( $type_id, $rule ) ) {
-            return new \WP_Error( 'bad_type', 'Unknown element type', [ 'status' => 400 ] );
-        }
-        return $this->get_animation_v2();
-    }
-
-    /**
-     * POST /animation/v2/element-rule/reset — { type_id }.
-     */
-    public function reset_element_rule( \WP_REST_Request $req ) {
-        $type_id = (string) $req->get_param( 'type_id' );
-        if ( ! Animation::reset_element_rule( $type_id ) ) {
-            return new \WP_Error( 'bad_type', 'Unknown element type', [ 'status' => 400 ] );
-        }
-        return $this->get_animation_v2();
-    }
-
-    /**
-     * POST /animation/v2/widget-override — { template_slug, widget, rule }.
-     */
-    public function set_widget_override( \WP_REST_Request $req ) {
-        $slug   = (string) $req->get_param( 'template_slug' );
-        $widget = (string) $req->get_param( 'widget' );
-        $rule   = $req->get_param( 'rule' );
-        if ( ! is_array( $rule ) ) {
-            return new \WP_Error( 'bad_rule', 'rule must be an object', [ 'status' => 400 ] );
-        }
-        $animation = new Animation( $this->templates );
-        if ( ! $animation->set_widget_override( $slug, $widget, $rule ) ) {
-            return new \WP_Error( 'bad_widget', 'Invalid template / widget slug', [ 'status' => 400 ] );
-        }
-        return $this->get_animation_v2();
-    }
-
-    /* ─────────────────────────────────────────────────────────────
-     * Sprint 2 — Cursor / Scroll / GSAP source
-     * ──────────────────────────────────────────────────────────── */
-
-    public function set_cursor( \WP_REST_Request $req ) {
-        $patch = $req->get_param( 'patch' );
-        if ( ! is_array( $patch ) ) return new \WP_Error( 'bad_patch', 'patch must be an object', [ 'status' => 400 ] );
-        if ( ! Animation::set_cursor_settings( $patch ) ) {
-            return new \WP_Error( 'bad_cursor', 'Invalid cursor settings', [ 'status' => 400 ] );
-        }
-        return $this->get_animation_v2();
-    }
-
-    public function set_scroll( \WP_REST_Request $req ) {
-        $patch = $req->get_param( 'patch' );
-        if ( ! is_array( $patch ) ) return new \WP_Error( 'bad_patch', 'patch must be an object', [ 'status' => 400 ] );
-        if ( ! Animation::set_scroll_settings( $patch ) ) {
-            return new \WP_Error( 'bad_scroll', 'Invalid scroll settings', [ 'status' => 400 ] );
-        }
-        return $this->get_animation_v2();
     }
 
     /* ─────────────────────────────────────────────────────────────

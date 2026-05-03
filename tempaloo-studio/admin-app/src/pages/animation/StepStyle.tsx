@@ -1,27 +1,23 @@
 import type { AnimationProfile } from '../../api';
 
 /**
- * Step 1 — Pick a style.
- * One question per screen (ux-flow skill: "one screen, one decision").
- * Profile cards include a mini live-preview strip and a clear primary
- * action ("Continue") at the bottom.
+ * Profile picker — one click applies a complete bundle of GSAP rules
+ * (globals + per-tag presets) site-wide. The four built-ins ship with
+ * the plugin; user-defined profiles appear with a "custom" pill.
  */
 export function StepStyle({
-  profiles, active, onPick, onCustom, onContinue,
+  profiles, active, onPick,
 }: {
-  profiles:   AnimationProfile[];
-  active:     string;          // currently applied profile id
-  onPick:     (id: string) => void;
-  onCustom:   () => void;      // jumps to step 2 with no profile (custom mode)
-  onContinue: () => void;      // moves to step 2
+  profiles: AnimationProfile[];
+  active:   string;
+  onPick:   (id: string) => void;
 }) {
   return (
     <div className="tsa-wizard-step">
       <header className="tsa-wizard-step__head">
-        <div className="tsa-wizard-step__num">1 / 3</div>
         <h2 className="tsa-wizard-step__title">Pick a style</h2>
         <p className="tsa-wizard-step__lead">
-          Each style is a complete bundle of GSAP rules. You can fine-tune it next, or jump in custom.
+          Each style is a complete bundle of GSAP rules. Click one to apply site-wide.
         </p>
       </header>
 
@@ -43,24 +39,7 @@ export function StepStyle({
             </button>
           );
         })}
-
-        <button type="button" className="tsa-wizard-card tsa-wizard-card--custom" onClick={onCustom}>
-          <div className="tsa-wizard-card__preview tsa-wizard-card__preview--blank" />
-          <div className="tsa-wizard-card__title">Start custom</div>
-          <div className="tsa-wizard-card__desc">Skip the preset and configure each element manually.</div>
-        </button>
       </div>
-
-      <footer className="tsa-wizard-step__footer">
-        <button
-          type="button"
-          className="tsa-btn-primary"
-          disabled={!active}
-          onClick={onContinue}
-        >
-          Continue →
-        </button>
-      </footer>
     </div>
   );
 }

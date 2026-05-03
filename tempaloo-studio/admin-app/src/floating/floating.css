@@ -1762,61 +1762,6 @@
   text-align: center;
 }
 
-/* Sticky steps row at top — compact pill style, wraps on narrow widths. */
-.tsa-fp-anim__steps {
-  display: flex;
-  gap: 4px;
-  flex-wrap: nowrap;
-  border-bottom: 1px solid var(--tsa-border, #ddd);
-  padding-bottom: 8px;
-  flex-shrink: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.tsa-fp-anim__steps::-webkit-scrollbar { display: none; }
-.tsa-fp-anim__step {
-  flex: 1 1 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 5px 8px;
-  background: transparent;
-  border: 1px solid var(--tsa-border, rgba(245,244,239,0.12));
-  border-radius: 999px;
-  font-family: inherit;
-  font-size: 11px;
-  cursor: pointer;
-  color: var(--tsa-text-soft, #888);
-  transition: border-color 140ms ease, color 140ms ease, background 140ms ease;
-  white-space: nowrap;
-  min-width: 0;
-}
-.tsa-fp-anim__step:hover { color: var(--tsa-text, #fff); border-color: rgba(255,255,255,0.2); }
-.tsa-fp-anim__step.is-active {
-  border-color: var(--tsa-accent, #10b981);
-  color: var(--tsa-text, #fff);
-  background: rgba(16, 185, 129, 0.1);
-}
-.tsa-fp-anim__step.is-past { color: var(--tsa-accent, #10b981); }
-.tsa-fp-anim__stepnum {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px; height: 16px;
-  border-radius: 50%;
-  background: rgba(255,255,255,0.06);
-  font-weight: 700;
-  font-size: 10px;
-  flex-shrink: 0;
-}
-.tsa-fp-anim__step.is-active .tsa-fp-anim__stepnum,
-.tsa-fp-anim__step.is-past   .tsa-fp-anim__stepnum {
-  background: var(--tsa-accent, #10b981);
-  color: #0c100f;
-}
-.tsa-fp-anim__steplabel { font-weight: 600; }
-
 /* Single scrollable surface — body owns all overflow. */
 .tsa-fp-anim__body {
   flex: 1 1 auto;
@@ -1932,28 +1877,6 @@
 .tsa-fp-anim .tsa-am-audit__row { padding: 5px 8px; gap: 6px; }
 .tsa-fp-anim .tsa-am-audit__btn { width: 20px; height: 20px; font-size: 11px; }
 .tsa-fp-anim .tsa-am-audit__sub { font-size: 10px; gap: 6px; }
-/* StepAdvanced + element rows fit narrow */
-.tsa-fp-anim__body .tsa-anim-element-row__head {
-  padding: 8px 10px;
-  gap: 8px;
-}
-.tsa-fp-anim__body .tsa-anim-element-row__name { min-width: 0; font-size: 12px; }
-.tsa-fp-anim__body .tsa-anim-element-row__preset { font-size: 11px; }
-.tsa-fp-anim__body .tsa-anim-element-row__selectors { display: none; }
-.tsa-fp-anim__body .tsa-anim-element-row__body { padding: 10px 12px; }
-.tsa-fp-anim__body .tsa-anim-rule-editor__group { padding: 8px 10px; }
-.tsa-fp-anim__body .tsa-anim-row__controls {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-.tsa-fp-anim__body .tsa-anim-row__field--full,
-.tsa-fp-anim__body .tsa-anim-row__field--check { grid-column: 1 / -1; }
-.tsa-fp-anim__body .tsa-anim-row__label { font-size: 9px; }
-.tsa-fp-anim__body .tsa-anim-row__num   { font-size: 10px; min-width: 32px; }
-.tsa-fp-anim__body .tsa-tk-select,
-.tsa-fp-anim__body .tsa-tk-input { font-size: 11px; padding: 4px 6px; }
-
 /* Wizard buttons (Done / Back / Cancel) — match the panel's btn aesthetic.
    The wizard's default .tsa-btn-primary uses admin-page tokens which
    render flat-white on the panel. Replace with the panel's accent
@@ -1991,28 +1914,6 @@
 .tsa-fp-anim__body .tsa-btn-ghost:hover {
   border-color: var(--tsa-accent) !important;
   color: var(--tsa-text) !important;
-}
-
-/* Step strip — make active step accent-filled (better readability than
-   the previous translucent green on dark green). */
-.tsa-fp-anim__step {
-  background: var(--tsa-bg-strong);
-}
-.tsa-fp-anim__step.is-active {
-  background: var(--tsa-accent);
-  color: var(--tsa-accent-text, #0c100f);
-  border-color: var(--tsa-accent);
-}
-.tsa-fp-anim__step.is-active .tsa-fp-anim__stepnum {
-  background: rgba(0,0,0,0.25);
-  color: var(--tsa-accent-text, #0c100f);
-}
-.tsa-fp-anim__step.is-active .tsa-fp-anim__steplabel {
-  color: var(--tsa-accent-text, #0c100f) !important;
-}
-.tsa-fp-anim__step.is-past {
-  border-color: var(--tsa-accent);
-  color: var(--tsa-accent);
 }
 
 /* Animation profile picker (toolbar dropdown) */

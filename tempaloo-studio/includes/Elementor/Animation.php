@@ -3,21 +3,18 @@
  * Animation — emits the user's animation config to the runtime so widget
  * markup can opt into entrance animations via data attributes alone.
  *
- * v2 (Plan A) hierarchical model — 4 levels of resolution at runtime:
+ * v2 hierarchical model — 3 levels of resolution at runtime:
  *
- *   0. GLOBALS                  intensity, direction, reduce-motion strategy.
- *   1. ELEMENT TYPE RULES       per-tag presets (h1/h2/h3/p/img/button/container/link).
- *   2. WIDGET SCOPE OVERRIDES   per-widget overrides (hero/services/faq/...).
- *   3. TARGETED OVERRIDES       per-selector overrides (Plan A++ slot, see todo).
+ *   0. GLOBALS              intensity, direction, reduce-motion strategy.
+ *   1. ELEMENT TYPE RULES   per-tag presets (h1/h2/h3/p/img/button/container/link).
+ *                            Driven by the active animation profile.
+ *   2. SELECTOR OVERRIDES   per-CSS-selector overrides (click-driven Animate Mode).
  *
- * Two payloads emitted in the head:
+ * Payloads emitted in the head:
  *
  *   1. window.tempaloo.studio.animation = { intensity, direction }
- *   2. window.tempaloo.studio.anims     = legacy widget config (kept for
- *                                          backward compatibility while we
- *                                          migrate runtime callers to v2).
- *   3. window.tempaloo.studio.animV2    = { globals, elementRules,
- *                                           widgetOverrides, library }
+ *   2. window.tempaloo.studio.animV2    = { globals, elementRules,
+ *                                           selectorOverrides, elementTypes }
  *
  * The schema/library lives in assets/data/anim-presets.json — see
  * Animation_Presets for the loader. Adding a preset there exposes it to
@@ -101,7 +98,7 @@ final class Animation {
      * {
      *   globals: { intensity, direction, reduceMotion },
      *   elementRules: { h1: {preset, params, scrollTrigger}, ... },
-     *   widgetOverrides: { template_slug: { widget_slug: {preset, params, scrollTrigger, direction} } }
+     *   selectorOverrides: { "<css selector>": { rule, label?, savedAt? } }
      * }
      */
     public static function config_v2(): array {
@@ -109,7 +106,6 @@ final class Animation {
         if ( is_array( $v2 ) && ! empty( $v2['__version'] ) ) {
             return self::with_defaults( $v2 );
         }
-        // Auto-migrate from v1.
         $migrated = self::migrate_from_v1();
         update_option( self::OPTION_V2, $migrated );
         return $migrated;
@@ -131,11 +127,9 @@ final class Animation {
             '__version'         => '2.0.0',
             'globals'           => $globals,
             'elementRules'      => is_array( $v2['elementRules']      ?? null ) ? $v2['elementRules']      : self::default_element_rules(),
-            'widgetOverrides'   => is_array( $v2['widgetOverrides']   ?? null ) ? $v2['widgetOverrides']   : [],
-            // Niveau 4 (Plan A++) — selector-targeted overrides set via
-            // the click-driven Animate Mode in the floating panel.
-            // Map shape: { "<css selector>": { rule, label?, savedAt? } }.
-            // Always wins over Niveau 1/2 because it's the most specific.
+            // Selector-targeted overrides set via the click-driven Animate
+            // Mode in the floating panel. Map: { "<css selector>": { rule, label?, savedAt? } }.
+            // Always wins over elementRules because it's more specific.
             'selectorOverrides' => is_array( $v2['selectorOverrides'] ?? null ) ? $v2['selectorOverrides'] : new \stdClass(),
         ];
     }
@@ -160,64 +154,23 @@ final class Animation {
     }
 
     /**
-     * Migrate the v1 storage (intensity / direction / per-widget presets)
-     * into the v2 hierarchical shape. Idempotent: runs only when v2
-     * doesn't exist yet.
+     * Migrate the v1 storage (intensity / direction) into the v2
+     * hierarchical shape. Idempotent: runs only when v2 doesn't exist yet.
+     * Per-widget v1 presets are intentionally dropped — profiles now
+     * cover that surface uniformly.
      */
     private static function migrate_from_v1(): array {
         $intensity = get_option( self::OPTION_INTENSITY, self::DEFAULT_ );
         $direction = get_option( self::OPTION_DIRECTION, self::DEFAULT_DIRECTION );
-        $presets_v1 = get_option( self::OPTION_PRESETS, [] );
-
-        $widget_overrides = [];
-        if ( is_array( $presets_v1 ) ) {
-            foreach ( $presets_v1 as $template_slug => $widget_map ) {
-                if ( ! is_array( $widget_map ) ) continue;
-                $clean_template = sanitize_key( (string) $template_slug );
-                if ( $clean_template === '' ) continue;
-                foreach ( $widget_map as $widget_slug => $cfg ) {
-                    if ( ! is_array( $cfg ) ) continue;
-                    $clean_widget = sanitize_key( (string) $widget_slug );
-                    if ( $clean_widget === '' ) continue;
-                    // v1 stored { entrance, stagger, duration, trigger, direction }
-                    // → translate to v2 { preset, params, scrollTrigger, direction }
-                    $entrance = (string) ( $cfg['entrance'] ?? '' );
-                    if ( $entrance === '' || ! in_array( $entrance, Animation_Presets::preset_ids(), true ) ) continue;
-
-                    $params = Animation_Presets::preset_defaults( $entrance );
-                    if ( isset( $cfg['stagger'] ) && is_numeric( $cfg['stagger'] ) ) {
-                        // v1 was milliseconds, schema is seconds.
-                        $s = max( 0, min( 0.5, ( (float) $cfg['stagger'] ) / 1000 ) );
-                        if ( array_key_exists( 'stagger', $params ) ) $params['stagger'] = $s;
-                    }
-                    if ( isset( $cfg['duration'] ) && is_numeric( $cfg['duration'] ) ) {
-                        if ( array_key_exists( 'duration', $params ) ) $params['duration'] = (float) $cfg['duration'];
-                    }
-
-                    $st = Animation_Presets::preset_scrolltrigger_defaults( $entrance );
-                    if ( isset( $cfg['trigger'] ) && is_string( $cfg['trigger'] ) ) {
-                        $st['start'] = (string) $cfg['trigger'];
-                    }
-
-                    $widget_overrides[ $clean_template ][ $clean_widget ] = [
-                        'preset'        => $entrance,
-                        'params'        => $params,
-                        'scrollTrigger' => $st,
-                        'direction'     => isset( $cfg['direction'] ) ? (string) $cfg['direction'] : '',
-                    ];
-                }
-            }
-        }
 
         return self::with_defaults( [
-            '__version'       => '2.0.0',
-            'globals'         => [
+            '__version'    => '2.0.0',
+            'globals'      => [
                 'intensity'    => is_string( $intensity ) ? $intensity : self::DEFAULT_,
                 'direction'    => is_string( $direction ) ? $direction : self::DEFAULT_DIRECTION,
                 'reduceMotion' => 'subtle',
             ],
-            'elementRules'    => self::default_element_rules(),
-            'widgetOverrides' => $widget_overrides,
+            'elementRules' => self::default_element_rules(),
         ] );
     }
 
@@ -373,83 +326,11 @@ final class Animation {
     }
 
     /* ─────────────────────────────────────────────────────────────
-     * Element Rules — Niveau 1
+     * Element Rules — Niveau 1 (driven by the active profile)
      * ──────────────────────────────────────────────────────────── */
 
     public static function element_rules(): array {
         return self::config_v2()['elementRules'];
-    }
-
-    /**
-     * Replace the whole rule for one element type. The caller is
-     * expected to send a sanitized payload (see Rest::set_element_rule).
-     */
-    public static function set_element_rule( string $type_id, array $rule ): bool {
-        if ( ! in_array( $type_id, Animation_Presets::element_type_ids(), true ) ) return false;
-        $v2 = self::config_v2();
-        $v2['elementRules'][ $type_id ] = self::sanitize_rule( $rule );
-        self::save_v2( $v2 );
-        return true;
-    }
-
-    public static function reset_element_rule( string $type_id ): bool {
-        if ( ! in_array( $type_id, Animation_Presets::element_type_ids(), true ) ) return false;
-        $v2 = self::config_v2();
-        $defaults = self::default_element_rules();
-        $v2['elementRules'][ $type_id ] = $defaults[ $type_id ] ?? [];
-        self::save_v2( $v2 );
-        return true;
-    }
-
-    /* ─────────────────────────────────────────────────────────────
-     * Widget Overrides — Niveau 2
-     * ──────────────────────────────────────────────────────────── */
-
-    /**
-     * Per-template widget overrides, merged with template.json defaults.
-     */
-    public function widget_overrides_for( string $template_slug ): array {
-        $v2 = self::config_v2();
-        $stored = is_array( $v2['widgetOverrides'][ $template_slug ] ?? null )
-                ? $v2['widgetOverrides'][ $template_slug ]
-                : [];
-
-        // Merge template.json defaults — template.animations.presets[widget].
-        $tpl_defaults = [];
-        if ( $this->templates ) {
-            $tpl = $this->templates->get( $template_slug );
-            if ( $tpl ) {
-                $defaults = is_array( $tpl['animations']['presets'] ?? null ) ? $tpl['animations']['presets'] : [];
-                foreach ( $defaults as $widget => $cfg ) {
-                    if ( ! is_array( $cfg ) ) continue;
-                    $entrance = (string) ( $cfg['entrance'] ?? '' );
-                    if ( $entrance === '' ) continue;
-                    $params = Animation_Presets::preset_defaults( $entrance );
-                    if ( isset( $cfg['stagger'] ) && array_key_exists( 'stagger', $params ) ) {
-                        $params['stagger'] = max( 0, min( 0.5, ( (float) $cfg['stagger'] ) / 1000 ) );
-                    }
-                    if ( isset( $cfg['duration'] ) && array_key_exists( 'duration', $params ) ) {
-                        $params['duration'] = (float) $cfg['duration'];
-                    }
-                    $st = Animation_Presets::preset_scrolltrigger_defaults( $entrance );
-                    if ( isset( $cfg['trigger'] ) ) $st['start'] = (string) $cfg['trigger'];
-
-                    $tpl_defaults[ (string) $widget ] = [
-                        'preset'        => $entrance,
-                        'params'        => $params,
-                        'scrollTrigger' => $st,
-                        'direction'     => '',
-                    ];
-                }
-            }
-        }
-
-        $out = $tpl_defaults;
-        foreach ( $stored as $widget => $cfg ) {
-            if ( ! is_array( $cfg ) ) continue;
-            $out[ (string) $widget ] = array_merge( $out[ (string) $widget ] ?? [], $cfg );
-        }
-        return $out;
     }
 
     /* ─────────────────────────────────────────────────────────────
@@ -479,14 +360,6 @@ final class Animation {
         $so = $v2['selectorOverrides'] ?? [];
         if ( $so instanceof \stdClass ) $so = (array) $so;
         if ( is_array( $so ) && ! empty( $so ) ) return true;
-
-        // Niveau 2 — any widget override across any template.
-        foreach ( (array) ( $v2['widgetOverrides'] ?? [] ) as $tpl_overrides ) {
-            if ( ! is_array( $tpl_overrides ) ) continue;
-            foreach ( $tpl_overrides as $rule ) {
-                if ( is_array( $rule ) && ! empty( $rule['preset'] ) ) return true;
-            }
-        }
 
         // Niveau 1 — any element rule with a preset that's not "none".
         foreach ( (array) ( $v2['elementRules'] ?? [] ) as $rule ) {
@@ -548,67 +421,6 @@ final class Animation {
         // Allow common selector chars: a-z 0-9 . # _ - * > + ~ , space [ ] = " ' : ( )
         if ( ! preg_match( '/^[a-zA-Z0-9_\-.#\s>+~,*\[\]=\'":()]+$/', $sel ) ) return '';
         return $sel;
-    }
-
-    public function set_widget_override( string $template_slug, string $widget, array $cfg ): bool {
-        $template_slug = sanitize_key( $template_slug );
-        $widget        = sanitize_key( $widget );
-        if ( $template_slug === '' || $widget === '' ) return false;
-        $v2 = self::config_v2();
-        if ( ! isset( $v2['widgetOverrides'][ $template_slug ] ) || ! is_array( $v2['widgetOverrides'][ $template_slug ] ) ) {
-            $v2['widgetOverrides'][ $template_slug ] = [];
-        }
-        $v2['widgetOverrides'][ $template_slug ][ $widget ] = self::sanitize_rule( $cfg, true );
-        self::save_v2( $v2 );
-        return true;
-    }
-
-    /**
-     * Legacy v1 shim — keeps the front-end PHP path that emits
-     * `window.tempaloo.studio.anims` working until the runtime fully
-     * adopts v2. Maps v2 widget overrides → v1 shape.
-     */
-    public function presets_for( string $template_slug ): array {
-        $overrides = $this->widget_overrides_for( $template_slug );
-        $out = [];
-        foreach ( $overrides as $widget => $rule ) {
-            if ( empty( $rule['preset'] ) ) continue;
-            $params = is_array( $rule['params'] ?? null ) ? $rule['params'] : [];
-            $st     = is_array( $rule['scrollTrigger'] ?? null ) ? $rule['scrollTrigger'] : [];
-            $out[ (string) $widget ] = [
-                'entrance'  => (string) $rule['preset'],
-                'stagger'   => isset( $params['stagger'] )  ? (int) round( ( (float) $params['stagger'] ) * 1000 ) : 0,
-                'duration'  => isset( $params['duration'] ) ? (float) $params['duration'] : 0.7,
-                'trigger'   => isset( $st['start'] ) ? (string) $st['start'] : 'top 85%',
-                'direction' => isset( $rule['direction'] ) ? (string) $rule['direction'] : '',
-            ];
-        }
-        return $out;
-    }
-
-    /**
-     * Legacy v1 shim for existing callers (Rest::set_animation old path).
-     */
-    public function set_preset( string $template_slug, string $widget, array $cfg ): bool {
-        $entrance = (string) ( $cfg['entrance'] ?? '' );
-        if ( $entrance === '' || ! in_array( $entrance, Animation_Presets::preset_ids(), true ) ) return false;
-        $params = Animation_Presets::preset_defaults( $entrance );
-        if ( isset( $cfg['stagger'] ) && is_numeric( $cfg['stagger'] ) && array_key_exists( 'stagger', $params ) ) {
-            $params['stagger'] = max( 0, min( 0.5, ( (float) $cfg['stagger'] ) / 1000 ) );
-        }
-        if ( isset( $cfg['duration'] ) && is_numeric( $cfg['duration'] ) && array_key_exists( 'duration', $params ) ) {
-            $params['duration'] = (float) $cfg['duration'];
-        }
-        $st = Animation_Presets::preset_scrolltrigger_defaults( $entrance );
-        if ( isset( $cfg['trigger'] ) && is_string( $cfg['trigger'] ) ) $st['start'] = (string) $cfg['trigger'];
-
-        $rule = [
-            'preset'        => $entrance,
-            'params'        => $params,
-            'scrollTrigger' => $st,
-            'direction'     => isset( $cfg['direction'] ) && is_string( $cfg['direction'] ) ? (string) $cfg['direction'] : '',
-        ];
-        return $this->set_widget_override( $template_slug, $widget, $rule );
     }
 
     /* ─────────────────────────────────────────────────────────────
@@ -711,24 +523,11 @@ final class Animation {
         $v2 = self::config_v2();
         $intensity = self::intensity();
 
-        // Resolve per-widget config for the active template (v1 shim).
-        $anims = [];
         $active_slug = '';
         if ( $this->templates ) {
             $active = $this->templates->active();
-            if ( $active ) {
-                $active_slug = (string) $active['slug'];
-                $anims       = $this->presets_for( $active_slug );
-            }
+            if ( $active ) $active_slug = (string) $active['slug'];
         }
-
-        /**
-         * Filter — modify per-widget animation config before serialize.
-         * @param array  $anims        widget_slug => { entrance, stagger, trigger, duration }
-         * @param string $active_slug  active template slug (or '')
-         * @param string $intensity    resolved intensity
-         */
-        $anims = (array) apply_filters( 'tempaloo_studio_anims', $anims, $active_slug, $intensity );
 
         // Slim element-types map (id → selectors) for the runtime
         // resolver. We don't ship the whole library for performance —
@@ -746,24 +545,16 @@ final class Animation {
             'direction' => self::direction(),
             'cursor'    => self::cursor_settings(),
         ] );
-        $payload_anims = wp_json_encode( (object) $anims );
 
-        // v2 runtime payload — consumed by the new resolver in animations.js.
-        // Includes element rules + widget overrides for the active template
-        // + the slim element-types selector map. Capped to active template
-        // to avoid leaking unrelated slugs to the front-end.
         $payload_v2 = wp_json_encode( [
             'globals'           => $v2['globals'],
             'elementRules'      => $v2['elementRules'],
-            'widgetOverrides'   => $active_slug !== '' && isset( $v2['widgetOverrides'][ $active_slug ] )
-                                        ? $v2['widgetOverrides'][ $active_slug ]
-                                        : new \stdClass(),
             'selectorOverrides' => self::selector_overrides() ?: new \stdClass(),
             'elementTypes'      => (object) $element_types,
             'templateSlug'      => $active_slug,
         ] );
 
-        if ( ! is_string( $payload_legacy ) || ! is_string( $payload_anims ) || ! is_string( $payload_v2 ) ) return;
+        if ( ! is_string( $payload_legacy ) || ! is_string( $payload_v2 ) ) return;
 
         $cursor_payload = wp_json_encode( self::cursor_settings() );
         $scroll_payload = wp_json_encode( self::scroll_settings() );
@@ -774,7 +565,6 @@ final class Animation {
             . "window.tempaloo=window.tempaloo||{};"
             . "window.tempaloo.studio=window.tempaloo.studio||{};"
             . "window.tempaloo.studio.animation=" . $payload_legacy . ";"
-            . "window.tempaloo.studio.anims="     . $payload_anims  . ";"
             . "window.tempaloo.studio.animV2="    . $payload_v2     . ";"
             . "window.tempaloo.studio.cursor="    . $cursor_payload . ";"
             . "window.tempaloo.studio.scroll="    . $scroll_payload . ";"

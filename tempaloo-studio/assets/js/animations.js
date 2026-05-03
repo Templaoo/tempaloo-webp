@@ -1403,17 +1403,13 @@
         var stCfg = hasST() && trig !== 'none' ? { trigger: rootEl, start: trig } : null;
         if (ts.editAware) stCfg = ts.editAware(stCfg);
 
-        // Pull `delay` (and any future v2 param) directly from the v2
-        // payload. The v1 shim doesn't carry delay — reading v2 here
-        // means the runtime always honours the full param surface
-        // configured in the React admin without us having to widen the
-        // legacy shim shape.
-        var v2Widget = (window.tempaloo && window.tempaloo.studio &&
-                        window.tempaloo.studio.animV2 &&
-                        window.tempaloo.studio.animV2.widgetOverrides &&
-                        window.tempaloo.studio.animV2.widgetOverrides[scope]) || null;
-        var v2Params = (v2Widget && v2Widget.params) || {};
-        var delay    = (typeof v2Params.delay === 'number') ? v2Params.delay : 0;
+        // applyEntrance is fed by the legacy widget-scope path. Widget
+        // overrides were removed when the admin UI was simplified to
+        // "profile + click-to-animate", so v2Params is always empty and
+        // delay defaults to 0. Element rules and selector overrides
+        // carry their own delay through their respective resolvers.
+        var v2Params = {};
+        var delay    = 0;
 
         var opts = {
             stagger:       stMs / 1000,

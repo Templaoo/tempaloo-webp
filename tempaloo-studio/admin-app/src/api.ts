@@ -44,41 +44,9 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ slug, replace }),
     }),
-  getAnimation: () => call<AnimationState>('/animation'),
-  setAnimation: (payload: {
-    intensity?:     string;
-    direction?:     string;
-    template_slug?: string;
-    presets?:       Record<string, AnimationPreset>;
-  }) =>
-    call<AnimationState>('/animation', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
-
   // ── v2 endpoints (Plan A typed schema) ─────────────────
   getAnimationLibrary: () => call<AnimationLibrary>('/animation/library'),
   getAnimationV2:      () => call<AnimationStateV2>('/animation/v2'),
-  setGlobals: (payload: { intensity?: string; direction?: string; reduceMotion?: string }) =>
-    call<AnimationStateV2>('/animation/v2/globals', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
-  setElementRule: (type_id: string, rule: AnimationRule) =>
-    call<AnimationStateV2>('/animation/v2/element-rule', {
-      method: 'POST',
-      body: JSON.stringify({ type_id, rule }),
-    }),
-  resetElementRule: (type_id: string) =>
-    call<AnimationStateV2>('/animation/v2/element-rule/reset', {
-      method: 'POST',
-      body: JSON.stringify({ type_id }),
-    }),
-  setWidgetOverride: (template_slug: string, widget: string, rule: AnimationRule) =>
-    call<AnimationStateV2>('/animation/v2/widget-override', {
-      method: 'POST',
-      body: JSON.stringify({ template_slug, widget, rule }),
-    }),
   setSelectorOverride: (selector: string, rule: AnimationRule, label?: string) =>
     call<AnimationStateV2>('/animation/v2/selector-override', {
       method: 'POST',
@@ -88,16 +56,6 @@ export const api = {
     call<AnimationStateV2>('/animation/v2/selector-override/delete', {
       method: 'POST',
       body: JSON.stringify({ selector }),
-    }),
-  setCursor: (patch: Partial<CursorSettings>) =>
-    call<AnimationStateV2>('/animation/v2/cursor', {
-      method: 'POST',
-      body: JSON.stringify({ patch }),
-    }),
-  setScroll: (patch: Partial<ScrollSettings>) =>
-    call<AnimationStateV2>('/animation/v2/scroll', {
-      method: 'POST',
-      body: JSON.stringify({ patch }),
     }),
 
   // ── Plan B — profiles ──────────────────────────────────
@@ -179,25 +137,6 @@ export interface AnimationRule {
   direction?:    string;
 }
 
-export interface CursorSettings {
-  type:         'off' | 'basic' | 'outline' | 'tooltip' | 'text' | 'media';
-  smooth:       number;   // 0–0.95
-  accent:       string;   // CSS color
-  bg:           string;
-  size:         number;   // 4–64 px
-  mixBlendMode: 'normal' | 'difference' | 'exclusion' | 'multiply' | 'screen' | 'overlay';
-  hover:        { scale: number };
-}
-
-export interface ScrollSettings {
-  engine:          'none' | 'lenis';
-  duration:        number;   // 0.2–4 s
-  lerp:            number;   // 0.01–1
-  wheelMultiplier: number;   // 0.1–5
-  excludePages:    string;   // CSV of post IDs
-  gsapSource:      'local' | 'cdn';
-}
-
 export interface AnimationStateV2 {
   version:         string;
   globals: {
@@ -205,23 +144,17 @@ export interface AnimationStateV2 {
     direction:    string;
     reduceMotion: string;
   };
-  elementRules:      Record<string, AnimationRule>;
-  widgetOverrides:   Record<string, AnimationRule>;
+  elementRules:       Record<string, AnimationRule>;
   selectorOverrides?: Record<string, { rule: AnimationRule; label?: string; savedAt?: number }>;
-  cursor?:         CursorSettings;
-  scroll?:         ScrollSettings;
-  templateSlug:    string;
-  widgets:         string[];
-  activeProfile?:  string;
+  templateSlug:       string;
+  widgets:            string[];
+  activeProfile?:     string;
   allowed: {
     intensity:    string[];
     direction:    string[];
     reduceMotion: string[];
     elementTypes: string[];
     presets:      string[];
-    cursorTypes?: string[];
-    scrollEngines?: string[];
-    gsapSources?: string[];
   };
 }
 
@@ -237,26 +170,6 @@ export interface AnimationProfile {
     reduceMotion?: string;
   };
   elementRules?: Record<string, AnimationRule>;
-}
-
-export interface AnimationPreset {
-  entrance?:  string;
-  stagger?:   number;
-  duration?:  number;
-  trigger?:   string;
-  direction?: string; // 'once' | 'replay' | 'bidirectional' | 'scrub'
-}
-
-export interface AnimationState {
-  intensity:           string;
-  direction:           string;
-  allowed:             string[];
-  directions_allowed:  string[];
-  presets_allowed:     string[];
-  presets_grouped:     { element: string[]; text: string[] };
-  template_slug:       string;
-  widgets:             string[];
-  presets:             Record<string, AnimationPreset>;
 }
 
 export interface ImportedPage {

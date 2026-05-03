@@ -3,19 +3,15 @@ import { api, type AnimationLibrary, type AnimationRule, type AnimationStateV2 }
 import { toast } from '../components/Toast';
 
 /**
- * Audit list of all currently animated elements on the page.
+ * Audit list of every element currently animated on the page.
  *
- * Surfaces (in priority order):
- *   1. Niveau 4 — selectorOverrides (pinned via Animate Mode)
- *   2. Niveau 2 — widgetOverrides (template scopes)
- *   3. Niveau 1 — elementRules (only enabled, only those that currently
- *      have nodes on the page)
- *
- * Each row offers:
- *   • Locate — scrolls the element into view + flashes a green border
- *   • Delete — for selectorOverrides only; widget overrides → "inherit"
- *
- * Element Rules are read-only here (use the Wizard's Step 3 to edit them).
+ * Two row kinds, listed in priority order:
+ *   1. selector — a Niveau 4 selectorOverride pinned via Animate Mode.
+ *      Editable: Locate + Delete.
+ *   2. element  — a Niveau 1 elementRule injected by the active profile.
+ *      Read-only: Locate only (the rule's life-cycle belongs to the
+ *      profile). To remove it, switch profile or use Animate Mode to
+ *      pin a more specific override.
  */
 export function AnimatedElementsList({
   state, lib, onChange,
@@ -27,7 +23,6 @@ export function AnimatedElementsList({
   const rows = useMemo<Row[]>(() => {
     const out: Row[] = [];
 
-    // Niveau 4 — selector overrides (most specific, listed first)
     const so = state.selectorOverrides ?? {};
     Object.entries(so).forEach(([selector, entry]) => {
       const r = entry?.rule;
@@ -41,26 +36,10 @@ export function AnimatedElementsList({
       });
     });
 
-    // Niveau 2 — widget overrides
-    const wo = state.widgetOverrides ?? {};
-    Object.entries(wo).forEach(([widget, rule]) => {
-      const r = rule as AnimationRule;
-      if (!r || !r.preset) return;
-      out.push({
-        kind:     'widget',
-        selector: `[data-tw-anim-scope="${widget}"]`,
-        label:    widget,
-        preset:   r.preset,
-        rule:     r,
-      });
-    });
-
-    // Niveau 1 — element rules (read-only summary; one entry per type)
     Object.entries(state.elementRules || {}).forEach(([typeId, rule]) => {
       if (!rule || !rule.preset || rule.preset === 'none' || rule.enabled === false) return;
       const type = lib.elementTypes.find((t) => t.id === typeId);
       if (!type) return;
-      // Count nodes currently in the DOM that this rule would target.
       let count = 0;
       try { count = document.querySelectorAll(type.selectors.join(',')).length; } catch {}
       if (!count) return;
@@ -74,7 +53,7 @@ export function AnimatedElementsList({
     });
 
     return out;
-  }, [state.selectorOverrides, state.widgetOverrides, state.elementRules, lib.elementTypes]);
+  }, [state.selectorOverrides, state.elementRules, lib.elementTypes]);
 
   if (rows.length === 0) {
     return (
@@ -100,7 +79,7 @@ export function AnimatedElementsList({
 }
 
 interface Row {
-  kind:     'selector' | 'widget' | 'element';
+  kind:     'selector' | 'element';
   selector: string;
   label:    string;
   preset:   string;
@@ -109,11 +88,10 @@ interface Row {
 
 function AuditRow({ row, lib, onChange }: { row: Row; lib: AnimationLibrary; onChange: () => void }) {
   const presetMeta = lib.presets.find((p) => p.id === row.preset);
-  const kindBadge = row.kind === 'selector' ? '4' : row.kind === 'widget' ? '2' : '1';
-  const kindTitle =
-    row.kind === 'selector' ? 'Selector override (most specific)' :
-    row.kind === 'widget'   ? 'Widget override (template scope)'  :
-                              'Element rule (per-tag)';
+  const kindBadge  = row.kind === 'selector' ? '4' : '1';
+  const kindTitle  = row.kind === 'selector'
+    ? 'Selector override (Animate Mode)'
+    : 'Element rule from active profile';
 
   function locate() {
     let nodes: Element[] = [];
@@ -122,9 +100,8 @@ function AuditRow({ row, lib, onChange }: { row: Row; lib: AnimationLibrary; onC
       toast.error(`No element found for "${row.selector}".`);
       return;
     }
-    const first = nodes[0] as HTMLElement;
+    const first   = nodes[0] as HTMLElement;
     first.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    // Flash an outline so the user can see what was just selected.
     const prev    = first.style.outline;
     const prevOff = first.style.outlineOffset;
     const prevTr  = first.style.transition;
@@ -139,53 +116,22 @@ function AuditRow({ row, lib, onChange }: { row: Row; lib: AnimationLibrary; onC
   }
 
   async function remove() {
-    if (row.kind === 'selector') {
+    if (row.kind !== 'selector') return; // element rules are managed by profiles
+    try {
+      await api.deleteSelectorOverride(row.selector);
+      type Win = { tempaloo?: { studio?: { animV2?: { selectorOverrides?: Record<string, unknown> } } } };
+      const v2 = (window as unknown as Win).tempaloo?.studio?.animV2;
+      if (v2 && v2.selectorOverrides) delete v2.selectorOverrides[row.selector];
       try {
-        await api.deleteSelectorOverride(row.selector);
-        // Clear runtime payload + revert inline styles in place.
-        type Win = { tempaloo?: { studio?: { animV2?: { selectorOverrides?: Record<string, unknown> } } } };
-        const v2 = (window as unknown as Win).tempaloo?.studio?.animV2;
-        if (v2 && v2.selectorOverrides) delete v2.selectorOverrides[row.selector];
-        try {
-          document.querySelectorAll(row.selector).forEach((el) => {
-            const ctx = (el as unknown as { __tw_anim_ctx?: { revert: () => void } }).__tw_anim_ctx;
-            if (ctx && typeof ctx.revert === 'function') ctx.revert();
-          });
-        } catch {}
-        toast.info(`Removed override for ${row.selector}`);
-        onChange();
-      } catch (e) {
-        toast.error(`Delete failed: ${(e as Error).message}`);
-      }
-      return;
-    }
-
-    if (row.kind === 'widget') {
-      // Set widget back to inherit — empty rule.
-      try {
-        const slug = (window as unknown as { tempaloo?: { studio?: { animV2?: { templateSlug?: string } } } })
-          .tempaloo?.studio?.animV2?.templateSlug;
-        if (!slug) { toast.error('No active template'); return; }
-        await api.setWidgetOverride(slug, row.label, {
-          enabled: true, preset: '', params: {}, scrollTrigger: {},
+        document.querySelectorAll(row.selector).forEach((el) => {
+          const ctx = (el as unknown as { __tw_anim_ctx?: { revert: () => void } }).__tw_anim_ctx;
+          if (ctx && typeof ctx.revert === 'function') ctx.revert();
         });
-        toast.info(`Widget "${row.label}" set to inherit`);
-        onChange();
-      } catch (e) {
-        toast.error(`Update failed: ${(e as Error).message}`);
-      }
-      return;
-    }
-
-    if (row.kind === 'element') {
-      const typeId = row.label.split(' ')[0]; // best-effort; user can also use Reset in Step 3
-      try {
-        await api.resetElementRule(typeId);
-        toast.info(`Element rule for ${typeId} reset to default`);
-        onChange();
-      } catch (e) {
-        toast.error(`Reset failed: ${(e as Error).message}`);
-      }
+      } catch {}
+      toast.info(`Removed override for ${row.selector}`);
+      onChange();
+    } catch (e) {
+      toast.error(`Delete failed: ${(e as Error).message}`);
     }
   }
 
@@ -201,11 +147,14 @@ function AuditRow({ row, lib, onChange }: { row: Row; lib: AnimationLibrary; onC
       </div>
       <div className="tsa-am-audit__actions">
         <button type="button" className="tsa-am-audit__btn" onClick={locate} title="Scroll to and flash">⌖</button>
-        <button type="button" className="tsa-am-audit__btn tsa-am-audit__btn--danger" onClick={remove} title={
-          row.kind === 'selector' ? 'Delete selector override' :
-          row.kind === 'widget'   ? 'Set widget to inherit'    :
-                                    'Reset element rule to default'
-        }>×</button>
+        {row.kind === 'selector' && (
+          <button
+            type="button"
+            className="tsa-am-audit__btn tsa-am-audit__btn--danger"
+            onClick={remove}
+            title="Delete selector override"
+          >×</button>
+        )}
       </div>
     </li>
   );
