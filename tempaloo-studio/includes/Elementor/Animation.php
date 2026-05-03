@@ -354,6 +354,42 @@ final class Animation {
     }
 
     /**
+     * Returns true when ANY animation rule is active across the v2
+     * config. Drives the lazy-loader in Frontend\Assets — if this is
+     * false, GSAP / ScrollTrigger / animations.js are NEVER enqueued
+     * on the front-end. Inspired by Motion.page's plugin-by-plugin
+     * lazy-loading (Sprint 1 / point #1).
+     */
+    public static function has_active_rules(): bool {
+        if ( self::intensity() === 'off' ) return false;
+
+        $v2 = self::config_v2();
+
+        // Niveau 4 — any selector override.
+        $so = $v2['selectorOverrides'] ?? [];
+        if ( $so instanceof \stdClass ) $so = (array) $so;
+        if ( is_array( $so ) && ! empty( $so ) ) return true;
+
+        // Niveau 2 — any widget override across any template.
+        foreach ( (array) ( $v2['widgetOverrides'] ?? [] ) as $tpl_overrides ) {
+            if ( ! is_array( $tpl_overrides ) ) continue;
+            foreach ( $tpl_overrides as $rule ) {
+                if ( is_array( $rule ) && ! empty( $rule['preset'] ) ) return true;
+            }
+        }
+
+        // Niveau 1 — any element rule with a preset that's not "none".
+        foreach ( (array) ( $v2['elementRules'] ?? [] ) as $rule ) {
+            if ( ! is_array( $rule ) ) continue;
+            if ( ( $rule['enabled'] ?? true ) === false ) continue;
+            $p = (string) ( $rule['preset'] ?? '' );
+            if ( $p !== '' && $p !== 'none' ) return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Save (or replace) a selector-targeted rule.
      * @param string $selector  CSS selector (free-form, sanitised below).
      * @param array  $payload   { rule, label? }
@@ -518,6 +554,36 @@ final class Animation {
         add_action( 'wp_head',                   [ $this, 'emit' ], 7 );
         add_action( 'elementor/editor/wp_head',  [ $this, 'emit' ], 7 );
         add_action( 'elementor/preview/wp_head', [ $this, 'emit' ], 7 );
+
+        // Sprint 1 / point #2 — Anti-FOUC. Hide the body until DCL when
+        // animations are about to play, so the user never sees the
+        // un-animated state for the few hundred ms before GSAP starts.
+        // Inspired by Motion.page's pattern (the same 3-line snippet
+        // they ship). Skipped for admin-bar users so it doesn't fight
+        // with the WP toolbar layout flash.
+        add_action( 'wp_head', [ $this, 'emit_anti_fouc' ], 1 );
+    }
+
+    /**
+     * <style>body{visibility:hidden}</style> snippet that auto-clears on
+     * DOMContentLoaded. The <noscript> fallback guarantees no-JS users
+     * still see the page (accessibility).
+     */
+    public function emit_anti_fouc(): void {
+        // Only when animations actually run. Skips when intensity = off
+        // and when no rule is configured (lazy-load already skipped GSAP
+        // → no animation will ever play → no FOUC to prevent).
+        if ( ! self::has_active_rules() ) return;
+        // Don't fight with the Elementor editor preview iframe — it
+        // needs to render immediately for the user to see what they're
+        // editing. The runtime's own scrollY-based "play above-the-fold"
+        // patch handles entry animations there.
+        if ( function_exists( 'is_admin' ) && is_admin() ) return;
+        if ( class_exists( '\Elementor\Plugin' ) && \Elementor\Plugin::$instance->preview->is_preview_mode() ) return;
+
+        echo "\n<style id=\"tempaloo-studio-fouc\">body{visibility:hidden}</style>"
+           . "<script id=\"tempaloo-studio-fouc-clear\">document.addEventListener('DOMContentLoaded',function(){document.body.style.visibility='inherit'});</script>"
+           . "<noscript><style>body{visibility:inherit}</style></noscript>\n"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
     }
 
     public function emit(): void {

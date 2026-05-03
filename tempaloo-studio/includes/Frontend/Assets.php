@@ -158,14 +158,28 @@ final class Assets {
             wp_enqueue_script( 'tempaloo-studio-runtime' );
         }
 
-        // PERF — Strategy 1: skip GSAP / ScrollTrigger / animations.js
-        // entirely when the user set animation intensity to "off". Saves
-        // ~120 KB of JS (gzipped ~46 KB) on sites that don't want motion.
-        // The runtime above is the only JS dep that survives.
+        // PERF — Lazy plugin loading (Sprint 1 / point #1, inspired by
+        // Motion.page). Three reasons to NOT load GSAP at all:
+        //
+        //   1. intensity = off → user explicitly disabled motion.
+        //   2. has_active_rules() = false → no Element Rule / Widget
+        //      Override / Selector Override has been configured. Loading
+        //      120 KB of JS to animate nothing is pure waste.
+        //   3. Builders / editor preview iframes — handled below by the
+        //      ts.editAware safety net.
+        //
+        // EXCEPTION — admins with `manage_options` always get GSAP +
+        // animations.js so the floating-panel "Animate Mode" picker can
+        // call applyRuleToElement() interactively. This is the
+        // "always-loaded for editors" rule from the gsap-react skill.
         $animation_off = ( Animation::intensity() === 'off' );
+        $has_rules     = Animation::has_active_rules();
+        $is_admin_user = function_exists( 'current_user_can' ) && current_user_can( 'manage_options' );
+
+        $skip_animations = $animation_off || ( ! $has_rules && ! $is_admin_user );
 
         $global_js = $template['global_js'] ?? 'global.js';
-        if ( file_exists( $dir . $global_js ) && ! $animation_off ) {
+        if ( file_exists( $dir . $global_js ) && ! $skip_animations ) {
             // GSAP source: LOCAL by default — bundled with the plugin
             // at assets/vendor/. This is the right default for shipped
             // premium plugins:

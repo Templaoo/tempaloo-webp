@@ -202,37 +202,78 @@
     if (document.readyState !== 'loading') bootAudit();
     else document.addEventListener('DOMContentLoaded', bootAudit);
 
-    /* ── Refresh ScrollTrigger once layout is final ─────────
+    /* ── ScrollTrigger refresh strategy (Sprint 1 / point #5) ───
      *
-     * Fonts loading after first paint shifts widget positions, which
-     * means start/end offsets ScrollTrigger computed on init are off.
-     * Refresh on window.load (everything done) and document.fonts.ready
-     * (web fonts swapped in) so triggers fire at the right scroll point.
+     * Inspired by Motion.page: instead of 5 scattered refresh hooks,
+     * one global refresher that:
+     *   1. Sorts triggers top-to-bottom (fixes pin-spacing miscalcs
+     *      when triggers are declared out of source order — common in
+     *      Elementor where widgets mount asynchronously).
+     *   2. Refreshes every trigger.
+     *
+     * Wired to:
+     *   • window.load + 92ms (Motion.page's magic number — lets the
+     *     final layout settle before recomputing offsets).
+     *   • document.fonts.ready (web fonts swap shifts text bounds).
+     *   • Lazy-load events from popular WP plugins (Smush, a3-lazy-load,
+     *     Lazy Load XT) — they all fire `lazyloaded` after each image
+     *     hot-swaps. Recompute so trigger positions stay accurate.
+     *   • window.resize (debounced 200ms — ScrollTrigger does this
+     *     natively but we add a backup for restored scroll positions).
+     *
+     * Exposed as window.tempaloo.studio.refreshScroll so widget scripts
+     * can trigger it on demand (e.g. after revealing a hidden tab panel).
      */
+    var globalRefreshTimer;
     function refreshScrollTrigger(why) {
-        if (window.ScrollTrigger && typeof window.ScrollTrigger.refresh === 'function') {
-            try { window.ScrollTrigger.refresh(); log('ScrollTrigger.refresh()', why || ''); }
-            catch (e) { warn('ScrollTrigger.refresh threw:', e); }
-        }
+        if (!window.ScrollTrigger) return;
+        try {
+            if (typeof window.ScrollTrigger.sort === 'function') {
+                window.ScrollTrigger.sort();
+            }
+            window.ScrollTrigger.getAll().forEach(function (t) {
+                try { t.refresh(); } catch (e) {}
+            });
+            log('ScrollTrigger.refresh()', why || '');
+        } catch (e) { warn('ScrollTrigger.refresh threw:', e); }
     }
-    // Refresh AT MULTIPLE points so scroll positions stay accurate
-    // through the whole page-loading lifecycle.
+    function scheduleRefresh(why, delay) {
+        clearTimeout(globalRefreshTimer);
+        globalRefreshTimer = setTimeout(function () { refreshScrollTrigger(why); }, delay || 92);
+    }
+    // Initial refresh — covers all readyState cases.
     if (document.readyState === 'complete') {
-        setTimeout(function () { refreshScrollTrigger('initial-already-complete'); }, 50);
+        scheduleRefresh('initial', 50);
     } else {
-        document.addEventListener('DOMContentLoaded', function () { setTimeout(function () { refreshScrollTrigger('DOMContentLoaded'); }, 0); });
-        window.addEventListener('load',                function () { setTimeout(function () { refreshScrollTrigger('window-load'); }, 50); });
+        window.addEventListener('load', function () { scheduleRefresh('window-load', 92); });
     }
+    // Web fonts swap.
     if (document.fonts && document.fonts.ready && typeof document.fonts.ready.then === 'function') {
-        document.fonts.ready.then(function () { refreshScrollTrigger('fonts-ready'); });
+        document.fonts.ready.then(function () { scheduleRefresh('fonts-ready', 0); });
     }
-    // Also on window resize (debounced) — ScrollTrigger handles this
-    // natively but we add an extra trigger for restored scroll positions.
+    // Sprint 1 / point #6 — lazy-load image hook. Most WP lazy-load
+    // plugins (Smush, a3-lazy-load, Lazy Load XT, etc.) emit
+    // `lazyloaded` once they swap the real <img src>. Without this,
+    // ScrollTrigger keeps the offsets it computed when the placeholder
+    // (1×1 transparent) was in place — animations fire at the wrong
+    // scroll position. Debounced via scheduleRefresh.
+    document.addEventListener('lazyloaded', function () { scheduleRefresh('lazyloaded', 0); });
+    // Also handle native loading=lazy images that complete after first
+    // paint (load event bubbles from <img>).
+    document.addEventListener('load', function (e) {
+        if (e.target && e.target.tagName === 'IMG') scheduleRefresh('img-load', 0);
+    }, true);
+    // Resize backup (ST handles this natively but for restored scroll
+    // positions on history navigation we want our own debounced trigger).
     var resizeTimer;
     window.addEventListener('resize', function () {
         clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(function () { refreshScrollTrigger('resize'); }, 200);
+        resizeTimer = setTimeout(function () { scheduleRefresh('resize', 0); }, 200);
     });
+    // Public: widget scripts can call ts.refreshScroll() after revealing
+    // hidden panels (tabs, accordions, modals) so triggers inside them
+    // recompute against the now-visible layout.
+    ts.refreshScroll = scheduleRefresh;
 
     /* ── Helpers ─────────────────────────────────────────────── */
 
