@@ -54,6 +54,8 @@ class Built_For_Life extends Widget_Base {
     }
 
     protected function register_controls(): void {
+
+        /* ── Content section (eyebrow / title / image) ──────────── */
         $this->start_controls_section( 'section_content', [
             'label' => esc_html__( 'Content', 'tempaloo-studio' ),
             'tab'   => Controls_Manager::TAB_CONTENT,
@@ -66,9 +68,9 @@ class Built_For_Life extends Widget_Base {
         ] );
 
         $this->add_control( 'title', [
-            'label'   => esc_html__( 'Title', 'tempaloo-studio' ),
-            'type'    => Controls_Manager::TEXTAREA,
-            'default' => 'Your routine adapts to <em>your week</em> — not the other way around.',
+            'label'       => esc_html__( 'Title', 'tempaloo-studio' ),
+            'type'        => Controls_Manager::TEXTAREA,
+            'default'     => 'Your routine adapts to <em>your week</em> — not the other way around.',
             'description' => esc_html__( 'Wrap a key phrase in <em>…</em> to render it in italic accent color (Forma serif-i style).', 'tempaloo-studio' ),
         ] );
 
@@ -80,18 +82,19 @@ class Built_For_Life extends Widget_Base {
 
         $this->end_controls_section();
 
-        $this->start_controls_section( 'section_motion', [
-            'label' => esc_html__( 'Motion', 'tempaloo-studio' ),
+        /* ── Card Style section (visual interpolation params) ──── */
+        $this->start_controls_section( 'section_card_style', [
+            'label' => esc_html__( 'Card Style', 'tempaloo-studio' ),
             'tab'   => Controls_Manager::TAB_CONTENT,
         ] );
 
+        // Card geometry — used by CSS calc() pattern, not by JS handler
+        // directly, so we keep them as simple numeric controls (no
+        // frontend_available needed since render() reads them server-side).
         $this->add_control( 'card_width_vw', [
             'label'   => esc_html__( 'Card width (vw)', 'tempaloo-studio' ),
             'type'    => Controls_Manager::NUMBER,
             'min'     => 50, 'max' => 100, 'step' => 1,
-            // Forma's exact starting card size — 88vw × 80vh grows to
-            // fullscreen during scrub. Section background is transparent
-            // so the visible margins inherit the page bg cleanly.
             'default' => 88,
         ] );
         $this->add_control( 'card_height_vh', [
@@ -113,17 +116,132 @@ class Built_For_Life extends Widget_Base {
             'default' => 1.15,
         ] );
         $this->add_control( 'pin_duration_vh', [
-            'label'   => esc_html__( 'Section height (vh)', 'tempaloo-studio' ),
-            'type'    => Controls_Manager::NUMBER,
-            'min'     => 150, 'max' => 400, 'step' => 10,
-            'default' => 250,
+            'label'       => esc_html__( 'Section height (vh)', 'tempaloo-studio' ),
+            'type'        => Controls_Manager::NUMBER,
+            'min'         => 150, 'max' => 400, 'step' => 10,
+            'default'     => 250,
             'description' => esc_html__( 'Total height of the section (Forma uses 250vh = 100vh sticky + 150vh of scroll travel: ~70% for the unfurl, ~30% to read).', 'tempaloo-studio' ),
         ] );
+
+        $this->end_controls_section();
+
+        /* ── Pin Settings section — Animation Addons-style controls ──
+         *
+         * Mirrors the surface of Animation Addons' "Sticky/Pin Element"
+         * extension so users familiar with that plugin find the same
+         * controls under the same names. Reference:
+         * https://animation-addons.com/docs/gsap-extensions/sticky-elements/
+         *
+         * Every control here has `frontend_available => true` so the JS
+         * handler can read them via `getResponsiveSetting(name)` without
+         * a REST round-trip. Responsive controls (Pin Start, Pin End,
+         * Pin Spacing) accept different values per device-mode.
+         */
+        $this->start_controls_section( 'section_pin', [
+            'label' => esc_html__( 'Pin Settings', 'tempaloo-studio' ),
+            'tab'   => Controls_Manager::TAB_CONTENT,
+        ] );
+
+        // Master Enable — Animation Addons calls this `wcf_enable_pin_area`.
+        // Disabling it means the section just renders as a normal block:
+        // image full-width with text overlay, no scroll coupling.
+        $this->add_responsive_control( 'enable_pin', [
+            'label'              => esc_html__( 'Enable cinematic pin', 'tempaloo-studio' ),
+            'type'               => Controls_Manager::SELECT,
+            'default'            => 'yes',
+            'options'            => [
+                'yes' => esc_html__( 'Yes', 'tempaloo-studio' ),
+                'no'  => esc_html__( 'No',  'tempaloo-studio' ),
+            ],
+            'description'        => esc_html__( 'When enabled, the section pins for ~2.5 viewport heights and animates card/image/text via scrub. When disabled, content renders normally.', 'tempaloo-studio' ),
+            'frontend_available' => true,
+            'render_type'        => 'template',
+        ] );
+
+        $pin_position_options = [
+            'top top'       => esc_html__( 'Top Top',       'tempaloo-studio' ),
+            'top center'    => esc_html__( 'Top Center',    'tempaloo-studio' ),
+            'top bottom'    => esc_html__( 'Top Bottom',    'tempaloo-studio' ),
+            'center top'    => esc_html__( 'Center Top',    'tempaloo-studio' ),
+            'center center' => esc_html__( 'Center Center', 'tempaloo-studio' ),
+            'center bottom' => esc_html__( 'Center Bottom', 'tempaloo-studio' ),
+            'bottom top'    => esc_html__( 'Bottom Top',    'tempaloo-studio' ),
+            'bottom center' => esc_html__( 'Bottom Center', 'tempaloo-studio' ),
+            'bottom bottom' => esc_html__( 'Bottom Bottom', 'tempaloo-studio' ),
+            'custom'        => esc_html__( 'Custom',        'tempaloo-studio' ),
+        ];
+
+        $this->add_responsive_control( 'pin_start', [
+            'label'              => esc_html__( 'Pin Start', 'tempaloo-studio' ),
+            'type'               => Controls_Manager::SELECT,
+            'default'            => 'top top',
+            'options'            => $pin_position_options,
+            'description'        => esc_html__( 'When the pin engages — element-position viewport-position. "Top Top" = pin engages when the section top hits the viewport top.', 'tempaloo-studio' ),
+            'condition'          => [ 'enable_pin' => 'yes' ],
+            'frontend_available' => true,
+        ] );
+        $this->add_responsive_control( 'pin_start_custom', [
+            'label'              => esc_html__( 'Custom Start', 'tempaloo-studio' ),
+            'type'               => Controls_Manager::TEXT,
+            'placeholder'        => 'top+=100',
+            'description'        => esc_html__( 'GSAP ScrollTrigger start string, e.g. "top+=100", "25% center", "+=300".', 'tempaloo-studio' ),
+            'condition'          => [ 'enable_pin' => 'yes', 'pin_start' => 'custom' ],
+            'frontend_available' => true,
+        ] );
+
+        $this->add_responsive_control( 'pin_end', [
+            'label'              => esc_html__( 'Pin End', 'tempaloo-studio' ),
+            'type'               => Controls_Manager::SELECT,
+            'default'            => 'bottom bottom',
+            'options'            => $pin_position_options,
+            'description'        => esc_html__( 'When the pin releases. "Bottom Bottom" = pin releases when the section bottom reaches the viewport bottom.', 'tempaloo-studio' ),
+            'condition'          => [ 'enable_pin' => 'yes' ],
+            'frontend_available' => true,
+        ] );
+        $this->add_responsive_control( 'pin_end_custom', [
+            'label'              => esc_html__( 'Custom End', 'tempaloo-studio' ),
+            'type'               => Controls_Manager::TEXT,
+            'placeholder'        => '+=1500',
+            'description'        => esc_html__( 'GSAP ScrollTrigger end string, e.g. "+=1500", "bottom top".', 'tempaloo-studio' ),
+            'condition'          => [ 'enable_pin' => 'yes', 'pin_end' => 'custom' ],
+            'frontend_available' => true,
+        ] );
+
+        $this->add_responsive_control( 'pin_spacing', [
+            'label'              => esc_html__( 'Pin Spacing', 'tempaloo-studio' ),
+            'type'               => Controls_Manager::SELECT,
+            'default'            => 'false',
+            'options'            => [
+                'true'   => esc_html__( 'True',   'tempaloo-studio' ),
+                'false'  => esc_html__( 'False',  'tempaloo-studio' ),
+                'custom' => esc_html__( 'Custom', 'tempaloo-studio' ),
+            ],
+            'description'        => esc_html__( 'False = no extra spacer added (the section already has explicit height). True = ScrollTrigger adds a spacer equal to the pinned element height.', 'tempaloo-studio' ),
+            'condition'          => [ 'enable_pin' => 'yes' ],
+            'frontend_available' => true,
+        ] );
+
+        $this->add_control( 'pin_markers', [
+            'label'              => esc_html__( 'Pin Markers', 'tempaloo-studio' ),
+            'type'               => Controls_Manager::SELECT,
+            'default'            => 'false',
+            'options'            => [
+                'true'  => esc_html__( 'True',  'tempaloo-studio' ),
+                'false' => esc_html__( 'False', 'tempaloo-studio' ),
+            ],
+            'description'        => esc_html__( 'Show ScrollTrigger debug markers on the page (start / end / pinSpacing). Disable in production.', 'tempaloo-studio' ),
+            'condition'          => [ 'enable_pin' => 'yes' ],
+            'frontend_available' => true,
+        ] );
+
         $this->add_control( 'mobile_breakpoint', [
-            'label'   => esc_html__( 'Mobile breakpoint (px)', 'tempaloo-studio' ),
-            'type'    => Controls_Manager::NUMBER,
-            'min'     => 400, 'max' => 1200, 'step' => 10,
-            'default' => 800,
+            'label'              => esc_html__( 'Mobile breakpoint (px)', 'tempaloo-studio' ),
+            'type'               => Controls_Manager::NUMBER,
+            'min'                => 400, 'max' => 1200, 'step' => 10,
+            'default'            => 800,
+            'description'        => esc_html__( 'Below this width, the cinematic effect is disabled and the card renders as a static block.', 'tempaloo-studio' ),
+            'condition'          => [ 'enable_pin' => 'yes' ],
+            'frontend_available' => true,
         ] );
 
         $this->end_controls_section();
