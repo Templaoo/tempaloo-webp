@@ -283,6 +283,63 @@
     // recompute against the now-visible layout.
     ts.refreshScroll = scheduleRefresh;
 
+    /* Audit fix #3 (2026-05-03) — Elementor editor lifecycle refresh.
+     *
+     * Inside the Elementor editor, the user can:
+     *   • Drag a widget to a new section (DOM moves, offsets shift)
+     *   • Toggle Desktop/Tablet/Mobile (viewport width changes)
+     *   • Edit a widget setting (the widget is destroyed + recreated)
+     *   • Resize the editor's right panel (scroller width changes)
+     *
+     * Each of these invalidates ScrollTrigger's cached start/end
+     * positions, but Elementor's events are namespaced and don't
+     * trigger the standard window resize listener. Hooking into
+     * `elementor/preview/loaded` and `elementor.channels.editor`
+     * forces a refresh at the right moments.
+     */
+    function bindElementorRefresh() {
+        if (!window.elementor && !window.elementorFrontend) return;
+
+        // Editor preview iframe finished loading — earliest moment all
+        // widget DOM is mounted.
+        if (window.elementor && typeof window.elementor.on === 'function') {
+            try {
+                window.elementor.on('preview:loaded', function () {
+                    scheduleRefresh('elementor:preview-loaded', 100);
+                });
+            } catch (e) {}
+        }
+
+        // Editor model changes (any widget setting edited). Backbone
+        // event channel — debounced via scheduleRefresh.
+        if (window.elementor && window.elementor.channels && window.elementor.channels.editor) {
+            try {
+                window.elementor.channels.editor.on('change', function () {
+                    scheduleRefresh('elementor:editor-change', 200);
+                });
+            } catch (e) {}
+        }
+
+        // Device-mode toggle (Desktop ↔ Tablet ↔ Mobile in the toolbar).
+        // The viewport width changes without firing a real `resize`,
+        // so we listen explicitly.
+        if (window.elementor && window.elementor.channels && window.elementor.channels.deviceMode) {
+            try {
+                window.elementor.channels.deviceMode.on('change', function () {
+                    scheduleRefresh('elementor:device-mode', 100);
+                });
+            } catch (e) {}
+        }
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bindElementorRefresh);
+    } else {
+        bindElementorRefresh();
+    }
+    // Also bind once Elementor frontend has finished its boot, in case
+    // the elementor objects weren't ready yet at our DCL.
+    window.addEventListener('elementor/frontend/init', bindElementorRefresh);
+
     /* ── Helpers ─────────────────────────────────────────────── */
 
     function gsap()   { return window.gsap || null; }

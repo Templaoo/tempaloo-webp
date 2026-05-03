@@ -173,7 +173,7 @@ class Built_For_Life extends Widget_Base {
             $srcset_attr = implode( ', ', $parts );
         }
         ?>
-        <style id="tw-bfl-css">
+        <style id="tw-avero-built-for-life-css">
         /* No-JS / pre-script fallback — when --p hasn't been driven by JS
            yet (initial paint OR JS disabled), pin the canvas at p:1 so
            the section is at least readable. The script.js sets --p back
@@ -183,9 +183,9 @@ class Built_For_Life extends Widget_Base {
            when the card is configured smaller than 100vw/100vh. By
            default the canvas fills the viewport so no margins are
            visible at all. */
-        .tw-bfl{position:relative;width:100%;background:transparent;height:<?php echo (int) $sec_vh; ?>vh;contain:layout paint;}
-        .tw-bfl__sticky{position:sticky;top:0;height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden;}
-        .tw-bfl__canvas{
+        .tw-avero-built-for-life{position:relative;width:100%;background:transparent;height:<?php echo (int) $sec_vh; ?>vh;contain:layout paint;}
+        .tw-avero-built-for-life__sticky{position:sticky;top:0;height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+        .tw-avero-built-for-life__canvas{
             --p:0;
             position:relative;overflow:hidden;
             margin:0 auto;
@@ -196,7 +196,7 @@ class Built_For_Life extends Widget_Base {
             transition:none;
             will-change:width,height,border-radius;
         }
-        .tw-bfl__media{
+        .tw-avero-built-for-life__media{
             display:block;width:100%;height:100%;object-fit:cover;
             transform:scale(calc(<?php echo number_format( $scale, 4, '.', '' ); ?> - <?php echo number_format( $scale_delta, 4, '.', '' ); ?> * var(--p)));
             transform-origin:center center;
@@ -204,13 +204,13 @@ class Built_For_Life extends Widget_Base {
             will-change:transform;
             backface-visibility:hidden;
         }
-        .tw-bfl__text{
+        .tw-avero-built-for-life__text{
             position:absolute;inset:0;
             display:flex;flex-direction:column;justify-content:center;align-items:center;
             text-align:center;color:#fff;
             padding:clamp(24px,5vw,64px);
-            /* Gradient overlay removed — text-shadow on .tw-bfl__eyebrow
-               and .tw-bfl__title alone keeps the type legible against any
+            /* Gradient overlay removed — text-shadow on .tw-avero-built-for-life__eyebrow
+               and .tw-avero-built-for-life__title alone keeps the type legible against any
                photo. Cleaner edit-mode preview, no dark wash on the image. */
             background:transparent;
             opacity:var(--p);
@@ -218,7 +218,7 @@ class Built_For_Life extends Widget_Base {
             pointer-events:none;
             will-change:opacity,transform;
         }
-        .tw-bfl__eyebrow{
+        .tw-avero-built-for-life__eyebrow{
             font-family:var(--tw-avero-font-body,'Inter',sans-serif);
             font-size:clamp(11px,1.1vw,13px);
             letter-spacing:0.18em;text-transform:uppercase;
@@ -230,7 +230,7 @@ class Built_For_Life extends Widget_Base {
                a wider soft glow for ambient contrast against any photo. */
             text-shadow:0 2px 4px rgba(0,0,0,0.85), 0 4px 24px rgba(0,0,0,0.55);
         }
-        .tw-bfl__title{
+        .tw-avero-built-for-life__title{
             font-family:var(--tw-avero-font-heading,'Hedvig Letters Serif',serif);
             font-size:clamp(36px,5.4vw,80px);
             line-height:1.04;letter-spacing:-0.025em;
@@ -243,7 +243,7 @@ class Built_For_Life extends Widget_Base {
                where a single shadow alone gets washed out. */
             text-shadow:0 2px 6px rgba(0,0,0,0.80), 0 8px 36px rgba(0,0,0,0.55);
         }
-        .tw-bfl__title em{
+        .tw-avero-built-for-life__title em{
             font-style:italic;
             color:var(--tw-avero-accent,#E6FF55);
         }
@@ -251,26 +251,26 @@ class Built_For_Life extends Widget_Base {
            vestibular sensitivity see the section in its readable end-state
            with no scroll-coupled motion. */
         @media (prefers-reduced-motion:reduce){
-            .tw-bfl__canvas{--p:1 !important;}
-            .tw-bfl__media{transform:scale(1) !important;}
-            .tw-bfl__text{opacity:1 !important;transform:none !important;}
+            .tw-avero-built-for-life__canvas{--p:1 !important;}
+            .tw-avero-built-for-life__media{transform:scale(1) !important;}
+            .tw-avero-built-for-life__text{opacity:1 !important;transform:none !important;}
         }
         @media (max-width:<?php echo (int) $bp; ?>px){
             /* Disable the pin entirely on mobile: section reverts to its
                natural height, sticky becomes static, the canvas locks at
                --p:1 (full text visible, image at scale 1, no border-radius
                growth needed since the card is already full-width). */
-            .tw-bfl{height:auto;padding:64px 0;}
-            .tw-bfl__sticky{position:static;height:auto;display:block;overflow:visible;}
-            .tw-bfl__canvas{
+            .tw-avero-built-for-life{height:auto;padding:64px 0;}
+            .tw-avero-built-for-life__sticky{position:static;height:auto;display:block;overflow:visible;}
+            .tw-avero-built-for-life__canvas{
                 --p:1;
                 width:92vw !important;height:auto !important;
                 aspect-ratio:4/3;border-radius:20px !important;
                 box-shadow:0 24px 48px -12px rgba(0,0,0,0.4) !important;
             }
-            .tw-bfl__media{transform:scale(1) !important;}
-            .tw-bfl__text{opacity:1 !important;transform:none !important;padding:24px !important;}
-            .tw-bfl__title{font-size:clamp(28px,7vw,44px);}
+            .tw-avero-built-for-life__media{transform:scale(1) !important;}
+            .tw-avero-built-for-life__text{opacity:1 !important;transform:none !important;padding:24px !important;}
+            .tw-avero-built-for-life__title{font-size:clamp(28px,7vw,44px);}
         }
         </style>
 
@@ -279,19 +279,19 @@ class Built_For_Life extends Widget_Base {
             /* JS disabled — show the section in its end-state. The script
                below would otherwise leave --p at 0, hiding the text
                entirely and stranding the user with an invisible card. */
-            .tw-bfl__canvas{--p:1 !important;}
-            .tw-bfl__media{transform:scale(1) !important;}
-            .tw-bfl__text{opacity:1 !important;transform:none !important;}
+            .tw-avero-built-for-life__canvas{--p:1 !important;}
+            .tw-avero-built-for-life__media{transform:scale(1) !important;}
+            .tw-avero-built-for-life__text{opacity:1 !important;transform:none !important;}
             </style>
         </noscript>
 
-        <section class="tw-bfl"
+        <section class="tw-avero-built-for-life"
             data-tw-anim-scope="built_for_life"
             data-tw-anim-skip
             data-bp="<?php echo esc_attr( (string) $bp ); ?>">
-            <div class="tw-bfl__sticky">
-                <div class="tw-bfl__canvas">
-                    <img class="tw-bfl__media"
+            <div class="tw-avero-built-for-life__sticky">
+                <div class="tw-avero-built-for-life__canvas">
+                    <img class="tw-avero-built-for-life__media"
                          src="<?php echo esc_url( $img_url ); ?>"
                          <?php if ( $srcset_attr !== '' ) : ?>srcset="<?php echo $srcset_attr; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped — pre-escaped above ?>"<?php endif; ?>
                          sizes="100vw"
@@ -299,11 +299,11 @@ class Built_For_Life extends Widget_Base {
                          loading="eager"
                          fetchpriority="high"
                          decoding="async" />
-                    <div class="tw-bfl__text">
+                    <div class="tw-avero-built-for-life__text">
                         <?php if ( ! empty( $s['eyebrow'] ) ) : ?>
-                            <div class="tw-bfl__eyebrow"><?php echo esc_html( $s['eyebrow'] ); ?></div>
+                            <div class="tw-avero-built-for-life__eyebrow"><?php echo esc_html( $s['eyebrow'] ); ?></div>
                         <?php endif; ?>
-                        <h2 class="tw-bfl__title"><?php
+                        <h2 class="tw-avero-built-for-life__title"><?php
                             echo wp_kses(
                                 (string) ( $s['title'] ?? '' ),
                                 [ 'em' => [], 'strong' => [], 'br' => [] ]
@@ -324,13 +324,13 @@ class Built_For_Life extends Widget_Base {
             .replace(/&lt;br\s*\/?&gt;/g, '<br>');
         var imgUrl = (settings.image && settings.image.url) ? settings.image.url : '';
         #>
-        <section class="tw-bfl">
-            <div class="tw-bfl__sticky">
-                <div class="tw-bfl__canvas" style="--p:1">
-                    <# if (imgUrl) { #><img class="tw-bfl__media" src="{{ imgUrl }}" alt="" /><# } #>
-                    <div class="tw-bfl__text">
-                        <# if (settings.eyebrow) { #><div class="tw-bfl__eyebrow">{{ settings.eyebrow }}</div><# } #>
-                        <h2 class="tw-bfl__title">{{{ safeTitle }}}</h2>
+        <section class="tw-avero-built-for-life">
+            <div class="tw-avero-built-for-life__sticky">
+                <div class="tw-avero-built-for-life__canvas" style="--p:1">
+                    <# if (imgUrl) { #><img class="tw-avero-built-for-life__media" src="{{ imgUrl }}" alt="" /><# } #>
+                    <div class="tw-avero-built-for-life__text">
+                        <# if (settings.eyebrow) { #><div class="tw-avero-built-for-life__eyebrow">{{ settings.eyebrow }}</div><# } #>
+                        <h2 class="tw-avero-built-for-life__title">{{{ safeTitle }}}</h2>
                     </div>
                 </div>
             </div>

@@ -1,47 +1,45 @@
 /* ============================================================
- * Avero Consulting — Built for Life widget (GSAP ScrollTrigger)
+ * Avero Consulting — Built for Life widget animation
  *
- * Driven by GSAP ScrollTrigger per the official gsap-scrolltrigger
- * skill recommendations. Replaces the previous CSS-sticky + manual
- * scroll listener that didn't survive Elementor's nested wrappers
- * reliably (CSS sticky breaks if any ancestor has overflow:hidden,
- * which is common in Elementor sections).
+ * GSAP ScrollTrigger driven, with full Elementor lifecycle integration
+ * (audit 2026-05-03 fixes #1-#6).
  *
- * Architecture (from gsap-scrolltrigger skill — Pinning + Scrub):
+ * Architecture per gsap-scrolltrigger SKILL:
+ *   trigger:    .tw-avero-built-for-life
+ *   pin:        .tw-avero-built-for-life__sticky  (CHILD pin, not the trigger)
+ *   pinSpacing: false                              (section has explicit height)
+ *   start:      'top top'
+ *   end:        'bottom bottom'
+ *   scrub:      1
+ *   invalidateOnRefresh: true
+ *   ease:       'none' on the tween (1:1 scroll-to-progress mapping)
  *
- *   trigger:  .tw-bfl                         (defines start/end calc)
- *   pin:      .tw-bfl__sticky                  (pinned via position:fixed by GSAP)
- *   pinSpacing: false                          (.tw-bfl already has explicit height)
- *   start:    'top top'
- *   end:      'bottom bottom'
- *   scrub:    1                                (smooth lag of 1s)
- *   invalidateOnRefresh: true                  (recalc on resize/img-load/font-swap)
+ * Elementor integration (audit fix #2):
+ *   - Hooks `frontend/element_ready/built-for-life.default` so Elementor
+ *     re-renders trigger a re-init.
+ *   - Kills any existing ScrollTrigger inside the widget root before
+ *     re-initialising → no leak across edits.
+ *   - Disables pin in edit mode (audit fix #4) so the editor stays
+ *     scrollable past the section.
  *
- *   Animation: a timeline that advances `--p` 0→1 across the first 70%
- *   of scroll, then holds at 1 for the remaining 30% (Forma's "moment
- *   to read" pattern). Tween uses ease: 'none' so scroll-to-progress
- *   stays 1:1 (per skill: "Use ease: 'none' on the animation when scrub
- *   is enabled, otherwise scroll position and animation progress won't
- *   line up — a very common mistake").
+ * Refresh integration (audit fix #3 — partly handled in animations.js
+ * for the global refresh, partly here for our own listener):
+ *   - elementor.channels.editor.on('change') → refresh
+ *   - elementor.on('preview:loaded') → refresh
  *
- * Why pin a CHILD instead of the trigger:
- *   The previous attempt at `pin: true` (pinning rootEl) deformed
- *   Elementor's flex/grid wrappers because the pin-spacer wraps the
- *   trigger. Pinning a smaller child (.tw-bfl__sticky) with
- *   pinSpacing:false uses position:fixed on the child only — the outer
- *   .elementor-section/.elementor-container chain stays in its natural
- *   layout. The trigger element provides scroll runway via inline height.
- *
- * Mobile + reduced-motion bypass via gsap.matchMedia (per gsap-core
- * skill): the cinematic effect runs only on desktop with normal motion
- * preference. Mobile and reduce-motion users see --p locked at 1 (full
- * end-state, readable, no scroll coupling).
- *
- * Cleanup: gsap.context() wraps the matchMedia + ScrollTrigger so a
- * single ctx.revert() on re-init cleans up everything atomically.
+ * Selector fix (audit fix #1): all internal classes renamed from
+ * `.tw-bfl*` to `.tw-avero-built-for-life*` to match the BEM convention
+ * the rest of the Avero template uses (.tw-avero-faq, .tw-avero-cta,
+ * .tw-avero-testimonials, etc.).
  * ============================================================ */
 (function () {
     'use strict';
+
+    var ROOT_SELECTOR    = '.tw-avero-built-for-life';
+    var STICKY_SELECTOR  = '.tw-avero-built-for-life__sticky';
+    var CANVAS_SELECTOR  = '.tw-avero-built-for-life__canvas';
+    var INIT_FLAG        = 'twBflInitialized';
+    var WIDGET_NAME      = 'built-for-life';
 
     var DEBUG = (function () {
         try { return location.search.indexOf('fp_debug=1') !== -1 || localStorage.getItem('fp_debug') === '1'; }
@@ -53,6 +51,12 @@
         args.unshift('%c[bfl]', 'color:#E6FF55;font-weight:bold');
         try { console.log.apply(console, args); } catch (e) {}
     }
+    function cwarn() {
+        if (!window.console) return;
+        var args = Array.prototype.slice.call(arguments);
+        args.unshift('%c[bfl]', 'color:#ff6b6b;font-weight:bold');
+        try { console.warn.apply(console, args); } catch (e) {}
+    }
 
     function gsapLib() { return window.gsap || null; }
     function STLib()   {
@@ -60,29 +64,35 @@
         return (g && g.ScrollTrigger) || window.ScrollTrigger || null;
     }
 
-    var initialised = (typeof WeakSet === 'function') ? new WeakSet() : null;
-    function alreadyInitialised(node) {
-        if (initialised && initialised.has(node)) return true;
-        if (initialised) initialised.add(node);
-        return false;
+    /** Are we running inside Elementor's editor preview iframe? */
+    function isEditMode() {
+        try {
+            return !!(window.elementorFrontend &&
+                      typeof window.elementorFrontend.isEditMode === 'function' &&
+                      window.elementorFrontend.isEditMode());
+        } catch (e) { return false; }
     }
 
-    function setupOne(section) {
-        if (alreadyInitialised(section)) {
-            clog('skip — already initialised', section);
+    function setupOne(root) {
+        if (!root) {
+            cwarn('setupOne called with null root — abort');
+            return;
+        }
+        // Guard against double-init via dataset flag (survives WeakSet
+        // limitations in older browsers and across module re-imports).
+        if (root.dataset && root.dataset[INIT_FLAG] === '1') {
+            clog('skip — already initialised', root);
             return;
         }
 
-        var canvas = section.querySelector('.tw-bfl__canvas');
-        var sticky = section.querySelector('.tw-bfl__sticky');
+        var canvas = root.querySelector(CANVAS_SELECTOR);
+        var sticky = root.querySelector(STICKY_SELECTOR);
         if (!canvas || !sticky) {
-            clog('markup missing — bailing', section);
+            cwarn('markup missing — bailing', { root: root, canvas: !!canvas, sticky: !!sticky });
             return;
         }
 
-        // Resolve breakpoint defensively. Number.isFinite guards against
-        // a corrupt data-bp attribute slipping NaN into matchMedia.
-        var bpRaw = parseInt(section.getAttribute('data-bp') || '800', 10);
+        var bpRaw = parseInt(root.getAttribute('data-bp') || '800', 10);
         var bp    = Number.isFinite(bpRaw) ? bpRaw : 800;
 
         var g  = gsapLib();
@@ -90,23 +100,51 @@
 
         // Graceful degradation: no GSAP available → set --p:1 so the
         // user sees the readable end-state. The CSS @media (prefers-
-        // reduced-motion) and <noscript> rules already handle this; the
+        // reduced-motion) and <noscript> rules already cover this; the
         // explicit JS set covers the case where GSAP failed to load
-        // mid-page (network error / blocked by adblocker / etc.).
+        // mid-page (network error / blocked / CSP).
         if (!g || !ST) {
             canvas.style.setProperty('--p', '1');
-            clog('GSAP/ScrollTrigger missing — falling back to --p:1', section);
+            cwarn('GSAP/ScrollTrigger missing — falling back to --p:1', root);
             return;
         }
 
-        // gsap.context() wraps every tween + ScrollTrigger + matchMedia
-        // we create. A single ctx.revert() on re-init cleans up the lot
-        // atomically — important because Elementor's preview lifecycle
-        // re-fires `frontend/element_ready` on every dirty render.
-        section.__tw_bfl_ctx = g.context(function () {
+        // Audit fix #2 — kill any pre-existing ScrollTrigger that
+        // targets a node inside our widget root. Survives Elementor's
+        // destroy + recreate lifecycle (the previous DOM is gone, but
+        // ScrollTrigger.getAll() still holds the orphan triggers until
+        // refresh — better to kill explicitly).
+        try {
+            ST.getAll().forEach(function (st) {
+                if (st && st.trigger && root.contains(st.trigger)) {
+                    st.kill();
+                    clog('killed orphan ST on', st.trigger);
+                }
+                if (st && st.pin && root.contains(st.pin)) {
+                    st.kill();
+                    clog('killed orphan ST (pin) on', st.pin);
+                }
+            });
+        } catch (e) { cwarn('ST cleanup threw', e); }
 
-            // gsap.matchMedia branches the animation on viewport + motion
-            // preference. Each branch gets its own cleanup function.
+        if (root.dataset) root.dataset[INIT_FLAG] = '1';
+
+        // Audit fix #4 — disable pin in edit mode. Editor users need to
+        // scroll past the section to inspect what comes after; an active
+        // pin makes that frustrating. The card-grow animation still runs
+        // (scrub stays on) so the user can preview the effect, just
+        // without sticking the section to the viewport.
+        var inEditor = isEditMode();
+
+        // gsap.context wraps every tween + ScrollTrigger + matchMedia we
+        // create. ctx.revert() on next setupOne (or on Elementor destroy)
+        // cleans the lot atomically.
+        if (root.__tw_bfl_ctx) {
+            try { root.__tw_bfl_ctx.revert(); } catch (e) {}
+            root.__tw_bfl_ctx = null;
+        }
+
+        root.__tw_bfl_ctx = g.context(function () {
             var mm = g.matchMedia();
 
             mm.add({
@@ -115,46 +153,22 @@
                 isReduced: '(prefers-reduced-motion: reduce)',
             }, function (ctx) {
 
-                // Mobile or reduced-motion → lock --p:1 (full text visible,
-                // image at scale 1, layout reset by CSS @media). No
-                // ScrollTrigger created, no scroll coupling.
                 if (ctx.conditions.isMobile || ctx.conditions.isReduced) {
                     canvas.style.setProperty('--p', '1');
-                    clog('mobile/reduced — locked at --p:1', section);
+                    clog('mobile/reduced — locked at --p:1', root);
                     return;
                 }
-
                 if (!ctx.conditions.isDesktop) return;
 
-                // Build a scrubbed timeline. The timeline's progress
-                // 0 → 1 maps to scroll progress through the section.
-                //
-                // Phase 1 (timeline 0 → 0.7): --p 0 → 1
-                //   Card grows, image dezooms, text fades + rises.
-                // Phase 2 (timeline 0.7 → 1.0): empty hold tween
-                //   --p stays at 1, scroll continues to consume the
-                //   final 30% of the pin without further visual change.
-                //
-                // ease: 'none' is REQUIRED here (skill rule: "with
-                // scrub enabled, scroll-to-progress mapping must be 1:1
-                // or the animation feels detached from scroll").
                 var tl = g.timeline({
                     scrollTrigger: {
-                        trigger:        section,
+                        trigger:        root,
                         start:          'top top',
                         end:            'bottom bottom',
-                        scrub:          1,
-                        // Pin the inner sticky child rather than the
-                        // section itself. pinSpacing:false because the
-                        // section already has explicit height (sec_vh
-                        // inline) so layout doesn't collapse.
-                        pin:            sticky,
+                        scrub:          inEditor ? false : 1,
+                        pin:            inEditor ? false : sticky,
                         pinSpacing:     false,
                         invalidateOnRefresh: true,
-                        // Lower priority = refreshed earlier (skill
-                        // rule: top-to-bottom page order). The BFL
-                        // section is mid-page in Avero so a small
-                        // positive priority is fine.
                         refreshPriority: 0,
                     },
                 });
@@ -162,25 +176,32 @@
                 tl.fromTo(canvas,
                     { '--p': 0 },
                     { '--p': 1, duration: 0.7, ease: 'none' }
-                ).to({}, { duration: 0.3 }); // 30% hold for reading
+                ).to({}, { duration: 0.3 });
 
-                clog('ready', { section: section, bp: bp, sec_vh: section.offsetHeight });
-
-                // matchMedia auto-reverts on breakpoint change. No
-                // explicit cleanup return needed.
+                clog('ready', { root: root, bp: bp, inEditor: inEditor });
             });
+        }, root);
+    }
 
-        }, section);
+    /** Find a `.tw-avero-built-for-life` inside an Elementor $scope. */
+    function rootFromScope($scope) {
+        if (!$scope || !$scope[0]) return null;
+        var node = $scope[0];
+        if (node.matches && node.matches(ROOT_SELECTOR)) return node;
+        return node.querySelector(ROOT_SELECTOR);
     }
 
     function bootAll() {
-        var sections = document.querySelectorAll('.tw-bfl');
-        if (!sections.length) return;
-        Array.prototype.forEach.call(sections, function (s) {
-            if (!s.hasAttribute('data-bp')) s.setAttribute('data-bp', '800');
-            setupOne(s);
+        var roots = document.querySelectorAll(ROOT_SELECTOR);
+        if (!roots.length) {
+            clog('boot — no .tw-avero-built-for-life on page');
+            return;
+        }
+        Array.prototype.forEach.call(roots, function (r) {
+            if (!r.hasAttribute('data-bp')) r.setAttribute('data-bp', '800');
+            setupOne(r);
         });
-        clog('boot — initialised', sections.length, 'instance(s)');
+        clog('boot — initialised', roots.length, 'instance(s)');
     }
 
     if (document.readyState === 'loading') {
@@ -189,18 +210,41 @@
         bootAll();
     }
 
-    // Re-init on Elementor editor re-renders. The WeakSet dedup in
-    // setupOne short-circuits redundant calls.
-    if (window.elementorFrontend && window.elementorFrontend.hooks && window.elementorFrontend.hooks.addAction) {
+    // Audit fix #2 — Elementor lifecycle integration. Hooks into the
+    // editor's per-widget ready event so a re-render after a setting
+    // change re-initialises the animation on the new DOM. Without this,
+    // edits to the widget kill the previous DOM (and its ScrollTriggers)
+    // and the new DOM has no animation attached.
+    function registerElementorHook() {
+        if (!window.elementorFrontend ||
+            !window.elementorFrontend.hooks ||
+            !window.elementorFrontend.hooks.addAction) return;
         try {
-            window.elementorFrontend.hooks.addAction('frontend/element_ready/built-for-life.default', function ($scope) {
-                if (!$scope || !$scope[0]) return;
-                var s = $scope[0].matches && $scope[0].matches('.tw-bfl') ? $scope[0] : $scope[0].querySelector('.tw-bfl');
-                if (s) {
-                    if (!s.hasAttribute('data-bp')) s.setAttribute('data-bp', '800');
-                    setupOne(s);
+            window.elementorFrontend.hooks.addAction(
+                'frontend/element_ready/' + WIDGET_NAME + '.default',
+                function ($scope) {
+                    var root = rootFromScope($scope);
+                    if (!root) {
+                        cwarn('frontend/element_ready fired but no .tw-avero-built-for-life inside scope', $scope);
+                        return;
+                    }
+                    if (!root.hasAttribute('data-bp')) root.setAttribute('data-bp', '800');
+                    // Reset init flag so setupOne does the full re-wire
+                    // (the DOM node may be the same reference but its
+                    // ScrollTriggers were torn down by the editor).
+                    if (root.dataset) root.dataset[INIT_FLAG] = '';
+                    setupOne(root);
                 }
-            });
-        } catch (e) {}
+            );
+            clog('elementorFrontend hook registered for', WIDGET_NAME);
+        } catch (e) { cwarn('elementorFrontend hook registration failed', e); }
+    }
+
+    // The hook needs to be registered AFTER elementorFrontend has booted.
+    // Wait for `elementor/frontend/init` if it hasn't fired yet.
+    if (window.elementorFrontend && window.elementorFrontend.hooks) {
+        registerElementorHook();
+    } else {
+        window.addEventListener('elementor/frontend/init', registerElementorHook);
     }
 })();
