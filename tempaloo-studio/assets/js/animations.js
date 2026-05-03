@@ -298,22 +298,45 @@
      * one listener per widget mount and re-fires for every other trigger.
      */
     function buildSync(tl, applyFromState) {
+        var ranOnce = false;
         return function (self) {
             if (!tl) return;
             try {
                 var p = typeof self.progress === 'number'
                             ? self.progress
                             : (typeof self.progress === 'function' ? self.progress() : 0);
+                var scrollY = window.pageYOffset || (document.documentElement && document.documentElement.scrollTop) || 0;
+
                 if (p > 0.01) {
-                    // Past start — element should be in its final state.
-                    // Skip applying fromState entirely (anti-flash on reload).
-                    if (tl.progress() < 0.99) tl.progress(1).pause();
+                    // The trigger is already past `start` on first refresh.
+                    // Two distinct cases — must NOT be conflated:
+                    //
+                    //   A) scrollY > 50  (user reloaded mid-page)
+                    //      Snap to played state — no flash, no replay of
+                    //      content the user has already seen.
+                    //
+                    //   B) scrollY ≤ 50  (page just loaded at the top)
+                    //      The element is above-the-fold but technically
+                    //      past `top 85%`. The user IS entering the page
+                    //      → entrance MUST play, not snap. Apply fromState
+                    //      then play the timeline normally.
+                    //
+                    // Conflating both broke text presets (typewriter,
+                    // word-fade-blur etc.) for above-the-fold heroes —
+                    // they were locked to opacity:1 with no animation.
+                    if (scrollY > 50 || ranOnce) {
+                        if (tl.progress() < 0.99) tl.progress(1).pause();
+                    } else {
+                        if (typeof applyFromState === 'function') applyFromState();
+                        tl.progress(0).play();
+                    }
                 } else {
                     // Before start — apply fromState so the entrance can
                     // play when the user scrolls down through start.
                     if (typeof applyFromState === 'function') applyFromState();
                     if (tl.progress() > 0.01) tl.progress(0).pause();
                 }
+                ranOnce = true;
             } catch (e) { warn('sync threw', e); }
         };
     }
@@ -465,18 +488,27 @@
             // CRITICAL — defer fromState until ScrollTrigger has computed
             // positions. If reload lands past start, fromState is never
             // applied → no flash of hidden text ("lost highlight").
+            //
+            // Two cases when past start on first refresh:
+            //   • scrollY > 50  → mid-page reload, snap to played state.
+            //   • scrollY ≤ 50  → page just loaded at top. Element is
+            //     above-the-fold but technically past start. Apply
+            //     fromState then play — typewriter / word-fade-blur etc.
+            //     MUST animate on first paint when the user is entering.
             onRefresh: function (self) {
+                if (played) return;
                 var p = typeof self.progress === 'number' ? self.progress : 0;
+                var scrollY = window.pageYOffset || (document.documentElement && document.documentElement.scrollTop) || 0;
                 if (p > 0.01) {
-                    // Past start — text should be visible. Run play once
-                    // to put spans in their played-out state. Subsequent
-                    // refreshes skip via the `played` guard.
-                    if (!played) {
+                    if (scrollY > 50) {
+                        played = true;
+                        try { playFn(); } catch (e) {}
+                    } else {
+                        ensureFrom();
                         played = true;
                         try { playFn(); } catch (e) {}
                     }
                 } else {
-                    // Before start — apply fromState so entrance works.
                     ensureFrom();
                 }
             },
@@ -1333,6 +1365,7 @@
                 //    cascades the picked profile down to <h1>/<p>/<img>
                 //    inside Avero hero/services/faq/etc.
                 var anims = (window.tempaloo && window.tempaloo.studio && window.tempaloo.studio.anims) || {};
+                var blockedByScope = {};
                 nodes = nodes.filter(function (el) {
                     if (el.hasAttribute && el.hasAttribute('data-tw-anim-skip')) return false;
                     var scope = el.closest && el.closest('[data-tw-anim-scope]');
@@ -1342,9 +1375,20 @@
                     // Active override = entrance preset that's neither
                     // empty nor "inherit". Composite presets (editorial-
                     // stack) handle their own descendants → also exclude.
-                    if (override && override.entrance && override.entrance !== 'inherit') return false;
+                    if (override && override.entrance && override.entrance !== 'inherit') {
+                        blockedByScope[scopeName] = (blockedByScope[scopeName] || 0) + 1;
+                        return false;
+                    }
                     return true;
                 });
+                // Surface the blocked count so the user can debug "why
+                // doesn't my element rule reach Avero?". Tip in console:
+                // set the listed widget(s) to "Inherit" in the React
+                // admin → Step 3 → Per widget to let the rule cascade in.
+                if (Object.keys(blockedByScope).length) {
+                    log('Element rule "' + typeId + '" blocked inside:', blockedByScope,
+                        '— set these widgets to "Inherit" in admin to let the rule apply.');
+                }
                 if (!nodes.length) return;
 
                 // Build opts from the rule's params and scrollTrigger.
