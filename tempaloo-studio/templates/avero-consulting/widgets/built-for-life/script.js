@@ -73,6 +73,134 @@
         } catch (e) { return false; }
     }
 
+    /**
+     * Self-diagnostic — walks ancestors looking for the 5 known
+     * blockers that prevent the pin-scale pattern from working in
+     * WordPress + Elementor. Logs clear warnings so the user knows
+     * exactly which environment issue to fix without guessing.
+     *
+     * Runs once per setupOne(), gated by fp_debug flag (or always
+     * when DEBUG=true). Cheap — the walk-up is bounded by document
+     * depth (~10-15 nodes max in a typical Elementor page).
+     */
+    function diagnose(root) {
+        if (!DEBUG) return;
+        var report = {
+            blockers: [],
+            warnings: [],
+            info: {},
+        };
+
+        // Blocker #1 — overflow:hidden on any ancestor breaks
+        // position:sticky and can clip GSAP's pinned position:fixed.
+        // Walk up to <html> checking computed overflow on each ancestor.
+        var el = root.parentElement;
+        var depth = 0;
+        while (el && depth < 30) {
+            var cs = window.getComputedStyle(el);
+            if (cs.overflowY === 'hidden' || cs.overflowY === 'clip' ||
+                cs.overflowX === 'hidden' || cs.overflowX === 'clip' ||
+                cs.overflow  === 'hidden' || cs.overflow  === 'clip') {
+                report.blockers.push({
+                    type:    'overflow-hidden-ancestor',
+                    element: el.tagName + (el.className ? '.' + String(el.className).split(' ').join('.') : ''),
+                    overflow: { x: cs.overflowX, y: cs.overflowY },
+                    fix:     'Add CSS: ' + ('.' + String(el.className).split(' ')[0]) + ' { overflow: visible }',
+                });
+            }
+            // Blocker #2 — transform / filter / perspective / will-change
+            // on an ancestor creates a new containing block, trapping
+            // position:fixed inside it (so pin moves with the parent).
+            if (cs.transform !== 'none' ||
+                cs.filter !== 'none' ||
+                cs.perspective !== 'none' ||
+                /transform|filter|perspective/.test(cs.willChange)) {
+                report.blockers.push({
+                    type:    'containing-block-trap',
+                    element: el.tagName + (el.className ? '.' + String(el.className).split(' ').join('.') : ''),
+                    cause: {
+                        transform:   cs.transform !== 'none' ? cs.transform : null,
+                        filter:      cs.filter    !== 'none' ? cs.filter    : null,
+                        perspective: cs.perspective !== 'none' ? cs.perspective : null,
+                        willChange:  cs.willChange,
+                    },
+                    fix: 'Remove transform/filter/perspective/will-change from this element, OR move the pinned section out of it.',
+                });
+            }
+            el = el.parentElement;
+            depth++;
+        }
+
+        // Blocker #3 — multiple GSAP instances on the page.
+        // Detected by counting <script src*="gsap"> in the document.
+        try {
+            var gsapScripts = Array.prototype.filter.call(
+                document.querySelectorAll('script[src*="gsap"]'),
+                function (s) { return s.src && /\bgsap(\.min)?\.js/i.test(s.src); }
+            );
+            if (gsapScripts.length > 1) {
+                report.warnings.push({
+                    type:  'multiple-gsap-scripts',
+                    count: gsapScripts.length,
+                    srcs:  gsapScripts.map(function (s) { return s.src; }),
+                    fix:   'Multiple GSAP versions loaded. Elementor Pro ships its own GSAP. Make sure ScrollTrigger is registered on the SAME gsap instance the widget uses.',
+                });
+            }
+            // Verify ScrollTrigger is actually registered on window.gsap.
+            var g = window.gsap;
+            if (g && (!g.ScrollTrigger && !window.ScrollTrigger)) {
+                report.blockers.push({
+                    type: 'scrolltrigger-not-registered',
+                    fix:  'Call gsap.registerPlugin(ScrollTrigger) once before any ScrollTrigger usage.',
+                });
+            }
+        } catch (e) {}
+
+        // Blocker #4 — Lenis active without scrollerProxy.
+        if (window._tw_lenis || window.Lenis) {
+            // ScrollTrigger.scrollerProxy uses a flag we can't easily
+            // detect. Just warn — user has to verify wiring manually.
+            report.warnings.push({
+                type: 'lenis-active',
+                fix:  'Lenis is loaded. Wire ScrollTrigger.scrollerProxy() and ScrollTrigger.update on lenis scroll, OR drop Lenis on this page.',
+            });
+        }
+
+        // Info — current ScrollTrigger count (reveals leaks across re-inits).
+        if (STLib()) {
+            report.info.scrollTriggerCount = STLib().getAll().length;
+        }
+        // Info — GSAP version actually attached to window.
+        if (window.gsap) {
+            report.info.gsapVersion = window.gsap.version || 'unknown';
+        }
+        // Info — are we in an iframe (Elementor editor)?
+        report.info.inIframe = (window.self !== window.top);
+        report.info.viewport = { w: window.innerWidth, h: window.innerHeight };
+        report.info.docHeight = document.documentElement.scrollHeight;
+
+        // Pretty-print the diagnostic report.
+        if (report.blockers.length || report.warnings.length) {
+            try {
+                console.groupCollapsed('%c[bfl] DIAGNOSTIC',
+                    'background:#E6FF55;color:#000;padding:2px 6px;border-radius:3px;font-weight:bold');
+                if (report.blockers.length) {
+                    console.warn('🛑 BLOCKERS (' + report.blockers.length + ')');
+                    report.blockers.forEach(function (b) { console.warn(b); });
+                }
+                if (report.warnings.length) {
+                    console.warn('⚠️  WARNINGS (' + report.warnings.length + ')');
+                    report.warnings.forEach(function (w) { console.warn(w); });
+                }
+                console.log('ℹ️  INFO', report.info);
+                console.groupEnd();
+            } catch (e) {}
+        } else {
+            clog('diagnostic clean — environment OK', report.info);
+        }
+        return report;
+    }
+
     function setupOne(root) {
         if (!root) {
             cwarn('setupOne called with null root — abort');
@@ -91,6 +219,13 @@
             cwarn('markup missing — bailing', { root: root, canvas: !!canvas, sticky: !!sticky });
             return;
         }
+
+        // Diagnose the environment BEFORE wiring anything. With
+        // ?fp_debug=1 this surfaces the exact WP/Elementor blocker
+        // (overflow:hidden ancestor / transform trap / multi-gsap /
+        // Lenis / SR-not-registered) so we know what to fix without
+        // guessing. No-op outside debug mode.
+        diagnose(root);
 
         var bpRaw = parseInt(root.getAttribute('data-bp') || '800', 10);
         var bp    = Number.isFinite(bpRaw) ? bpRaw : 800;
