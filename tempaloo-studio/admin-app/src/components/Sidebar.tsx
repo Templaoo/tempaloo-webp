@@ -53,16 +53,10 @@ const NAV: NavItem[] = [
       </svg>
     ),
   },
-  {
-    id: 'animation',
-    label: 'Animation',
-    icon: (
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M2 12V4l5 4-5 4z" />
-        <circle cx="11" cy="8" r="3" />
-      </svg>
-    ),
-  },
+  // The Animation page used to live here. Step 1 of the floating-panel
+  // migration moved profiles into the live editor (see ProfilePicker).
+  // The wizard is no longer surfaced from the sidebar — it can be
+  // reached via a deep-link if someone needs the advanced surface.
   {
     id: 'license',
     label: 'License',

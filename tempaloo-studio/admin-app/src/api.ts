@@ -113,16 +113,18 @@ export type ParamSpec =
   | { type: 'string'; value: string;  label?: string; tip?: string; locked?: boolean };
 
 export interface PresetSchema {
-  id:           string;
-  label:        string;
-  category:     'element' | 'text';
-  description:  string;
-  requires:     string[];
-  splits?:      'words' | 'chars' | 'lines' | 'auto';
-  scrubOnly?:   boolean;
-  params:       Record<string, ParamSpec>;
-  scrollTrigger?: Record<string, ParamSpec> | null;
-  preview?:     string;
+  id:              string;
+  label:           string;
+  category:        'element' | 'text';
+  /** Element type ids this preset is allowed on. Empty / missing → assume all. */
+  compatibleWith?: string[];
+  description:     string;
+  requires:        string[];
+  splits?:         'words' | 'chars' | 'lines' | 'auto';
+  scrubOnly?:      boolean;
+  params:          Record<string, ParamSpec>;
+  scrollTrigger?:  Record<string, ParamSpec> | null;
+  preview?:        string;
 }
 
 export interface ElementType {

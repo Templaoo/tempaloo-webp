@@ -15,17 +15,29 @@ import { ParamControl } from './ParamControl';
  *   - rule.enabled === false → entire editor greyed out
  */
 export function RuleEditor({
-  rule, lib, allowInherit, onChange,
+  rule, lib, allowInherit, elementTypeId, onChange,
 }: {
-  rule:          AnimationRule;
-  lib:           AnimationLibrary;
-  allowInherit?: boolean;
-  onChange:      (next: AnimationRule) => void;
+  rule:           AnimationRule;
+  lib:            AnimationLibrary;
+  allowInherit?:  boolean;
+  /** When set, the preset dropdown is filtered to presets compatible
+   *  with this element type (h1 / h2 / p / img / button / container /
+   *  link). E.g. picking text-typing for an "img" rule is forbidden by
+   *  the schema — the option is omitted entirely. */
+  elementTypeId?: string;
+  onChange:       (next: AnimationRule) => void;
 }) {
-  const presets = lib.presets;
-  const preset  = useMemo(
-    () => presets.find((p) => p.id === rule.preset) ?? null,
-    [presets, rule.preset],
+  const presets = useMemo(() => {
+    if (!elementTypeId) return lib.presets;
+    return lib.presets.filter((p) => {
+      if (!p.compatibleWith || p.compatibleWith.length === 0) return true;
+      return p.compatibleWith.includes(elementTypeId);
+    });
+  }, [lib.presets, elementTypeId]);
+
+  const preset = useMemo(
+    () => lib.presets.find((p) => p.id === rule.preset) ?? null,
+    [lib.presets, rule.preset],
   );
 
   const isDisabled    = rule.enabled === false;

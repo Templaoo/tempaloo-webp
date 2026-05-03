@@ -347,10 +347,17 @@
      * → `toState`. If a scrollTriggerCfg is provided, wires the
      * timeline to a ScrollTrigger according to the chosen direction.
      */
-    function scheduleAnim(targets, fromState, toState, scrollTriggerCfg, direction) {
+    function scheduleAnim(targets, fromState, toState, scrollTriggerCfg, direction, delay) {
         var g = gsap();
         if (!g) return null;
         direction = direction || defaultDirection();
+
+        // Universal `delay` (in seconds, gsap-core param). Injected on
+        // toState so GSAP holds the tween for `delay` seconds before
+        // playing. Honours per-rule delays set in the React admin.
+        if (typeof delay === 'number' && delay > 0) {
+            toState = Object.assign({}, toState, { delay: delay });
+        }
 
         var applyFromState = function () {
             try { g.set(targets, fromState); } catch (e) { warn('gsap.set failed', e); }
@@ -465,15 +472,24 @@
             fromApplied = true;
             try { setFromFn(); } catch (e) { warn('setFromFn threw', e); }
         };
+        // `delay` (gsap-core) — wait N seconds before playFn fires. Text
+        // presets don't pass delay through their own gsap.to() params, so
+        // we wrap the playFn invocation in a setTimeout. Matches GSAP's
+        // delay semantics for the user (the entrance starts late) without
+        // touching every individual preset.
+        var delayMs = (typeof opts.delay === 'number' && opts.delay > 0) ? Math.round(opts.delay * 1000) : 0;
+        var runPlay = function () { try { playFn(); } catch (e) {} };
         var safePlay = function () {
             ensureFrom();
             played = true;
-            try { playFn(); } catch (e) {}
+            if (delayMs) setTimeout(runPlay, delayMs);
+            else runPlay();
         };
         var safeReplay = function () {
             ensureFrom();
             played = true;
-            try { playFn(); } catch (e) {}
+            if (delayMs) setTimeout(runPlay, delayMs);
+            else runPlay();
         };
         var safeReverse = function () {
             if (!played) return; // never reverse before first play
@@ -551,7 +567,7 @@
             scheduleAnim(targets,
                 { opacity: 0 },
                 { opacity: 1, duration: opts.duration || 0.45, ease: 'power1.out', stagger: opts.stagger || 0, clearProps: 'opacity' },
-                opts.scrollTrigger, opts.direction);
+                opts.scrollTrigger, opts.direction, opts.delay);
         },
 
         'fade-up': function (targets, opts) {
@@ -559,7 +575,7 @@
             scheduleAnim(targets,
                 { opacity: 0, y: y },
                 { opacity: 1, y: 0, duration: opts.duration || 0.7, ease: 'power3.out', stagger: opts.stagger || 0, clearProps: 'opacity,transform' },
-                opts.scrollTrigger, opts.direction);
+                opts.scrollTrigger, opts.direction, opts.delay);
         },
 
         'fade-down': function (targets, opts) {
@@ -567,7 +583,7 @@
             scheduleAnim(targets,
                 { opacity: 0, y: y },
                 { opacity: 1, y: 0, duration: opts.duration || 0.7, ease: 'power3.out', stagger: opts.stagger || 0, clearProps: 'opacity,transform' },
-                opts.scrollTrigger, opts.direction);
+                opts.scrollTrigger, opts.direction, opts.delay);
         },
 
         'fade-left': function (targets, opts) {
@@ -575,7 +591,7 @@
             scheduleAnim(targets,
                 { opacity: 0, x: x },
                 { opacity: 1, x: 0, duration: opts.duration || 0.7, ease: 'power3.out', stagger: opts.stagger || 0, clearProps: 'opacity,transform' },
-                opts.scrollTrigger, opts.direction);
+                opts.scrollTrigger, opts.direction, opts.delay);
         },
 
         'fade-right': function (targets, opts) {
@@ -583,7 +599,7 @@
             scheduleAnim(targets,
                 { opacity: 0, x: x },
                 { opacity: 1, x: 0, duration: opts.duration || 0.7, ease: 'power3.out', stagger: opts.stagger || 0, clearProps: 'opacity,transform' },
-                opts.scrollTrigger, opts.direction);
+                opts.scrollTrigger, opts.direction, opts.delay);
         },
 
         'scale-in': function (targets, opts) {
@@ -591,7 +607,7 @@
             scheduleAnim(targets,
                 { opacity: 0, scale: 1 - 0.08 * f },
                 { opacity: 1, scale: 1, duration: opts.duration || 0.7, ease: 'back.out(1.4)', stagger: opts.stagger || 0, clearProps: 'opacity,transform' },
-                opts.scrollTrigger, opts.direction);
+                opts.scrollTrigger, opts.direction, opts.delay);
         },
 
         'blur-in': function (targets, opts) {
@@ -599,7 +615,7 @@
             scheduleAnim(targets,
                 { opacity: 0, filter: 'blur(' + (20 * f) + 'px)', willChange: 'opacity, filter' },
                 { opacity: 1, filter: 'blur(0px)', duration: opts.duration || 0.85, ease: 'power3.out', stagger: opts.stagger || 0, clearProps: 'opacity,filter,willChange' },
-                opts.scrollTrigger, opts.direction);
+                opts.scrollTrigger, opts.direction, opts.delay);
         },
 
         'mask-reveal': function (targets, opts) {
@@ -608,13 +624,13 @@
                 scheduleAnim(targets,
                     { opacity: 0 },
                     { opacity: 1, duration: opts.duration || 0.4, ease: 'power1.out', stagger: opts.stagger || 0, clearProps: 'opacity' },
-                    opts.scrollTrigger, opts.direction);
+                    opts.scrollTrigger, opts.direction, opts.delay);
                 return;
             }
             scheduleAnim(targets,
                 { clipPath: 'inset(0 100% 0 0)' },
                 { clipPath: 'inset(0 0% 0 0)', duration: opts.duration || 0.8, ease: 'power3.out', stagger: opts.stagger || 0, clearProps: 'clipPath' },
-                opts.scrollTrigger, opts.direction);
+                opts.scrollTrigger, opts.direction, opts.delay);
         },
     };
 
@@ -1177,9 +1193,22 @@
         var stCfg = hasST() && trig !== 'none' ? { trigger: rootEl, start: trig } : null;
         if (ts.editAware) stCfg = ts.editAware(stCfg);
 
+        // Pull `delay` (and any future v2 param) directly from the v2
+        // payload. The v1 shim doesn't carry delay — reading v2 here
+        // means the runtime always honours the full param surface
+        // configured in the React admin without us having to widen the
+        // legacy shim shape.
+        var v2Widget = (window.tempaloo && window.tempaloo.studio &&
+                        window.tempaloo.studio.animV2 &&
+                        window.tempaloo.studio.animV2.widgetOverrides &&
+                        window.tempaloo.studio.animV2.widgetOverrides[scope]) || null;
+        var v2Params = (v2Widget && v2Widget.params) || {};
+        var delay    = (typeof v2Params.delay === 'number') ? v2Params.delay : 0;
+
         var opts = {
             stagger:       stMs / 1000,
             duration:      dur * (lvl === 'bold' ? 1.25 : 1),
+            delay:         delay,
             lvlFactor:     lvlF,
             scrollTrigger: stCfg,
             direction:     direction,
@@ -1408,6 +1437,7 @@
                 // enters the viewport, not when the first one does.
                 nodes.forEach(function (el) {
                     var opts = {
+                        delay:         (typeof params.delay   === 'number' ? params.delay   : 0),
                         stagger:       (typeof params.stagger === 'number' ? params.stagger : 0),
                         duration:      (typeof params.duration === 'number' ? params.duration : 0.7),
                         lvlFactor:     intensityFactor(level()),

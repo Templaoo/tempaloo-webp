@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AppState, TemplateFull } from '../types';
 import { api } from '../api';
+import { ProfilePicker } from './ProfilePicker';
 
 type Mode     = 'light' | 'dark';
 type ViewMode = Mode | 'dual';   // 'dual' = edit both modes side-by-side
@@ -1074,6 +1075,7 @@ export function FloatingPanel() {
         >
           + Add color
         </button>
+        <ProfilePicker />
         {inspectFilter && (
           <button type="button" className="tsa-fp__btn" onClick={() => { setInspectFilter(null); setInspectLabel(''); }}>
             Show all

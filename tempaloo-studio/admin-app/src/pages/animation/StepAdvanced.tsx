@@ -148,6 +148,7 @@ function ElementsList({
                 <RuleEditor
                   rule={rule}
                   lib={lib}
+                  elementTypeId={type.id}
                   onChange={(next) => onSave(type.id, next)}
                 />
                 <div className="tsa-anim-element-row__footer">
