@@ -79,6 +79,16 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ template_slug, widget, rule }),
     }),
+  setSelectorOverride: (selector: string, rule: AnimationRule, label?: string) =>
+    call<AnimationStateV2>('/animation/v2/selector-override', {
+      method: 'POST',
+      body: JSON.stringify({ selector, rule, label: label ?? '' }),
+    }),
+  deleteSelectorOverride: (selector: string) =>
+    call<AnimationStateV2>('/animation/v2/selector-override/delete', {
+      method: 'POST',
+      body: JSON.stringify({ selector }),
+    }),
 
   // ── Plan B — profiles ──────────────────────────────────
   listProfiles:    () => call<{ profiles: AnimationProfile[]; active: string }>('/animation/profiles'),
@@ -166,8 +176,9 @@ export interface AnimationStateV2 {
     direction:    string;
     reduceMotion: string;
   };
-  elementRules:    Record<string, AnimationRule>;
-  widgetOverrides: Record<string, AnimationRule>;
+  elementRules:      Record<string, AnimationRule>;
+  widgetOverrides:   Record<string, AnimationRule>;
+  selectorOverrides?: Record<string, { rule: AnimationRule; label?: string; savedAt?: number }>;
   templateSlug:    string;
   widgets:         string[];
   activeProfile?:  string;

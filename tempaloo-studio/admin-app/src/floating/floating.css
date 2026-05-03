@@ -1282,6 +1282,141 @@
 }
 
 /* Mobile fallback */
+/* Animate Mode (step 2) — page-wide click picker */
+.tsa-fp__animatebar {
+  padding: 8px 12px;
+  background: var(--tsa-bg-strong, #fff);
+  border-bottom: 1px solid var(--tsa-border, #ddd);
+  flex-shrink: 0;
+}
+.tsa-fp__animatebtn {
+  width: 100%;
+  justify-content: center;
+  font-weight: 600;
+}
+.tsa-fp__animatebtn.is-active {
+  background: var(--tsa-accent, #3fb2a2);
+  color: #fff;
+}
+
+/* Hover/pinned outline drawn over the inspected element (absolute,
+   anchored to scroll position so it tracks correctly). */
+.tsa-am-overlay {
+  position: absolute;
+  pointer-events: none;
+  z-index: 999998;
+  border: 2px dashed #3fb2a2;
+  border-radius: 2px;
+  background: rgba(63, 178, 162, 0.08);
+  transition: top 80ms ease, left 80ms ease, width 80ms ease, height 80ms ease;
+}
+.tsa-am-overlay--pinned {
+  border-style: solid;
+  border-color: #2563eb;
+  background: rgba(37, 99, 235, 0.06);
+}
+.tsa-am-overlay__label {
+  position: absolute;
+  top: -22px;
+  left: 0;
+  background: #3fb2a2;
+  color: #fff;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: ui-monospace, SF Mono, Menlo, monospace;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+
+/* Floating popover anchored next to the pinned element. */
+.tsa-am-popover {
+  z-index: 999999;
+  background: var(--tsa-bg-strong, #fff);
+  color: var(--tsa-text, #111);
+  border: 1px solid var(--tsa-border, #ddd);
+  border-radius: 10px;
+  box-shadow: 0 24px 64px -16px rgba(0,0,0,0.35);
+  display: flex;
+  flex-direction: column;
+  font-family: var(--tsa-font-body, system-ui, sans-serif);
+  overflow: hidden;
+}
+.tsa-am-popover__head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--tsa-bg-soft, #f5f5f5);
+  border-bottom: 1px solid var(--tsa-border, #ddd);
+  font-size: 13px;
+}
+.tsa-am-popover__close {
+  background: transparent; border: none; font-size: 20px; line-height: 1;
+  cursor: pointer; color: var(--tsa-text-muted, #888);
+  padding: 0 4px;
+}
+.tsa-am-popover__close:hover { color: var(--tsa-text, #111); }
+.tsa-am-popover__sel {
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--tsa-text-muted, #666);
+  background: var(--tsa-bg, #fafafa);
+  border-bottom: 1px solid var(--tsa-border, #ddd);
+}
+.tsa-am-popover__sel code {
+  font-family: ui-monospace, SF Mono, Menlo, monospace;
+  background: rgba(0,0,0,0.05);
+  padding: 1px 4px;
+  border-radius: 2px;
+  color: var(--tsa-accent, #3fb2a2);
+}
+.tsa-am-popover__body {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 12px;
+}
+.tsa-am-popover__foot {
+  display: flex; gap: 8px; justify-content: flex-end;
+  padding: 10px 12px;
+  background: var(--tsa-bg-soft, #f5f5f5);
+  border-top: 1px solid var(--tsa-border, #ddd);
+}
+.tsa-am-popover__foot .tsa-btn-ghost:nth-child(2) { margin-right: auto; }
+
+/* Top-of-viewport hint banner. */
+.tsa-am-hint {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 999998;
+  background: rgba(15, 23, 42, 0.92);
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-family: var(--tsa-font-body, system-ui, sans-serif);
+  display: flex; align-items: center; gap: 12px;
+  box-shadow: 0 12px 32px -8px rgba(0,0,0,0.4);
+}
+.tsa-am-hint kbd {
+  background: rgba(255,255,255,0.15);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+}
+.tsa-am-hint__exit {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.3);
+  color: #fff;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.tsa-am-hint__exit:hover { background: rgba(255,255,255,0.1); }
+
 /* View tabs (Colors / Animation) — step 1.5 */
 .tsa-fp__viewtabs {
   display: flex;

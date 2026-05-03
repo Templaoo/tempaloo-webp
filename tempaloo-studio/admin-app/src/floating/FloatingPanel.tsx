@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AppState, TemplateFull } from '../types';
 import { api } from '../api';
 import { AnimationView } from './AnimationView';
+import { AnimateMode } from './AnimateMode';
 
 type PanelView = 'colors' | 'animation';
 const STORAGE_VIEW = 'tempaloo-fp-view';
@@ -192,6 +193,9 @@ export function FloatingPanel() {
     return v === 'animation' ? 'animation' : 'colors';
   });
   useEffect(() => { try { localStorage.setItem(STORAGE_VIEW, panelView); } catch {} }, [panelView]);
+  // Animate Mode — click-driven element animator (step 2). Mutually
+  // exclusive with the color Inspect mode below.
+  const [animateMode, setAnimateMode] = useState(false);
   const [maximized,  setMaximized]  = useState(false);
   const [pos,        setPos]        = useState(() => readStored(STORAGE_POS, { x: -1, y: -1 }));
   const [size,       setSize]       = useState(() => readStored(STORAGE_SIZE, DEFAULT_SIZE));
@@ -1049,6 +1053,22 @@ export function FloatingPanel() {
         </button>
       </div>
 
+      {/* Global "Animate Mode" trigger — works in both Colors and Animation
+           views. Clicking it activates the page-wide click picker. */}
+      <div className="tsa-fp__animatebar">
+        <button
+          type="button"
+          className={'tsa-fp__btn tsa-fp__animatebtn' + (animateMode ? ' is-active' : '')}
+          onClick={() => setAnimateMode((v) => !v)}
+          title="Click any element on the page to animate it"
+        >
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M2 2h6v6H2z" /><path d="M8 8l6 6M11 14h3v-3" />
+          </svg>
+          {animateMode ? 'Click an element…' : 'Animate any element'}
+        </button>
+      </div>
+
       {panelView === 'animation' && <AnimationView />}
 
       {panelView === 'colors' && (<>
@@ -1445,6 +1465,10 @@ export function FloatingPanel() {
         />
       )}
       </>)}
+      {/* Animate Mode overlay + popover live OUTSIDE the panel chrome,
+          positioned via fixed coords against the viewport so they can
+          appear anywhere on the page. */}
+      <AnimateMode active={animateMode} onClose={() => setAnimateMode(false)} />
     </div>
   );
 }
