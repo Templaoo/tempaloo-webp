@@ -62,11 +62,25 @@ final class Floating_Panel {
             true
         );
         wp_localize_script( 'tempaloo-studio-floating', 'TempalooStudioBoot', [
-            'rest'  => [ 'root' => esc_url_raw( rest_url() ), 'nonce' => wp_create_nonce( 'wp_rest' ) ],
-            'admin' => [ 'url' => admin_url() ],
-            'mode'  => 'floating',
+            'rest'   => [ 'root' => esc_url_raw( rest_url() ), 'nonce' => wp_create_nonce( 'wp_rest' ) ],
+            'admin'  => [ 'url' => admin_url() ],
+            'mode'   => 'floating',
+            // Shadow-DOM isolation — main.tsx fetches this URL and
+            // injects <link rel="stylesheet"> INSIDE the shadow root
+            // instead of letting it leak to the document head where
+            // the WP theme's `body strong { color: x }` rules can
+            // bleed in. The CSS file URL stays the same; only its
+            // injection location changes.
+            'cssUrl' => file_exists( $css )
+                ? TEMPALOO_STUDIO_URL . 'build/admin.css?ver=' . TEMPALOO_STUDIO_VERSION . '-' . filemtime( $css )
+                : '',
         ] );
 
+        // We STILL enqueue admin.css in the document head — not for
+        // styling (CSS in head can't reach into shadow DOM), but so
+        // the browser pre-fetches it. The shadow-root injection in
+        // main.tsx then loads it instantly from cache, eliminating
+        // the unstyled-flash window.
         if ( file_exists( $css ) ) {
             wp_enqueue_style(
                 'tempaloo-studio-floating-css',
