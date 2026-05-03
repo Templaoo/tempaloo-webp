@@ -1109,12 +1109,22 @@
         var cfg = (window.tempaloo && window.tempaloo.studio && window.tempaloo.studio.anims) || {};
         var widgetCfg = cfg[scope] || {};
 
-        // Per-widget preset is ALWAYS respected — intensity only modulates
-        // transform size via lvlFactor (subtle = 0, medium = 1, bold = 1.4).
-        // At subtle the y/x translates collapse to 0 → effectively opacity-
-        // only, but the preset's character (scale, blur, mask) is preserved.
-        // Off bails out entirely above.
-        var preset = widgetCfg.entrance || 'fade-up';
+        // OPTION 1 (per-widget Inherit) — when no widget override is
+        // configured for this scope, applyEntrance BAILS OUT so the
+        // Element Rules engine can take over inside this scope. This
+        // is what makes Avero's <h1> / <p> / <img> respect the picked
+        // profile (Editorial / Cinematic / etc.) when the widget is
+        // left on "Inherit" in the React admin Step 3.
+        //
+        // Backward-compat: if the widget has NO entry in the config map
+        // at all (template never declared it), we still bail out — the
+        // element rules will handle it. Only widgets explicitly
+        // configured by template.json or the admin run applyEntrance.
+        var preset = widgetCfg.entrance;
+        if (!preset || preset === 'inherit') {
+            log('applyEntrance: scope "' + scope + '" inherits → element rules will handle it');
+            return;
+        }
 
         var stMs       = parseInt(widgetCfg.stagger || 80, 10);
         var dur        = parseFloat(widgetCfg.duration || 0.7);
@@ -1315,15 +1325,24 @@
 
                 // Exclusions:
                 //  • elements explicitly opted out via data-tw-anim-skip
-                //  • elements inside a [data-tw-anim-scope] (handled by
-                //    applyEntrance with their widget override)
-                //  • elements whose closest scope opted into the
-                //    composite editorial-stack (already orchestrating
-                //    children)
+                //  • elements inside a [data-tw-anim-scope] WHEN that
+                //    scope has an active widget override. When the scope
+                //    has no override (or "inherit"), we descend INTO it
+                //    and let element rules apply — this is OPTION 1 of
+                //    the Avero ↔ admin bridge: per-widget "Inherit"
+                //    cascades the picked profile down to <h1>/<p>/<img>
+                //    inside Avero hero/services/faq/etc.
+                var anims = (window.tempaloo && window.tempaloo.studio && window.tempaloo.studio.anims) || {};
                 nodes = nodes.filter(function (el) {
                     if (el.hasAttribute && el.hasAttribute('data-tw-anim-skip')) return false;
                     var scope = el.closest && el.closest('[data-tw-anim-scope]');
-                    if (scope) return false;
+                    if (!scope) return true;
+                    var scopeName = scope.getAttribute('data-tw-anim-scope');
+                    var override  = scopeName ? anims[scopeName] : null;
+                    // Active override = entrance preset that's neither
+                    // empty nor "inherit". Composite presets (editorial-
+                    // stack) handle their own descendants → also exclude.
+                    if (override && override.entrance && override.entrance !== 'inherit') return false;
                     return true;
                 });
                 if (!nodes.length) return;
