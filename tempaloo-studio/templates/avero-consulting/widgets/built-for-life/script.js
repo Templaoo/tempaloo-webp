@@ -73,10 +73,16 @@
 
             /* ── Lifecycle 1 — onInit (state, no DOM events yet) ── */
             onInit: function () {
-                Base.prototype.onInit.apply(this, arguments);
-                this._tls = [];        // tracked timelines
-                this._mm  = null;      // gsap.matchMedia context
+                // CRITICAL — set state BEFORE the super call. Elementor's
+                // Base.prototype.onInit triggers bindEvents() synchronously,
+                // which calls run() → matchMedia.add() → _buildDesktop() →
+                // this._stIds.push(...). If we initialise _stIds AFTER
+                // super, _buildDesktop runs with this._stIds === undefined
+                // and throws TypeError. Set first, then super.
+                this._tls   = [];      // tracked timelines
+                this._mm    = null;    // gsap.matchMedia context
                 this._stIds = [];      // tracked ScrollTrigger ids (for dedup)
+                Base.prototype.onInit.apply(this, arguments);
             },
 
             /* ── Lifecycle 2 — bindEvents (DOM ready, attach behavior) ── */
