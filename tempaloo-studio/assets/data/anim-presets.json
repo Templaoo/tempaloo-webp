@@ -222,8 +222,8 @@
       "id": "world-expands",
       "label": "World expands (cinematic pin)",
       "category": "text",
-      "compatibleWith": ["container"],
-      "description": "Hero section starts as a rounded card (88vw × 80vh), then on scroll grows to fullscreen 100vw × 100vh while the inner image dezooms 1.15→1.0 and the title fades in + rises 40px. The section pins for one viewport so the user can read, then scroll continues. Auto-disabled below 800px (mobile = static layout). Markup expected: section > .tw-anim-world-expands__inner > .tw-anim-world-expands__media + .tw-anim-world-expands__overlay (with title / lead inside).",
+      "compatibleWith": ["container", "img"],
+      "description": "Hero section starts as a rounded card (88vw × 80vh), then on scroll grows to fullscreen 100vw × 100vh while the inner image dezooms 1.15→1.0 and the title fades in + rises 40px. The section pins for one viewport so the user can read, then scroll continues. Auto-disabled below 800px. Works on ANY markup: native Elementor sections / containers with a CSS background-image, sections containing an Image widget + Heading widget, or Tempaloo widgets with explicit BEM (.tw-anim-world-expands__inner / __media / __overlay). The runtime auto-detects the parts and synthesizes the missing wrapper(s) at apply time, restoring everything on revert.",
       "requires": ["ScrollTrigger"],
       "scrubOnly": true,
       "params": {

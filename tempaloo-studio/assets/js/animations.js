@@ -631,6 +631,132 @@
      *  asks for it (gsap-core best practice). Falls back to plain opacity. */
     function fadeKey(opts) { return pBool(opts, 'useAutoAlpha', false) ? 'autoAlpha' : 'opacity'; }
 
+    /**
+     * Resolve the markup parts world-expands needs (inner / media / overlay)
+     * from ARBITRARY user markup — so the preset can be applied to any
+     * widget (Tempaloo or native Elementor) via Animate Mode without the
+     * user having to author specific BEM classes.
+     *
+     * Three resolution paths, tried in order:
+     *
+     *   A. AUTHORED BEM
+     *      `.tw-anim-world-expands__inner / __media / __overlay`.
+     *      Used by Tempaloo widgets that bake the markup in.
+     *
+     *   B. NATIVE <img> / <picture> / <video> child anywhere inside.
+     *      The "inner" is the deepest direct child of rootEl that
+     *      contains the media. If the media is itself a direct child,
+     *      we synthesize a wrapper div so we have one element to scale.
+     *      Headings + paragraphs that are NOT inside the media are
+     *      treated as the overlay.
+     *
+     *   C. CSS background-image fallback — for sections / containers
+     *      that use a backdrop image (most common Elementor pattern).
+     *      We inject a real `<img>` covering the host so the rest of
+     *      the animation logic works uniformly. Original bg-image is
+     *      hidden during the effect and restored on revert.
+     *
+     * Returns `{ inner, media, overlay, restore }` or `null` if no
+     * media source can be found anywhere inside rootEl. The `restore`
+     * callback undoes any DOM mutations on revert.
+     */
+    function resolveWorldExpandsTargets(rootEl) {
+        // PATH A — explicit BEM authored markup
+        var bemInner   = rootEl.querySelector('.tw-anim-world-expands__inner');
+        var bemMedia   = rootEl.querySelector('.tw-anim-world-expands__media');
+        var bemOverlay = rootEl.querySelector('.tw-anim-world-expands__overlay');
+        if (bemInner && bemMedia) {
+            return {
+                inner:   bemInner,
+                media:   bemMedia,
+                overlay: bemOverlay || null,
+                restore: function () {},
+            };
+        }
+
+        var restoreSteps = [];
+        var pushRestore  = function (fn) { restoreSteps.push(fn); };
+
+        // PATH B — find a real media element
+        var media = rootEl.querySelector('img, picture, video');
+
+        // PATH C — fall back to CSS background-image if no real media
+        if (!media) {
+            var hosts = [rootEl].concat(Array.prototype.slice.call(rootEl.querySelectorAll('*')));
+            var bgHost = null, bgUrl = '';
+            for (var i = 0; i < hosts.length; i++) {
+                var bg = window.getComputedStyle(hosts[i]).backgroundImage;
+                var m  = bg && bg.match(/url\(["']?([^"')]+)["']?\)/);
+                if (m && m[1]) { bgHost = hosts[i]; bgUrl = m[1]; break; }
+            }
+            if (!bgHost) return null;
+
+            // Inject a real <img> covering the host so the scale/dezoom
+            // logic in PATH B applies uniformly. Hide the original bg
+            // during the animation; restore on revert.
+            var imgEl = document.createElement('img');
+            imgEl.src = bgUrl;
+            imgEl.alt = '';
+            imgEl.setAttribute('aria-hidden', 'true');
+            imgEl.style.cssText = 'display:block;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none;';
+            var prevPos = bgHost.style.position;
+            var prevBg  = bgHost.style.backgroundImage;
+            if (window.getComputedStyle(bgHost).position === 'static') {
+                bgHost.style.position = 'relative';
+            }
+            bgHost.style.backgroundImage = 'none';
+            bgHost.insertBefore(imgEl, bgHost.firstChild);
+            media = imgEl;
+            pushRestore(function () {
+                bgHost.style.position        = prevPos;
+                bgHost.style.backgroundImage = prevBg;
+                if (imgEl.parentNode) imgEl.parentNode.removeChild(imgEl);
+            });
+        }
+
+        // Resolve `inner` — walk up from media until just below rootEl.
+        // ScrollTrigger pins rootEl so we cannot animate width/height
+        // on the trigger itself; we need a separate inner.
+        var inner = media;
+        while (inner.parentElement && inner.parentElement !== rootEl) {
+            inner = inner.parentElement;
+        }
+        // If the media is a direct child of rootEl (so inner === media),
+        // wrap rootEl's children in a synthesized div.
+        if (inner === media || inner.parentElement !== rootEl) {
+            var wrap = document.createElement('div');
+            wrap.className = 'tw-world-expands__synth-inner';
+            wrap.style.cssText = 'position:relative;display:block;';
+            // Move all of rootEl's existing children into the wrapper.
+            while (rootEl.firstChild) wrap.appendChild(rootEl.firstChild);
+            rootEl.appendChild(wrap);
+            inner = wrap;
+            pushRestore(function () {
+                while (wrap.firstChild) rootEl.appendChild(wrap.firstChild);
+                if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
+            });
+        }
+
+        // Resolve `overlay` — first headline / paragraph NOT inside the
+        // media element. Returns null if none found (image-only mode).
+        var overlay = null;
+        var candidates = rootEl.querySelectorAll('h1, h2, h3, h4, p, [data-tw-anim-target]');
+        for (var j = 0; j < candidates.length; j++) {
+            if (!media.contains(candidates[j])) { overlay = candidates[j]; break; }
+        }
+
+        return {
+            inner:   inner,
+            media:   media,
+            overlay: overlay,
+            restore: function () {
+                for (var k = restoreSteps.length - 1; k >= 0; k--) {
+                    try { restoreSteps[k](); } catch (e) {}
+                }
+            },
+        };
+    }
+
     var PRESETS = {
         'none': function () { /* no-op */ },
 
@@ -1098,51 +1224,58 @@
          * Title + lead fade in + rise 40px during the climax. Section
          * pins one viewport so the user can read, then scroll continues.
          *
-         * Markup expected (or auto-injected from a single <img>):
-         *   <section ...>
-         *     <div class="tw-anim-world-expands__inner">
-         *       <img class="tw-anim-world-expands__media" src="..." />
-         *       <div class="tw-anim-world-expands__overlay">
-         *         <h2 class="tw-anim-world-expands__title">…</h2>
-         *         <p  class="tw-anim-world-expands__lead">…</p>
-         *       </div>
-         *     </div>
-         *   </section>
+         * Universal markup support — applies to ANY clicked element:
          *
-         * If the user hasn't authored the BEM markup, we auto-detect:
-         *   • inner: first child div
-         *   • media: first <img> / <picture> / <video>
-         *   • overlay: any sibling that contains text
+         *   • Authored BEM (Tempaloo widgets):
+         *       section > .tw-anim-world-expands__inner
+         *               > .tw-anim-world-expands__media
+         *               + .tw-anim-world-expands__overlay
+         *
+         *   • Native Elementor section/container with a CHILD <img>
+         *     (Image widget) — the runtime walks up from the <img> to
+         *     the right inner wrapper and uses any sibling heading /
+         *     paragraph as the overlay.
+         *
+         *   • Native Elementor section/container with a CSS
+         *     `background-image: url(...)` and no <img> — the runtime
+         *     injects an `<img>` covering the host with that URL,
+         *     hides the original bg, and animates the injected image
+         *     uniformly. Restored on revert.
          *
          * Mobile bypass: gsap.matchMedia drops the entire effect below
          * `mobileBreakpoint` (default 800px) — image stays as a static
          * card and the text is always visible (accessibility +
          * performance: phones don't pay for the pin).
          *
-         * How to use (Avero "Built for life" section example):
-         *   1. Add an Elementor section with a single image + heading
-         *      + lead inside a column. Give the heading the class
-         *      `tw-anim-world-expands__title` (or just leave bare h2).
-         *   2. Open the floating panel → Animate Mode → click the
-         *      section's outer container.
-         *   3. Set preset = "World expands (cinematic pin)". The
-         *      runtime auto-detects the inner div / img / overlay.
-         *   4. Add ~250vh of scroll-room above the next section so the
-         *      pin can resolve (set the section's CSS `min-height: 250vh`
-         *      OR rely on the preset which sets it on inner).
+         * How to use (e.g. an Avero "Built for life" section):
+         *   1. Build the section however you want — a section with a
+         *      bg image + h2 + p, OR a container holding an Image
+         *      widget + Heading widget side by side.
+         *   2. Floating panel → Animate Mode → click the OUTER section
+         *      (or container). The selector override is saved.
+         *   3. Pick preset = "World expands (cinematic pin)". The
+         *      runtime auto-detects all parts. No markup change needed.
+         *   4. Make sure the section's natural height is ≥ 250vh, OR
+         *      that there's content below — ScrollTrigger needs scroll
+         *      room to resolve the pin.
          */
         'world-expands': function (rootEl, opts) {
             var g = gsap();
             if (!g || !hasST()) return;
 
-            // Resolve markup parts (BEM if present, auto-detect otherwise).
-            var inner   = rootEl.querySelector('.tw-anim-world-expands__inner')   || rootEl.querySelector(':scope > div, :scope > figure');
-            var media   = rootEl.querySelector('.tw-anim-world-expands__media')   || rootEl.querySelector('img, picture, video');
-            var overlay = rootEl.querySelector('.tw-anim-world-expands__overlay') || rootEl.querySelector('h1, h2, h3, [data-tw-anim-target]');
-            if (!inner || !media) {
-                warn('world-expands: missing required markup (inner + media) on', rootEl);
+            // Universal markup resolver — handles authored BEM, native
+            // <img>/<picture>/<video> children, and CSS background-image
+            // sections. Returns synthesized wrappers + restore callback
+            // when the user's markup doesn't match the BEM contract.
+            var resolved = resolveWorldExpandsTargets(rootEl);
+            if (!resolved) {
+                warn('world-expands: no <img>, <picture>, <video>, or background-image found inside', rootEl);
                 return;
             }
+            var inner   = resolved.inner;
+            var media   = resolved.media;
+            var overlay = resolved.overlay;
+            var restoreMarkup = resolved.restore;
 
             // Read params with sensible fallbacks.
             var cardW    = pNum(opts, 'cardWidthVw', 88);
@@ -1260,11 +1393,15 @@
                     // to consume scroll without further visual change.
                     tl.to({}, { duration: 0.3 }, 0.7);
 
-                    // Cleanup on revert (matchMedia handles this for free).
+                    // Cleanup on revert (matchMedia handles tween cleanup
+                    // for free; we additionally undo any DOM mutations
+                    // injected by the resolver — synthesized inner wrap,
+                    // bg-image-to-img injection, etc.).
                     return function () {
                         try {
                             g.set([inner, media, overlay].filter(Boolean), { clearProps: 'all' });
                         } catch (e) {}
+                        try { restoreMarkup(); } catch (e) {}
                     };
                 }
 
@@ -1283,6 +1420,7 @@
                         try {
                             g.set([inner, media, overlay].filter(Boolean), { clearProps: 'all' });
                         } catch (e) {}
+                        try { restoreMarkup(); } catch (e) {}
                     };
                 }
             });
