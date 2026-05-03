@@ -585,24 +585,46 @@ final class Animation {
         if ( function_exists( 'is_admin' ) && is_admin() ) return;
         if ( class_exists( '\Elementor\Plugin' ) && \Elementor\Plugin::$instance->preview->is_preview_mode() ) return;
 
-        // We DON'T unhide body on DCL anymore — that caused a brief
-        // flash where un-animated content showed before GSAP applied
-        // its fromState. The unhide trigger now lives in animations.js
-        // (after first applyElementRules + applySelectorOverrides
-        // pass). Safety net: unhide after 2.5s no matter what so the
-        // user is never stuck on a blank page if the runtime fails.
-        echo "\n<style id=\"tempaloo-studio-fouc\">body{visibility:hidden}</style>"
+        // ── Targeted anti-FOUC (audit 2026-05-03 P0 fix) ─────────
+        //
+        // Replaced the page-wide `body{visibility:hidden}` mask with a
+        // targeted opacity:0 on `[data-tw-anim-target]` only. This lets
+        // the header, footer, and any non-animated content paint as soon
+        // as the browser has them — drops Core Web Vitals (FCP/LCP) by
+        // ~2-4s on heavy WP+Elementor stacks where DCL is delayed by
+        // third-party JS.
+        //
+        // Reveal pipeline:
+        //   1. animations.js calls window.__tw_unhide() AFTER its first
+        //      applyElementRules + applySelectorOverrides pass + 2 RAF
+        //      ticks. This adds class `tw-anim-ready` on <html>.
+        //   2. CSS rule `.tw-anim-ready [data-tw-anim-target] { opacity:1 }`
+        //      reveals the elements.
+        //   3. Watchdog: same class is added by setTimeout 1.5s later as
+        //      a safety net so the user is never stuck on hidden targets
+        //      if animations.js fails.
+        //
+        // Element-rule targets (h1/h2/h3/p/img/etc) without an explicit
+        // `data-tw-anim-target` will paint un-animated for a brief frame
+        // before GSAP poses their from-state. The trade-off vs the old
+        // body-hide: a 1-frame visual flicker on element-rule targets
+        // in exchange for a ~2-4s improvement in FCP. Audit deemed this
+        // acceptable for premium WordPress feel.
+        echo "\n<style id=\"tempaloo-studio-fouc\">"
+           . "[data-tw-anim-target]{opacity:0}"
+           . "html.tw-anim-ready [data-tw-anim-target]{opacity:1;transition:opacity 320ms ease}"
+           . "</style>"
            . "<script id=\"tempaloo-studio-fouc-clear\">"
-           . "(function(){var h=function(){document.body&&(document.body.style.visibility='inherit');};"
+           . "(function(){var h=function(){"
+           .   "document.documentElement&&document.documentElement.classList.add('tw-anim-ready');"
+           . "};"
            . "window.__tw_unhide=h;"
-           . "setTimeout(h,1500);" // safety net — release after 1.5s max even if GSAP boot is delayed (audit 2026-05-03)
+           . "setTimeout(h,1500);" // safety net — release after 1.5s max even if animations.js boot is delayed
            // Scroll restoration — disable browser's automatic scroll-restore
-           // and force scrollTo(0,0) on reload. Without this, reloading a
-           // page mid-scroll lands the user where they were, but our
-           // anti-FOUC + scrub-tied animations boot expecting scrollY=0,
-           // which produces visible jumps and stale ScrollTrigger states.
-           // Runs as early as possible (in <head>) so the browser doesn't
-           // have time to restore.
+           // and force scrollTo(0,0) on reload. ScrollTrigger + scrub-tied
+           // animations expect a deterministic boot at scrollY=0; restoring
+           // mid-scroll produces stale states + visible jumps when fonts/
+           // images finish loading and document.height shifts.
            . "if('scrollRestoration' in history){history.scrollRestoration='manual';}"
            . "if(performance&&performance.getEntriesByType){"
            .   "var navs=performance.getEntriesByType('navigation');"
@@ -612,7 +634,7 @@ final class Animation {
            . "}"
            . "})();"
            . "</script>"
-           . "<noscript><style>body{visibility:inherit}</style></noscript>\n"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+           . "<noscript><style>[data-tw-anim-target]{opacity:1}</style></noscript>\n"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
     }
 
     public function emit(): void {

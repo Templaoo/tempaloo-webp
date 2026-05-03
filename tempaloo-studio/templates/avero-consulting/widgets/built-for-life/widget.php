@@ -201,7 +201,11 @@ class Built_For_Life extends Widget_Base {
             display:flex;flex-direction:column;justify-content:center;align-items:center;
             text-align:center;color:#fff;
             padding:clamp(24px,5vw,64px);
-            background:linear-gradient(180deg,rgba(0,0,0,0.10),rgba(0,0,0,0.55));
+            /* Gradient strengthened from rgba(0,0,0,0.10→0.55) to
+               rgba(0,0,0,0.40→0.75) so the yellow eyebrow stays readable
+               against bright Unsplash backgrounds even at low --p (audit
+               2026-05-03 P2: "eyebrow #E6FF55 nearly invisible at --p<0.7"). */
+            background:linear-gradient(180deg,rgba(0,0,0,0.40),rgba(0,0,0,0.75));
             opacity:var(--p);
             transform:translateY(calc(40px - 40px * var(--p)));
             pointer-events:none;
@@ -214,6 +218,10 @@ class Built_For_Life extends Widget_Base {
             font-weight:600;
             color:var(--tw-avero-accent,#E6FF55);
             margin-bottom:24px;
+            /* Shadow keeps the eyebrow legible against any image, even
+               busy/bright backgrounds where the gradient alone isn't
+               enough. Doesn't affect the perceived color. */
+            text-shadow:0 2px 12px rgba(0,0,0,0.65), 0 0 1px rgba(0,0,0,0.4);
         }
         .tw-bfl__title{
             font-family:var(--tw-avero-font-heading,'Hedvig Letters Serif',serif);
@@ -222,6 +230,10 @@ class Built_For_Life extends Widget_Base {
             font-weight:500;
             color:#fff;
             max-width:1100px;margin:0;
+            /* Same readability defense as the eyebrow — soft shadow
+               anchors the text against bright Unsplash photos without
+               muddying the type. */
+            text-shadow:0 4px 24px rgba(0,0,0,0.55), 0 0 1px rgba(0,0,0,0.3);
         }
         .tw-bfl__title em{
             font-style:italic;
