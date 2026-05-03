@@ -193,6 +193,17 @@ export function FloatingPanel() {
     return v === 'animation' ? 'animation' : 'colors';
   });
   useEffect(() => { try { localStorage.setItem(STORAGE_VIEW, panelView); } catch {} }, [panelView]);
+  // Auto-grow the panel when entering the Animation view — the wizard
+  // needs a minimum of 480px width and 700px height to render the
+  // 4-step strip + content + footer without horizontal overflow. We
+  // never SHRINK on user interaction — only bump up if smaller.
+  useEffect(() => {
+    if (panelView !== 'animation') return;
+    setSize((prev) => ({
+      w: Math.max(prev.w, 480),
+      h: Math.max(prev.h, 700),
+    }));
+  }, [panelView]);
   // Animate Mode — click-driven element animator (step 2). Mutually
   // exclusive with the color Inspect mode below.
   const [animateMode, setAnimateMode] = useState(false);
@@ -1069,7 +1080,7 @@ export function FloatingPanel() {
         </button>
       </div>
 
-      {panelView === 'animation' && <AnimationView />}
+      {panelView === 'animation' && <AnimationView onClose={() => setOpen(false)} />}
 
       {panelView === 'colors' && (<>
       {/* ── Mode switcher row — Light · Dark · Dual ─────── */}

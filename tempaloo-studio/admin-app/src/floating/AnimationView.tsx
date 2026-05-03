@@ -30,7 +30,7 @@ const STEPS: Array<{ id: Step; label: string }> = [
  * The same load + save handlers as the old AnimationPage so behaviour
  * is identical; only the host changes.
  */
-export function AnimationView() {
+export function AnimationView({ onClose }: { onClose?: () => void } = {}) {
   const [step, setStep] = useState<Step>('style');
   const [lib, setLib]   = useState<AnimationLibrary | null>(null);
   const [state, setState] = useState<AnimationStateV2 | null>(null);
@@ -193,7 +193,7 @@ export function AnimationView() {
                 lib={lib}
                 profileId={activeProfile}
                 onChange={saveGlobals}
-                onContinue={() => toast.info('Saved. Reload pages to see the change.')}
+                onContinue={() => { toast.info('Saved. Reload pages to see the change.'); if (onClose) onClose(); }}
                 onBack={() => setStep('style')}
                 onAdvanced={() => setStep('advanced')}
               />
@@ -207,7 +207,7 @@ export function AnimationView() {
                 onResetElement={resetElementRule}
                 onSaveWidget={saveWidgetOverride}
                 onBack={() => setStep('tune')}
-                onDone={() => toast.info('Advanced overrides saved.')}
+                onDone={() => { toast.info('Advanced overrides saved.'); if (onClose) onClose(); }}
               />
             )}
             {step === 'site' && (
@@ -215,7 +215,7 @@ export function AnimationView() {
                 state={state}
                 onChange={setState}
                 onBack={() => setStep('advanced')}
-                onDone={() => toast.info('Site settings saved.')}
+                onDone={() => { toast.info('Site settings saved.'); if (onClose) onClose(); }}
               />
             )}
           </div>

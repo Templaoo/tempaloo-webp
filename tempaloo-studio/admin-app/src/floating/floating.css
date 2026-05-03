@@ -1697,15 +1697,17 @@
   border-bottom-color: var(--tsa-accent, #3fb2a2);
 }
 
-/* Animation view container inside the floating panel */
+/* Animation view container — fills the panel, single internal
+   scrollbar on the body, no horizontal overflow at narrow widths. */
 .tsa-fp-anim {
   flex: 1 1 auto;
-  overflow: auto;
-  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  padding: 10px 10px 0;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 .tsa-fp-anim__loading {
   font-size: 13px;
@@ -1713,66 +1715,171 @@
   padding: 24px;
   text-align: center;
 }
+
+/* Sticky steps row at top — compact pill style, wraps on narrow widths. */
 .tsa-fp-anim__steps {
   display: flex;
   gap: 4px;
+  flex-wrap: nowrap;
   border-bottom: 1px solid var(--tsa-border, #ddd);
   padding-bottom: 8px;
+  flex-shrink: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.tsa-fp-anim__steps::-webkit-scrollbar { display: none; }
 .tsa-fp-anim__step {
-  flex: 1;
+  flex: 1 1 auto;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  background: var(--tsa-bg-soft, #f5f5f5);
-  border: 1px solid var(--tsa-border, #ddd);
-  border-radius: 6px;
+  justify-content: center;
+  gap: 6px;
+  padding: 5px 8px;
+  background: transparent;
+  border: 1px solid var(--tsa-border, rgba(245,244,239,0.12));
+  border-radius: 999px;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 11px;
   cursor: pointer;
-  color: var(--tsa-text-soft, #555);
-  transition: border-color 140ms ease;
+  color: var(--tsa-text-soft, #888);
+  transition: border-color 140ms ease, color 140ms ease, background 140ms ease;
+  white-space: nowrap;
+  min-width: 0;
 }
-.tsa-fp-anim__step:hover { color: var(--tsa-text, #111); }
+.tsa-fp-anim__step:hover { color: var(--tsa-text, #fff); border-color: rgba(255,255,255,0.2); }
 .tsa-fp-anim__step.is-active {
-  border-color: var(--tsa-accent, #3fb2a2);
-  color: var(--tsa-text, #111);
-  background: var(--tsa-bg-strong, #fff);
+  border-color: var(--tsa-accent, #10b981);
+  color: var(--tsa-text, #fff);
+  background: rgba(16, 185, 129, 0.1);
 }
-.tsa-fp-anim__step.is-past { color: var(--tsa-accent, #3fb2a2); }
+.tsa-fp-anim__step.is-past { color: var(--tsa-accent, #10b981); }
 .tsa-fp-anim__stepnum {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px; height: 18px;
+  width: 16px; height: 16px;
   border-radius: 50%;
-  background: var(--tsa-bg-strong, #fff);
+  background: rgba(255,255,255,0.06);
   font-weight: 700;
-  font-size: 11px;
+  font-size: 10px;
+  flex-shrink: 0;
 }
 .tsa-fp-anim__step.is-active .tsa-fp-anim__stepnum,
 .tsa-fp-anim__step.is-past   .tsa-fp-anim__stepnum {
-  background: var(--tsa-accent, #3fb2a2);
-  color: #fff;
+  background: var(--tsa-accent, #10b981);
+  color: #0c100f;
 }
 .tsa-fp-anim__steplabel { font-weight: 600; }
+
+/* Single scrollable surface — body owns all overflow. */
 .tsa-fp-anim__body {
   flex: 1 1 auto;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   min-height: 0;
+  min-width: 0;
+  padding-bottom: 10px;
+  /* Custom thin scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.15) transparent;
 }
-/* Inside the floating panel, the wizard cards render compactly. */
+.tsa-fp-anim__body::-webkit-scrollbar { width: 8px; }
+.tsa-fp-anim__body::-webkit-scrollbar-track { background: transparent; }
+.tsa-fp-anim__body::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.12);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.tsa-fp-anim__body::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.25);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+/* Inside the floating panel, every wizard step compacts. */
 .tsa-fp-anim__body .tsa-wizard-step {
   border: none;
   padding: 0;
   background: transparent;
+  min-width: 0;
 }
-.tsa-fp-anim__body .tsa-wizard-step__head { margin-bottom: 12px; }
-.tsa-fp-anim__body .tsa-wizard-step__title { font-size: 16px; }
-.tsa-fp-anim__body .tsa-wizard-step__lead  { font-size: 12px; }
-.tsa-fp-anim__body .tsa-wizard-tune { grid-template-columns: 1fr; }
-.tsa-fp-anim__body .tsa-lp { position: static; }
+.tsa-fp-anim__body .tsa-wizard-step__head { margin-bottom: 10px; }
+.tsa-fp-anim__body .tsa-wizard-step__title { font-size: 15px; line-height: 1.3; }
+.tsa-fp-anim__body .tsa-wizard-step__lead  { font-size: 11px; line-height: 1.45; }
+.tsa-fp-anim__body .tsa-wizard-step__num   { font-size: 9px; }
+.tsa-fp-anim__body .tsa-wizard-tune {
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+.tsa-fp-anim__body .tsa-lp { position: static; max-height: 200px; }
+/* Profile cards / element rows — compact 1-column inside the panel */
+.tsa-fp-anim__body .tsa-wizard-cards {
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+.tsa-fp-anim__body .tsa-wizard-card {
+  padding: 10px 12px;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+.tsa-fp-anim__body .tsa-wizard-card__preview {
+  width: 56px; height: 36px;
+  flex-shrink: 0;
+  margin: 0;
+}
+.tsa-fp-anim__body .tsa-wizard-card__title { font-size: 13px; }
+.tsa-fp-anim__body .tsa-wizard-card__desc  { font-size: 11px; line-height: 1.3; }
+.tsa-fp-anim__body .tsa-wizard-card__badge { top: 6px; right: 8px; font-size: 9px; }
+/* Compact ChoiceGrid */
+.tsa-fp-anim__body .tsa-wizard-choice__grid {
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+.tsa-fp-anim__body .tsa-wizard-choice__btn {
+  padding: 6px 8px;
+}
+.tsa-fp-anim__body .tsa-wizard-choice__label { font-size: 11px; }
+.tsa-fp-anim__body .tsa-wizard-choice__desc  { font-size: 10px; line-height: 1.3; }
+.tsa-fp-anim__body .tsa-wizard-choice legend { font-size: 10px; margin-bottom: 6px; }
+/* Tighter step footer */
+.tsa-fp-anim__body .tsa-wizard-step__footer {
+  margin-top: 14px;
+  padding-top: 10px;
+  flex-wrap: wrap;
+}
+.tsa-fp-anim__body .tsa-wizard-step__footer button { font-size: 11px; padding: 6px 12px; }
+/* Anim audit list — narrower, smaller actions */
+.tsa-fp-anim .tsa-am-audit { margin-bottom: 10px; }
+.tsa-fp-anim .tsa-am-audit__list { max-height: 160px; }
+.tsa-fp-anim .tsa-am-audit__list::-webkit-scrollbar { width: 6px; }
+.tsa-fp-anim .tsa-am-audit__list::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.12); border-radius: 3px;
+}
+.tsa-fp-anim .tsa-am-audit__row { padding: 5px 8px; gap: 6px; }
+.tsa-fp-anim .tsa-am-audit__btn { width: 20px; height: 20px; font-size: 11px; }
+.tsa-fp-anim .tsa-am-audit__sub { font-size: 10px; gap: 6px; }
+/* StepAdvanced + element rows fit narrow */
+.tsa-fp-anim__body .tsa-anim-element-row__head {
+  padding: 8px 10px;
+  gap: 8px;
+}
+.tsa-fp-anim__body .tsa-anim-element-row__name { min-width: 0; font-size: 12px; }
+.tsa-fp-anim__body .tsa-anim-element-row__preset { font-size: 11px; }
+.tsa-fp-anim__body .tsa-anim-element-row__selectors { display: none; }
+.tsa-fp-anim__body .tsa-anim-element-row__body { padding: 10px 12px; }
+.tsa-fp-anim__body .tsa-anim-rule-editor__group { padding: 8px 10px; }
+.tsa-fp-anim__body .tsa-anim-row__controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.tsa-fp-anim__body .tsa-anim-row__field--full,
+.tsa-fp-anim__body .tsa-anim-row__field--check { grid-column: 1 / -1; }
+.tsa-fp-anim__body .tsa-anim-row__label { font-size: 9px; }
+.tsa-fp-anim__body .tsa-anim-row__num   { font-size: 10px; min-width: 32px; }
+.tsa-fp-anim__body .tsa-tk-select,
+.tsa-fp-anim__body .tsa-tk-input { font-size: 11px; padding: 4px 6px; }
 
 /* Animation profile picker (toolbar dropdown) */
 .tsa-fp-prof { position: relative; display: inline-block; }
