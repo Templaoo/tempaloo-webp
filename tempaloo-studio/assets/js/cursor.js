@@ -281,13 +281,14 @@
     }, { once: true });
     rafId = requestAnimationFrame(tick);
 
-    // Hide native cursor only when our custom one is BASIC / OUTLINE
-    // / TEXT — for tooltip + media we keep the OS pointer so the user
-    // doesn't lose their bearings while reading the label / image.
-    if (TYPE === 'basic' || TYPE === 'outline' || TYPE === 'text') {
+    // Hide native cursor only when our custom one fully replaces it —
+    // BASIC and OUTLINE both render a self-sufficient shape that the
+    // user can rely on as a pointer. TEXT / TOOLTIP / MEDIA only show
+    // a label/preview that's contextual to elements carrying a
+    // data-tw-cursor-* attribute, so we must keep the OS pointer or
+    // the user loses their bearings on every other surface.
+    if (TYPE === 'basic' || TYPE === 'outline') {
         document.documentElement.style.cursor = 'none';
-        // But we don't want this on form fields — let them keep the
-        // I-beam / pointer for affordance.
         var styleTag = document.createElement('style');
         styleTag.id = 'tw-cursor-overrides';
         styleTag.textContent =
