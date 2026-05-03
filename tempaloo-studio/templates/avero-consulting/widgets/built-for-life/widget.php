@@ -126,25 +126,14 @@ class Built_For_Life extends Widget_Base {
         $this->end_controls_section();
     }
 
+    /**
+     * Unsplash CDN URL for the default mockup. Same gym/fitness photo
+     * Forma uses in its `pin-scale` reference section. Sized 2000w q=85
+     * for the cinematic fullscreen state. Unsplash's CDN serves WebP
+     * with HTTP/2 — no need to bundle a local placeholder.
+     */
     private function mockup_image_url(): string {
-        $tpl_url = TEMPALOO_STUDIO_URL . 'templates/avero-consulting/widgets/';
-        $tpl_dir = TEMPALOO_STUDIO_DIR . 'templates/avero-consulting/widgets/';
-        if ( file_exists( $tpl_dir . 'built-for-life/placeholder.jpg' ) )  return $tpl_url . 'built-for-life/placeholder.jpg';
-        if ( file_exists( $tpl_dir . 'built-for-life/placeholder.svg' ) )  return $tpl_url . 'built-for-life/placeholder.svg';
-        if ( file_exists( $tpl_dir . 'hero/placeholder.jpg' ) )            return $tpl_url . 'hero/placeholder.jpg';
-        if ( file_exists( $tpl_dir . 'hero/placeholder.svg' ) )            return $tpl_url . 'hero/placeholder.svg';
-        // SVG mockup — gym-vibe gradient with a centered subject silhouette
-        // so the user sees a meaningful preview before uploading their image.
-        return 'data:image/svg+xml;utf8,' . rawurlencode(
-            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">'
-          . '<defs><linearGradient id="g" x1="0" y1="0" x2="0.6" y2="1">'
-          . '<stop offset="0" stop-color="#1a1f1d"/><stop offset="0.5" stop-color="#2a615a"/><stop offset="1" stop-color="#0e0e0c"/>'
-          . '</linearGradient></defs>'
-          . '<rect width="1600" height="1000" fill="url(#g)"/>'
-          . '<circle cx="1100" cy="500" r="220" fill="rgba(230,255,85,0.06)"/>'
-          . '<text x="800" y="510" fill="rgba(255,255,255,0.35)" font-size="48" font-family="serif" font-style="italic" text-anchor="middle">mockup background image</text>'
-          . '</svg>'
-        );
+        return 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=2000&q=85&auto=format&fit=crop';
     }
 
     protected function render(): void {

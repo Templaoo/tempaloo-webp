@@ -105,9 +105,30 @@ class How_It_Works extends Widget_Base {
             'fields'      => $rep->get_controls(),
             'title_field' => '{{{ i_marker }}} — {{{ i_title }}}',
             'default'     => [
-                [ 'i_marker' => '01', 'i_title' => 'Simple Booking',     'i_desc' => 'Effortlessly schedule a consultation to discuss your business needs and challenges. We streamline the process to get started quickly.', 'i_link_text' => 'Discover More' ],
-                [ 'i_marker' => '02', 'i_title' => 'Tailored Strategy',  'i_desc' => 'We analyze your goals and create a customized strategy designed to drive measurable success for your business needs.',                  'i_link_text' => 'Discover More' ],
-                [ 'i_marker' => '03', 'i_title' => 'Continuous Support', 'i_desc' => 'From implementation to optimization, we provide ongoing guidance and adjustments to ensure long-term growth for your business.',          'i_link_text' => 'Discover More' ],
+                [
+                    'i_marker'    => '01',
+                    'i_title'     => 'Simple Booking',
+                    'i_desc'      => 'Effortlessly schedule a consultation to discuss your business needs and challenges. We streamline the process to get started quickly.',
+                    'i_link_text' => 'Discover More',
+                    // Calendar / scheduling on laptop — process step 1.
+                    'i_image'     => [ 'url' => 'https://images.unsplash.com/photo-1506784983877-45594efa4cbe?w=1200&q=85&auto=format&fit=crop' ],
+                ],
+                [
+                    'i_marker'    => '02',
+                    'i_title'     => 'Tailored Strategy',
+                    'i_desc'      => 'We analyze your goals and create a customized strategy designed to drive measurable success for your business needs.',
+                    'i_link_text' => 'Discover More',
+                    // Whiteboard / planning session — process step 2.
+                    'i_image'     => [ 'url' => 'https://images.unsplash.com/photo-1542626991-cbc4e32524cc?w=1200&q=85&auto=format&fit=crop' ],
+                ],
+                [
+                    'i_marker'    => '03',
+                    'i_title'     => 'Continuous Support',
+                    'i_desc'      => 'From implementation to optimization, we provide ongoing guidance and adjustments to ensure long-term growth for your business.',
+                    'i_link_text' => 'Discover More',
+                    // Team handshake / partnership — process step 3.
+                    'i_image'     => [ 'url' => 'https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=1200&q=85&auto=format&fit=crop' ],
+                ],
             ],
         ] );
 

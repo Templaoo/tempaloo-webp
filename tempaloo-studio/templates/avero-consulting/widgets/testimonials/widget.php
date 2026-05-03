@@ -100,12 +100,50 @@ class Testimonials extends Widget_Base {
             'fields'      => $rep->get_controls(),
             'title_field' => '{{{ t_name }}}',
             'default'     => [
-                [ 't_quote' => "Avero's strategies completely transformed our operational efficiency. We saw a 40% increase in productivity within three months.", 't_name' => 'Sarah Jenkins',  't_badge_1' => 'High conversion', 't_badge_2' => '2x sales' ],
-                [ 't_quote' => 'The level of strategic foresight provided is unmatched. Our logistics have never run smoother, saving us countless hours.',         't_name' => "David O'Connor", 't_badge_1' => 'Supply chain',    't_badge_2' => 'Cost reduction' ],
-                [ 't_quote' => 'Digital transformation seemed daunting until we partnered with them. Now our tech stack is future-proof, agile, and secure.',     't_name' => 'Elena Rostova',  't_badge_1' => 'Tech adoption',   't_badge_2' => 'Agility' ],
-                [ 't_quote' => 'Unparalleled market research. We entered a new demographic with absolute confidence and immediately captured market share.',      't_name' => 'Marcus Chen',    't_badge_1' => 'Market expansion','t_badge_2' => 'Deep insights' ],
-                [ 't_quote' => 'Their team felt like an extension of ours. Dedicated, transparent, and ruthlessly focused on driving our revenue upwards.',       't_name' => 'Amira Khalid',   't_badge_1' => 'Revenue growth',  't_badge_2' => 'Partnership' ],
-                [ 't_quote' => 'We redefined our core business model thanks to their consulting. The direct impact on our bottom line was evident by Q2.',         't_name' => 'Thomas Wright',  't_badge_1' => 'Strategic pivot', 't_badge_2' => 'High ROI' ],
+                [
+                    't_quote'   => "Avero's strategies completely transformed our operational efficiency. We saw a 40% increase in productivity within three months.",
+                    't_name'    => 'Sarah Jenkins',
+                    't_badge_1' => 'High conversion',
+                    't_badge_2' => '2x sales',
+                    // Unsplash editorial portraits — sized 200w q=85 for the
+                    // 56×56 avatar slot. WebP auto-served, retina-friendly.
+                    't_photo'   => [ 'url' => 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&q=85&auto=format&fit=crop' ],
+                ],
+                [
+                    't_quote'   => 'The level of strategic foresight provided is unmatched. Our logistics have never run smoother, saving us countless hours.',
+                    't_name'    => "David O'Connor",
+                    't_badge_1' => 'Supply chain',
+                    't_badge_2' => 'Cost reduction',
+                    't_photo'   => [ 'url' => 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&q=85&auto=format&fit=crop' ],
+                ],
+                [
+                    't_quote'   => 'Digital transformation seemed daunting until we partnered with them. Now our tech stack is future-proof, agile, and secure.',
+                    't_name'    => 'Elena Rostova',
+                    't_badge_1' => 'Tech adoption',
+                    't_badge_2' => 'Agility',
+                    't_photo'   => [ 'url' => 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=200&q=85&auto=format&fit=crop' ],
+                ],
+                [
+                    't_quote'   => 'Unparalleled market research. We entered a new demographic with absolute confidence and immediately captured market share.',
+                    't_name'    => 'Marcus Chen',
+                    't_badge_1' => 'Market expansion',
+                    't_badge_2' => 'Deep insights',
+                    't_photo'   => [ 'url' => 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&q=85&auto=format&fit=crop' ],
+                ],
+                [
+                    't_quote'   => 'Their team felt like an extension of ours. Dedicated, transparent, and ruthlessly focused on driving our revenue upwards.',
+                    't_name'    => 'Amira Khalid',
+                    't_badge_1' => 'Revenue growth',
+                    't_badge_2' => 'Partnership',
+                    't_photo'   => [ 'url' => 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&q=85&auto=format&fit=crop' ],
+                ],
+                [
+                    't_quote'   => 'We redefined our core business model thanks to their consulting. The direct impact on our bottom line was evident by Q2.',
+                    't_name'    => 'Thomas Wright',
+                    't_badge_1' => 'Strategic pivot',
+                    't_badge_2' => 'High ROI',
+                    't_photo'   => [ 'url' => 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&q=85&auto=format&fit=crop' ],
+                ],
             ],
         ] );
 

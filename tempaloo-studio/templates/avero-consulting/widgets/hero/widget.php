@@ -101,7 +101,10 @@ class Hero extends Widget_Base {
         $this->add_control( 'hero_image', [
             'label'   => esc_html__( 'Hero image', 'tempaloo-studio' ),
             'type'    => Controls_Manager::MEDIA,
-            'default' => [ 'url' => $this->asset( 'placeholder.svg' ) ],
+            // Editorial consulting / workshop scene — modern office,
+            // people collaborating around a laptop. Unsplash CDN, WebP
+            // auto-served, sized 1600w for the hero card.
+            'default' => [ 'url' => 'https://images.unsplash.com/photo-1556761175-5973dc0f32e7?w=1600&q=85&auto=format&fit=crop' ],
         ] );
 
         $this->add_control( 'hero_image_alt', [
