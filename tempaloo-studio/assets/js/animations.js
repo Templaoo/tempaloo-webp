@@ -1805,6 +1805,23 @@
 
         var rmStrategy = (v2.globals && v2.globals.reduceMotion) || 'subtle';
 
+        // Build the union of all active Niveau 4 selectorOverride
+        // selectors. Nodes that match — or descend from a node that
+        // matches — are EXCLUDED from element-rule application. The
+        // selector override is the most specific layer (it wins),
+        // and stacking element rules on the same subtree double-paints
+        // (two competing tweens on opacity / y / scale → visual
+        // chaos like ".tw-avero-cta" getting fade-up AND world-expands
+        // simultaneously, with all its <p>/<h2> getting their own).
+        var soUnion = '';
+        if (v2.selectorOverrides && typeof v2.selectorOverrides === 'object') {
+            var soKeys = Object.keys(v2.selectorOverrides).filter(function (sel) {
+                var e = v2.selectorOverrides[sel];
+                return e && e.rule && e.rule.preset && e.rule.preset !== 'none';
+            });
+            soUnion = soKeys.join(',');
+        }
+
         var mm;
         try { mm = g.matchMedia(); } catch (e) { warn('matchMedia unavailable, falling back', e); mm = null; }
 
@@ -1843,8 +1860,21 @@
                 //    inside Avero hero/services/faq/etc.
                 var anims = (window.tempaloo && window.tempaloo.studio && window.tempaloo.studio.anims) || {};
                 var blockedByScope = {};
+                var blockedBySelectorOverride = 0;
                 nodes = nodes.filter(function (el) {
                     if (el.hasAttribute && el.hasAttribute('data-tw-anim-skip')) return false;
+
+                    // Niveau 4 wins — skip if el itself matches any
+                    // selectorOverride OR is a descendant of a node that does.
+                    if (soUnion) {
+                        try {
+                            if (el.closest && el.closest(soUnion)) {
+                                blockedBySelectorOverride++;
+                                return false;
+                            }
+                        } catch (e) {}
+                    }
+
                     var scope = el.closest && el.closest('[data-tw-anim-scope]');
                     if (!scope) return true;
                     var scopeName = scope.getAttribute('data-tw-anim-scope');
@@ -1858,6 +1888,10 @@
                     }
                     return true;
                 });
+                if (blockedBySelectorOverride) {
+                    log('Element rule "' + typeId + '" skipped', blockedBySelectorOverride,
+                        'nodes covered by a selectorOverride (Niveau 4 wins).');
+                }
                 // Surface the blocked count so the user can debug "why
                 // doesn't my element rule reach Avero?". Tip in console:
                 // set the listed widget(s) to "Inherit" in the React
@@ -1949,17 +1983,72 @@
         var map = v2.selectorOverrides;
         if (typeof map !== 'object') return;
 
+        // Step 1 — collect every active override + its matched nodes.
+        var entries = [];
         Object.keys(map).forEach(function (sel) {
             var entry = map[sel];
-            if (!entry || !entry.rule || !entry.rule.preset) return;
+            if (!entry || !entry.rule || !entry.rule.preset || entry.rule.preset === 'none') return;
             var nodes;
-            try { nodes = document.querySelectorAll(sel); }
+            try { nodes = Array.prototype.slice.call(document.querySelectorAll(sel)); }
             catch (e) { warn('selectorOverride: invalid selector', sel, e); return; }
             if (!nodes.length) return;
-            Array.prototype.forEach.call(nodes, function (el) {
+            entries.push({ selector: sel, rule: entry.rule, nodes: nodes });
+        });
+        if (!entries.length) return;
+
+        // Step 2 — sort outer-first by depth in the DOM. A node that
+        // contains another node has a smaller "depth from root", so
+        // counting parents gives the depth and we sort ascending. This
+        // ensures parent overrides apply BEFORE child overrides, so the
+        // structure-mutating presets (e.g. world-expands, which wraps
+        // children in a sticky/inner) run first; child overrides then
+        // operate on the post-mutation DOM.
+        function depth(el) {
+            var d = 0, p = el && el.parentElement;
+            while (p) { d++; p = p.parentElement; }
+            return d;
+        }
+        entries.sort(function (a, b) {
+            // Use the shallowest matched node as the entry's representative
+            // depth. Lower depth = closer to root = applied first.
+            var da = Math.min.apply(null, a.nodes.map(depth));
+            var db = Math.min.apply(null, b.nodes.map(depth));
+            return da - db;
+        });
+
+        // Step 3 — apply each override but skip nodes whose ancestor
+        // already has another override (the ancestor's preset has full
+        // control over its subtree; stacking child + parent overrides
+        // produces double-tweens on the same target).
+        entries.forEach(function (entry, idx) {
+            // Build the union of OTHER selectors (could be either
+            // earlier-applied ancestors, or later siblings). Either way,
+            // an ancestor match means this override is nested inside
+            // another and should yield.
+            var otherSelectors = entries
+                .filter(function (e, i) { return i !== idx; })
+                .map(function (e) { return e.selector; });
+            var otherUnion = otherSelectors.join(',');
+
+            var skipped = 0;
+            entry.nodes.forEach(function (el) {
+                if (otherUnion) {
+                    try {
+                        var anc = el.parentElement;
+                        while (anc) {
+                            if (anc.matches && anc.matches(otherUnion)) {
+                                skipped++;
+                                return;
+                            }
+                            anc = anc.parentElement;
+                        }
+                    } catch (e) {}
+                }
                 applyRuleToElement(el, entry.rule);
             });
-            log('Selector override "' + sel + '" → "' + entry.rule.preset + '" applied to', nodes.length, 'nodes');
+            var applied = entry.nodes.length - skipped;
+            log('Selector override "' + entry.selector + '" → "' + entry.rule.preset + '" applied to',
+                applied, 'nodes' + (skipped ? ' (' + skipped + ' skipped — covered by ancestor override)' : ''));
         });
     }
 
@@ -1973,10 +2062,27 @@
         if (!el || !rule || !rule.preset) return;
         var g = gsap();
         if (!g) return;
+        // Revert the element's own context AND every descendant context
+        // first. Selector overrides target a subtree; a child whose
+        // element rule already created a tween (e.g. <p> fade-up inside
+        // .tw-avero-cta) keeps its tween alive otherwise — and worse,
+        // when the parent's preset (e.g. world-expands) mutates DOM by
+        // wrapping children in a sticky/inner, the existing tweens still
+        // target the original nodes and produce conflicting transforms.
         if (el.__tw_anim_ctx) {
             try { el.__tw_anim_ctx.revert(); } catch (e) {}
             el.__tw_anim_ctx = null;
         }
+        try {
+            var descendants = el.querySelectorAll('*');
+            for (var i = 0; i < descendants.length; i++) {
+                var d = descendants[i];
+                if (d.__tw_anim_ctx) {
+                    try { d.__tw_anim_ctx.revert(); } catch (e) {}
+                    d.__tw_anim_ctx = null;
+                }
+            }
+        } catch (e) {}
         var preset = rule.preset;
         var fn = TEXT_PRESETS[preset] || PRESETS[preset];
         if (!fn) { warn('applyRuleToElement: unknown preset', preset); return; }
