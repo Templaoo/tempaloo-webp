@@ -194,14 +194,18 @@ export function FloatingPanel() {
   });
   useEffect(() => { try { localStorage.setItem(STORAGE_VIEW, panelView); } catch {} }, [panelView]);
   // Auto-grow the panel when entering the Animation view — the wizard
-  // needs a minimum of 480px width and 700px height to render the
-  // 4-step strip + content + footer without horizontal overflow. We
-  // never SHRINK on user interaction — only bump up if smaller.
+  // needs a minimum of 520×720 to render the 4-step strip + cards +
+  // footer without horizontal overflow. Capped at 70% of the viewport
+  // so the panel never blocks the live page entirely. The user can
+  // still drag the resize handle past this size; we never SHRINK,
+  // only bump up if smaller.
   useEffect(() => {
     if (panelView !== 'animation') return;
+    var vw = typeof window !== 'undefined' ? window.innerWidth  : 1280;
+    var vh = typeof window !== 'undefined' ? window.innerHeight : 800;
     setSize((prev) => ({
-      w: Math.max(prev.w, 480),
-      h: Math.max(prev.h, 700),
+      w: Math.min(Math.max(prev.w, 520), Math.floor(vw * 0.7)),
+      h: Math.min(Math.max(prev.h, 720), Math.floor(vh * 0.85)),
     }));
   }, [panelView]);
   // Animate Mode — click-driven element animator (step 2). Mutually
@@ -477,8 +481,10 @@ export function FloatingPanel() {
     e.stopPropagation();
     const dw = e.clientX - resizeRef.current.x;
     const dh = e.clientY - resizeRef.current.y;
-    const maxW = Math.min(window.innerWidth  - 40, 800);
-    const maxH = Math.min(window.innerHeight - 40, 900);
+    // Cap to viewport-40 — let the user grow as large as they want
+    // (Motion.page's pattern). The hard 800/900 cap was too tight.
+    const maxW = window.innerWidth  - 40;
+    const maxH = window.innerHeight - 40;
     setSize({
       w: Math.max(MIN_SIZE.w, Math.min(maxW, resizeRef.current.w + dw)),
       h: Math.max(MIN_SIZE.h, Math.min(maxH, resizeRef.current.h + dh)),
