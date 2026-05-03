@@ -632,183 +632,179 @@
     function fadeKey(opts) { return pBool(opts, 'useAutoAlpha', false) ? 'autoAlpha' : 'opacity'; }
 
     /**
-     * Resolve the markup parts world-expands needs (inner / media / overlay)
-     * from ARBITRARY user markup — so the preset can be applied to any
-     * widget (Tempaloo or native Elementor) via Animate Mode without the
-     * user having to author specific BEM classes.
+     * Resolve + scaffold the markup world-expands needs from ARBITRARY
+     * user markup. Builds a CSS-sticky stage so the preset works on any
+     * widget (Tempaloo or native Elementor) via Animate Mode.
      *
-     * Three resolution paths, tried in order:
+     * Architecture (matches Forma reference, the canonical pattern):
      *
-     *   A. AUTHORED BEM
-     *      `.tw-anim-world-expands__inner / __media / __overlay`.
-     *      Used by Tempaloo widgets that bake the markup in.
+     *   rootEl (set min-height: 250vh+ to reserve scroll room)
+     *     └ .tw-we__sticky      position: sticky; top: 0; height: 100vh
+     *                            display: flex; align-items: center; justify-content: center
+     *                            overflow: hidden
+     *         └ .tw-we__inner   width: 88vw → 100vw; height: 80vh → 100vh
+     *                            border-radius: 28px → 0
+     *             ├ media       (img / picture / video / injected from bg-image)
+     *             └ original rootEl content (heading / lead / etc.)
      *
-     *   B. NATIVE <img> / <picture> / <video> child anywhere inside.
-     *      The "inner" is the deepest direct child of rootEl that
-     *      contains the media. If the media is itself a direct child,
-     *      we synthesize a wrapper div so we have one element to scale.
-     *      Headings + paragraphs that are NOT inside the media are
-     *      treated as the overlay.
+     * Why CSS sticky and NOT ScrollTrigger pin: pinning rootEl forces it
+     * `position: fixed` inside Elementor's deeply nested flex/grid
+     * containers, which deforms layout (the "Ready when you are" bug).
+     * `position: sticky` is layout-friendly — it only kicks in once the
+     * sticky element hits the top of its containing block, and rootEl's
+     * extended min-height provides the scroll runway.
      *
-     *   C. CSS background-image fallback — for sections / containers
-     *      that use a backdrop image (most common Elementor pattern).
-     *      We inject a real `<img>` covering the host so the rest of
-     *      the animation logic works uniformly. Original bg-image is
-     *      hidden during the effect and restored on revert.
+     * Resolution paths for media (most specific first):
+     *   B. <img>/<picture>/<video> child → use it, dezoom it.
+     *   C. CSS background-image url(...) on rootEl or a descendant →
+     *      inject a real <img>, hide the original bg.
+     *   D. None — bare container (CTA card, FAQ, text widget). Skip
+     *      the dezoom phase entirely; the inner grows alone, carrying
+     *      the rootEl's visual presentation (bg color/gradient/etc).
      *
-     *   D. NO MEDIA — bare container with text / buttons (a CTA card,
-     *      a FAQ, any widget that's just elements). The container's
-     *      own visual presentation (background-color / gradient /
-     *      border / etc.) is transferred to a synthesized inner so
-     *      the unfurl-to-fullscreen effect carries the section's
-     *      look. The rootEl's bg is masked during the effect and
-     *      restored on revert.
+     * Existing BEM markup (`.tw-anim-world-expands__*`) is honored: we
+     * use the authored inner / media / overlay directly and only add
+     * the sticky wrapper around the inner.
      *
-     * Returns `{ inner, media, overlay, restore }`. Media may be null
-     * (PATH D). The `restore` callback undoes any DOM mutations on
-     * revert. Returns `null` only if rootEl has no children at all.
+     * Returns `{ inner, sticky, media, overlay, restore }`. Media may
+     * be null (PATH D). `restore()` is idempotent.
      */
     function resolveWorldExpandsTargets(rootEl) {
-        // PATH A — explicit BEM authored markup
-        var bemInner   = rootEl.querySelector('.tw-anim-world-expands__inner');
-        var bemMedia   = rootEl.querySelector('.tw-anim-world-expands__media');
-        var bemOverlay = rootEl.querySelector('.tw-anim-world-expands__overlay');
-        if (bemInner && bemMedia) {
-            return {
-                inner:   bemInner,
-                media:   bemMedia,
-                overlay: bemOverlay || null,
-                restore: function () {},
-            };
+        var restoreSteps = [];
+        var restored     = false;
+        function pushRestore(fn) { restoreSteps.push(fn); }
+        function runRestore() {
+            if (restored) return;
+            restored = true;
+            for (var k = restoreSteps.length - 1; k >= 0; k--) {
+                try { restoreSteps[k](); } catch (e) {}
+            }
         }
 
-        var restoreSteps = [];
-        var pushRestore  = function (fn) { restoreSteps.push(fn); };
+        // ── 1. Detect or build the inner. ─────────────────────
+        // Prefer authored BEM if present, else synthesize a wrapper
+        // around all of rootEl's existing children.
+        var bemInner = rootEl.querySelector('.tw-anim-world-expands__inner');
+        var inner;
 
-        // PATH B — find a real media element
-        var media = rootEl.querySelector('img, picture, video');
+        if (bemInner) {
+            inner = bemInner;
+        } else {
+            inner = document.createElement('div');
+            inner.className = 'tw-we__inner';
+            inner.style.cssText = 'position:relative;overflow:hidden;box-sizing:border-box;';
+            while (rootEl.firstChild) inner.appendChild(rootEl.firstChild);
+            rootEl.appendChild(inner);
+            pushRestore(function () {
+                while (inner.firstChild) rootEl.appendChild(inner.firstChild);
+                if (inner.parentNode) inner.parentNode.removeChild(inner);
+            });
+        }
 
-        // PATH C — fall back to CSS background-image if no real media
+        // ── 2. Resolve media (PATH B → C → D fallback). ───────
+        var bemMedia = rootEl.querySelector('.tw-anim-world-expands__media');
+        var media    = bemMedia || inner.querySelector('img, picture, video');
+
         if (!media) {
+            // PATH C — search rootEl + descendants for a CSS background-image
             var hosts = [rootEl].concat(Array.prototype.slice.call(rootEl.querySelectorAll('*')));
             var bgHost = null, bgUrl = '';
             for (var i = 0; i < hosts.length; i++) {
+                if (hosts[i] === inner) continue; // skip the synthesized inner itself
                 var bg = window.getComputedStyle(hosts[i]).backgroundImage;
                 var m  = bg && bg.match(/url\(["']?([^"')]+)["']?\)/);
                 if (m && m[1]) { bgHost = hosts[i]; bgUrl = m[1]; break; }
             }
             if (bgHost) {
-                // Inject a real <img> covering the host so the scale/dezoom
-                // logic in PATH B applies uniformly. Hide the original bg
-                // during the animation; restore on revert.
                 var imgEl = document.createElement('img');
                 imgEl.src = bgUrl;
                 imgEl.alt = '';
                 imgEl.setAttribute('aria-hidden', 'true');
-                imgEl.style.cssText = 'display:block;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none;';
-                var prevPos = bgHost.style.position;
-                var prevBg  = bgHost.style.backgroundImage;
-                if (window.getComputedStyle(bgHost).position === 'static') {
-                    bgHost.style.position = 'relative';
-                }
+                imgEl.className = 'tw-we__media-synth';
+                imgEl.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none;display:block;';
+                var prevHostBg = bgHost.style.backgroundImage;
                 bgHost.style.backgroundImage = 'none';
-                bgHost.insertBefore(imgEl, bgHost.firstChild);
+                inner.insertBefore(imgEl, inner.firstChild);
                 media = imgEl;
                 pushRestore(function () {
-                    bgHost.style.position        = prevPos;
-                    bgHost.style.backgroundImage = prevBg;
+                    bgHost.style.backgroundImage = prevHostBg;
                     if (imgEl.parentNode) imgEl.parentNode.removeChild(imgEl);
                 });
             }
-            // No bg-image either → fall through to PATH D below.
         }
 
-        // Bail only if the rootEl is completely empty (no children at all
-        // and no media to work with). Otherwise we always have something.
-        if (!media && !rootEl.firstChild) return null;
-
-        // Resolve `inner`.
-        // - WITH media : walk up from media until just below rootEl.
-        //                If media is a direct child of rootEl, wrap.
-        // - WITHOUT media (PATH D): synthesize a wrapper around rootEl's
-        //                children so we have a separate element to grow
-        //                from card to fullscreen. Transfer the rootEl's
-        //                visual presentation (bg, border, color) so the
-        //                unfurl carries the section's look. Hide rootEl's
-        //                own bg during the effect; restore on revert.
-        var inner;
-        if (media) {
-            inner = media;
-            while (inner.parentElement && inner.parentElement !== rootEl) {
-                inner = inner.parentElement;
-            }
-            if (inner === media || inner.parentElement !== rootEl) {
-                var wrapM = document.createElement('div');
-                wrapM.className = 'tw-world-expands__synth-inner';
-                wrapM.style.cssText = 'position:relative;display:block;';
-                while (rootEl.firstChild) wrapM.appendChild(rootEl.firstChild);
-                rootEl.appendChild(wrapM);
-                inner = wrapM;
-                pushRestore(function () {
-                    while (wrapM.firstChild) rootEl.appendChild(wrapM.firstChild);
-                    if (wrapM.parentNode) wrapM.parentNode.removeChild(wrapM);
-                });
-            }
-        } else {
-            // PATH D — bare container, no visual media.
+        // PATH D — no media at all. Carry rootEl's visual presentation
+        // onto the inner so the unfurl effect actually shows something
+        // beyond the text inside.
+        if (!media) {
             var rootCS = window.getComputedStyle(rootEl);
-            var wrapD = document.createElement('div');
-            wrapD.className = 'tw-world-expands__synth-inner';
-            // Transfer the visual presentation so the synthesized inner
-            // visually represents rootEl when it grows. Carry both bg
-            // layers (color + image/gradient) and border-radius so the
-            // card pre-state looks right.
-            wrapD.style.cssText = [
-                'position:relative',
-                'display:block',
-                'box-sizing:border-box',
-                'background-color:' + rootCS.backgroundColor,
-                'background-image:' + rootCS.backgroundImage,
-                'background-size:'  + rootCS.backgroundSize,
-                'background-position:' + rootCS.backgroundPosition,
-                'background-repeat:' + rootCS.backgroundRepeat,
-                'color:' + rootCS.color,
-            ].join(';');
-            while (rootEl.firstChild) wrapD.appendChild(rootEl.firstChild);
-            rootEl.appendChild(wrapD);
-            // Mask rootEl's own bg so we don't paint twice (once on rootEl
-            // statically, once on inner growing). Capture only what we
-            // override so revert is faithful.
+            inner.style.backgroundColor    = rootCS.backgroundColor;
+            inner.style.backgroundImage    = rootCS.backgroundImage;
+            inner.style.backgroundSize     = rootCS.backgroundSize;
+            inner.style.backgroundPosition = rootCS.backgroundPosition;
+            inner.style.backgroundRepeat   = rootCS.backgroundRepeat;
+            inner.style.color              = rootCS.color;
+            // Mask rootEl's own bg so we don't paint twice (once on
+            // rootEl statically, once on inner growing).
             var prevRootCol = rootEl.style.backgroundColor;
             var prevRootImg = rootEl.style.backgroundImage;
             rootEl.style.backgroundColor = 'transparent';
             rootEl.style.backgroundImage = 'none';
-            inner = wrapD;
             pushRestore(function () {
-                while (wrapD.firstChild) rootEl.appendChild(wrapD.firstChild);
-                if (wrapD.parentNode) wrapD.parentNode.removeChild(wrapD);
                 rootEl.style.backgroundColor = prevRootCol;
                 rootEl.style.backgroundImage = prevRootImg;
             });
         }
 
-        // Resolve `overlay` — first headline / paragraph NOT inside the
-        // media element. Returns null if none found (image-only mode).
-        var overlay = null;
-        var candidates = rootEl.querySelectorAll('h1, h2, h3, h4, p, [data-tw-anim-target]');
-        for (var j = 0; j < candidates.length; j++) {
-            if (!media.contains(candidates[j])) { overlay = candidates[j]; break; }
+        // ── 3. Resolve overlay — first heading / paragraph that's
+        //       NOT inside the media element.
+        var bemOverlay = rootEl.querySelector('.tw-anim-world-expands__overlay');
+        var overlay    = bemOverlay || null;
+        if (!overlay) {
+            var ovCandidates = inner.querySelectorAll('h1, h2, h3, h4, p, [data-tw-anim-target]');
+            for (var j = 0; j < ovCandidates.length; j++) {
+                if (!media || !media.contains(ovCandidates[j])) {
+                    overlay = ovCandidates[j];
+                    break;
+                }
+            }
         }
+
+        // ── 4. Wrap inner in a CSS-sticky stage. ──────────────
+        //   The sticky wrapper centers the inner card in the viewport
+        //   while rootEl's extended min-height absorbs the scroll. No
+        //   ScrollTrigger pin → no position:fixed deformation in deep
+        //   Elementor layouts.
+        var sticky = document.createElement('div');
+        sticky.className = 'tw-we__sticky';
+        sticky.style.cssText = [
+            'position:sticky',
+            'top:0',
+            'height:100vh',
+            'display:flex',
+            'align-items:center',
+            'justify-content:center',
+            'overflow:hidden',
+            'width:100%',
+        ].join(';');
+        var innerParent = inner.parentNode;
+        var innerNext   = inner.nextSibling;
+        sticky.appendChild(inner);
+        innerParent.insertBefore(sticky, innerNext);
+        pushRestore(function () {
+            if (inner.parentNode === sticky) {
+                if (innerNext) innerParent.insertBefore(inner, innerNext);
+                else           innerParent.appendChild(inner);
+            }
+            if (sticky.parentNode) sticky.parentNode.removeChild(sticky);
+        });
 
         return {
             inner:   inner,
+            sticky:  sticky,
             media:   media,
             overlay: overlay,
-            restore: function () {
-                for (var k = restoreSteps.length - 1; k >= 0; k--) {
-                    try { restoreSteps[k](); } catch (e) {}
-                }
-            },
+            restore: runRestore,
         };
     }
 
@@ -1271,55 +1267,47 @@
         },
 
         /* ─────────────────────────────────────────────────────
-         * world-expands — cinematic pin preset.
+         * world-expands — cinematic CSS-sticky pin preset.
          *
-         * Hero section starts as a rounded card (88vw × 80vh), grows
-         * to fullscreen (100vw × 100vh) on scroll while the inner
-         * <img> dezooms 1.15 → 1.0 for a "the world expands" feel.
-         * Title + lead fade in + rise 40px during the climax. Section
-         * pins one viewport so the user can read, then scroll continues.
+         * Card (88vw × 80vh) grows to fullscreen (100vw × 100vh) on
+         * scroll while any inner image dezooms 1.15 → 1.0. Title +
+         * lead fade in + rise 40px during the climax, then the
+         * section holds for one viewport so the user can read.
+         *
+         * Why CSS sticky instead of ScrollTrigger pin: pinning rootEl
+         * via `pin: true` forces it `position: fixed` with a pin
+         * spacer wrapping it. Inside Elementor's deeply nested flex /
+         * grid containers (.elementor-section > .elementor-container
+         * > .elementor-row > .elementor-column > .elementor-widget-
+         * wrap > .elementor-widget > .elementor-widget-container >
+         * the actual widget root), the pin spacer + fixed positioning
+         * deforms the layout — that's the "Ready when you are" bug.
+         *
+         * The resolver builds:
+         *
+         *   rootEl (min-height: pinVh+100 vh)
+         *     └ .tw-we__sticky    position: sticky; top: 0; height: 100vh
+         *                          display: flex; align/justify: center
+         *         └ .tw-we__inner width: 88vw → 100vw
+         *                          height: 80vh → 100vh
+         *                          border-radius: 28px → 0
+         *             ├ media (img / picture / video / injected from bg-image)
+         *             └ original rootEl content (heading / lead / etc.)
          *
          * Universal markup support — applies to ANY clicked element:
+         *   • Authored BEM (Tempaloo widgets) — used as-is; sticky
+         *     wrapper is added around the existing inner.
+         *   • Section/container with a child <img>/<picture>/<video>.
+         *   • Section/container with a CSS background-image (no <img>) —
+         *     the runtime injects an <img> covering the host.
+         *   • Bare container with NO media (CTA card / FAQ / text-only)
+         *     — the rootEl's bg / gradient / color is transferred to
+         *     the synthesized inner so the unfurl carries the look.
          *
-         *   • Authored BEM (Tempaloo widgets):
-         *       section > .tw-anim-world-expands__inner
-         *               > .tw-anim-world-expands__media
-         *               + .tw-anim-world-expands__overlay
-         *
-         *   • Native Elementor section/container with a CHILD <img>
-         *     (Image widget) — the runtime walks up from the <img> to
-         *     the right inner wrapper and uses any sibling heading /
-         *     paragraph as the overlay.
-         *
-         *   • Native Elementor section/container with a CSS
-         *     `background-image: url(...)` and no <img> — the runtime
-         *     injects an `<img>` covering the host with that URL,
-         *     hides the original bg, and animates the injected image
-         *     uniformly. Restored on revert.
-         *
-         *   • A bare container with NO image at all (just text /
-         *     buttons / a CTA card) — the rootEl's own visual
-         *     presentation (background-color / gradient / border /
-         *     color) is transferred to a synthesized inner so the
-         *     unfurl-to-fullscreen effect carries the section's look.
-         *     The dezoom phase is skipped (no media to scale).
-         *
-         * Mobile bypass: gsap.matchMedia drops the entire effect below
-         * `mobileBreakpoint` (default 800px) — image stays as a static
-         * card and the text is always visible (accessibility +
-         * performance: phones don't pay for the pin).
-         *
-         * How to use (e.g. an Avero "Built for life" section):
-         *   1. Build the section however you want — a section with a
-         *      bg image + h2 + p, OR a container holding an Image
-         *      widget + Heading widget side by side.
-         *   2. Floating panel → Animate Mode → click the OUTER section
-         *      (or container). The selector override is saved.
-         *   3. Pick preset = "World expands (cinematic pin)". The
-         *      runtime auto-detects all parts. No markup change needed.
-         *   4. Make sure the section's natural height is ≥ 250vh, OR
-         *      that there's content below — ScrollTrigger needs scroll
-         *      room to resolve the pin.
+         * Mobile bypass: gsap.matchMedia drops the cinematic effect
+         * below `mobileBreakpoint` (default 800px). The sticky wrapper
+         * is overridden to `position: static` and the inner is shown
+         * full-width as a normal card.
          */
         'world-expands': function (rootEl, opts) {
             var g = gsap();
@@ -1337,6 +1325,7 @@
             var inner   = resolved.inner;
             var media   = resolved.media;
             var overlay = resolved.overlay;
+            var sticky  = resolved.sticky;
             var restoreMarkup = resolved.restore;
 
             // Read params with sensible fallbacks.
@@ -1349,26 +1338,13 @@
             var bp       = pNum(opts, 'mobileBreakpoint', 800);
             var grad     = pBool(opts, 'overlayGradient', true);
 
-            // Smoothstep ease — `p*p*(3 - 2p)`. Standard cubic Hermite
-            // interpolation, organic feel without overshoot. Forma uses
-            // this exact curve; it sits between `power1.inOut` (too soft)
-            // and `power2.inOut` (slightly too aggressive at the edges).
-            var smoothstep = (typeof CustomEase !== 'undefined' && CustomEase && CustomEase.create)
-                ? null  // CustomEase not registered in free GSAP — use the function form below.
-                : null;
+            // Smoothstep ease — `p*p*(3 - 2p)`. Same curve Forma uses
+            // (cubic Hermite). Passed as a function (free GSAP doesn't
+            // ship CustomEase, but tween.ease accepts a fn(progress)).
             var smoothstepFn = function (p) { return p * p * (3 - 2 * p); };
 
-            // Section needs to clear room for the pin — set min-height
-            // so layout reserves the pin's scroll length above the
-            // fullscreen viewport. Without this, the pinned section
-            // overlaps the next one.
-            try {
-                rootEl.style.position = rootEl.style.position || 'relative';
-            } catch (e) {}
-
             // gsap.matchMedia — desktop runs the effect, mobile bypasses
-            // and renders a static card. The mobile branch sets only
-            // the visible static layout (no scrub, no pin).
+            // and renders a static card.
             var mm = g.matchMedia();
             var queryDesktop = '(min-width: ' + (bp + 1) + 'px)';
             var queryMobile  = '(max-width: ' + bp + 'px)';
@@ -1379,14 +1355,24 @@
             }, function (ctx) {
                 // ── DESKTOP — full cinematic effect ─────────────
                 if (ctx.conditions.isDesktop) {
-                    // Initial state — rounded card centered.
+                    // Reserve scroll room on rootEl. The sticky child can
+                    // only "stick" while rootEl is being scrolled past;
+                    // we need rootEl to be ~(pinVh + 100)vh tall so the
+                    // unfurl + the read-pause both fit the scroll runway.
+                    var prevMin = rootEl.style.minHeight;
+                    var prevPos = rootEl.style.position;
+                    rootEl.style.minHeight = (pinVh + 100) + 'vh';
+                    if (window.getComputedStyle(rootEl).position === 'static') {
+                        rootEl.style.position = 'relative';
+                    }
+
+                    // Initial card state. The inner is a child of the
+                    // sticky wrapper which centers it in the viewport,
+                    // so the card always appears centered without margin.
                     g.set(inner, {
                         width:        cardW + 'vw',
                         height:       cardH + 'vh',
                         borderRadius: radiusPx + 'px',
-                        margin:       '0 auto',
-                        overflow:     'hidden',
-                        position:     'relative',
                         willChange:   'width, height, border-radius',
                     });
                     if (media) {
@@ -1399,37 +1385,32 @@
                         });
                     }
                     if (overlay) {
-                        g.set(overlay, {
-                            opacity:    0,
-                            y:          textY,
-                            position:   overlay.style.position || 'absolute',
-                            // Optional dark gradient — keeps the title readable
-                            // when the underlying image is busy. Matches Forma's
-                            // default styling.
-                            background: grad
-                                ? 'linear-gradient(180deg, rgba(0,0,0,0.10), rgba(0,0,0,0.55))'
-                                : overlay.style.background,
-                        });
+                        g.set(overlay, { opacity: 0, y: textY });
+                        if (grad) {
+                            // Add a readable dark gradient unless the
+                            // overlay already carries its own background.
+                            if (!overlay.style.background && window.getComputedStyle(overlay).backgroundImage === 'none') {
+                                overlay.style.background = 'linear-gradient(180deg, rgba(0,0,0,0.10), rgba(0,0,0,0.55))';
+                            }
+                        }
                     }
 
-                    // Build the scrubbed timeline. Smoothstep ease — same
-                    // curve Forma uses (`p*p*(3 - 2p)`), more organic than
-                    // power2.inOut at start/end.
+                    // Build the scrubbed timeline. NO `pin: true` — the
+                    // synthesized `position: sticky` wrapper handles the
+                    // pin natively without the layout deformation that
+                    // ScrollTrigger's pin spacer causes inside Elementor's
+                    // deeply nested flex/grid containers.
                     var tl = g.timeline({
                         scrollTrigger: {
                             trigger:        rootEl,
                             start:          'top top',
                             end:            '+=' + pinVh + '%',
                             scrub:          1,
-                            pin:            true,
-                            anticipatePin:  1,
                             invalidateOnRefresh: true,
                         },
                     });
 
                     // Phase 1 (0 → 0.7): card grows to fullscreen + image dezooms.
-                    // Forma compresses the visual change into the first 70% of
-                    // travel, then holds — `t.to(..., {... }, 0).to({}, { duration: 0.3 }, 0.7)`.
                     tl.to(inner, {
                         width:        '100vw',
                         height:       '100vh',
@@ -1455,15 +1436,13 @@
                         }, 0.4);
                     }
 
-                    // Phase 3 (0.7 → 1.0): hold for reading. Empty tween
-                    // to consume scroll without further visual change.
+                    // Phase 3 (0.7 → 1.0): hold for reading. Empty tween.
                     tl.to({}, { duration: 0.3 }, 0.7);
 
-                    // Cleanup on revert (matchMedia handles tween cleanup
-                    // for free; we additionally undo any DOM mutations
-                    // injected by the resolver — synthesized inner wrap,
-                    // bg-image-to-img injection, etc.).
+                    // Cleanup on revert.
                     return function () {
+                        rootEl.style.minHeight = prevMin;
+                        rootEl.style.position  = prevPos;
                         try {
                             g.set([inner, media, overlay].filter(Boolean), { clearProps: 'all' });
                         } catch (e) {}
@@ -1473,6 +1452,14 @@
 
                 // ── MOBILE — static card, text visible ─────────
                 if (ctx.conditions.isMobile) {
+                    // Disable the sticky behavior so the inner just
+                    // renders inline at full width with auto height.
+                    if (sticky) {
+                        sticky.style.position    = 'static';
+                        sticky.style.height      = 'auto';
+                        sticky.style.display     = 'block';
+                        sticky.style.overflow    = 'visible';
+                    }
                     g.set(inner, {
                         width:        '100%',
                         height:       'auto',
@@ -1483,6 +1470,13 @@
                     if (media) g.set(media, { scale: 1, width: '100%', height: 'auto' });
                     if (overlay) g.set(overlay, { opacity: 1, y: 0 });
                     return function () {
+                        if (sticky) {
+                            sticky.style.position = 'sticky';
+                            sticky.style.top      = '0';
+                            sticky.style.height   = '100vh';
+                            sticky.style.display  = 'flex';
+                            sticky.style.overflow = 'hidden';
+                        }
                         try {
                             g.set([inner, media, overlay].filter(Boolean), { clearProps: 'all' });
                         } catch (e) {}
