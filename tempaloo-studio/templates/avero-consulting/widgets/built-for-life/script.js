@@ -1,33 +1,44 @@
 /* ============================================================
- * Avero Consulting — Built for Life widget animation
+ * Avero Consulting — Built for Life widget (GSAP ScrollTrigger)
  *
- * Forma's exact pin-scale pattern, ported verbatim:
+ * Driven by GSAP ScrollTrigger per the official gsap-scrolltrigger
+ * skill recommendations. Replaces the previous CSS-sticky + manual
+ * scroll listener that didn't survive Elementor's nested wrappers
+ * reliably (CSS sticky breaks if any ancestor has overflow:hidden,
+ * which is common in Elementor sections).
  *
- *   • Section is N vh tall (default 250vh) and contains a sticky
- *     wrapper at 100vh.
- *   • A single CSS custom property `--p` interpolates 0 → 1 across
- *     the section's scroll-through.
- *   • All visual interpolation is done in CSS via calc(* var(--p)).
- *   • Smoothstep ease applied to p.
- *   • Mobile (≤ data-bp px) — pin is fully bypassed via CSS @media,
- *     the JS sets --p:1 once and bails.
- *   • prefers-reduced-motion — locks --p:1 (readable end-state, no
- *     scroll-coupled motion). The CSS @media handles this too; JS
- *     bails early so the rAF loop never engages.
+ * Architecture (from gsap-scrolltrigger skill — Pinning + Scrub):
  *
- * No GSAP / no ScrollTrigger — that gives us:
- *   - No pin-spacer creation that fights Elementor's flex/grid
- *   - No timeline / matchMedia conflicts with other widgets' triggers
- *   - Cheaper than scrub: one rAF-throttled scroll handler
- *   - Graceful degradation: failed JS still leaves a readable section
- *     (the @media + <noscript> CSS pin --p:1 by default)
+ *   trigger:  .tw-bfl                         (defines start/end calc)
+ *   pin:      .tw-bfl__sticky                  (pinned via position:fixed by GSAP)
+ *   pinSpacing: false                          (.tw-bfl already has explicit height)
+ *   start:    'top top'
+ *   end:      'bottom bottom'
+ *   scrub:    1                                (smooth lag of 1s)
+ *   invalidateOnRefresh: true                  (recalc on resize/img-load/font-swap)
  *
- * Hardening from the 2026-05-03 audit:
- *   - WeakSet dedup so Elementor lifecycle events don't double-init
- *   - prefers-reduced-motion early bail
- *   - Resize listener debounced 100ms + passive
- *   - section.offsetHeight cached, invalidated on resize
- *   - Number.isFinite(bp) so a corrupt data-bp doesn't blow up
+ *   Animation: a timeline that advances `--p` 0→1 across the first 70%
+ *   of scroll, then holds at 1 for the remaining 30% (Forma's "moment
+ *   to read" pattern). Tween uses ease: 'none' so scroll-to-progress
+ *   stays 1:1 (per skill: "Use ease: 'none' on the animation when scrub
+ *   is enabled, otherwise scroll position and animation progress won't
+ *   line up — a very common mistake").
+ *
+ * Why pin a CHILD instead of the trigger:
+ *   The previous attempt at `pin: true` (pinning rootEl) deformed
+ *   Elementor's flex/grid wrappers because the pin-spacer wraps the
+ *   trigger. Pinning a smaller child (.tw-bfl__sticky) with
+ *   pinSpacing:false uses position:fixed on the child only — the outer
+ *   .elementor-section/.elementor-container chain stays in its natural
+ *   layout. The trigger element provides scroll runway via inline height.
+ *
+ * Mobile + reduced-motion bypass via gsap.matchMedia (per gsap-core
+ * skill): the cinematic effect runs only on desktop with normal motion
+ * preference. Mobile and reduce-motion users see --p locked at 1 (full
+ * end-state, readable, no scroll coupling).
+ *
+ * Cleanup: gsap.context() wraps the matchMedia + ScrollTrigger so a
+ * single ctx.revert() on re-init cleans up everything atomically.
  * ============================================================ */
 (function () {
     'use strict';
@@ -43,18 +54,12 @@
         try { console.log.apply(console, args); } catch (e) {}
     }
 
-    /** Smoothstep — cubic Hermite (Forma's exact curve). */
-    function smoothstep(p) { return p * p * (3 - 2 * p); }
+    function gsapLib() { return window.gsap || null; }
+    function STLib()   {
+        var g = gsapLib();
+        return (g && g.ScrollTrigger) || window.ScrollTrigger || null;
+    }
 
-    /** Clamp helper. */
-    function clamp01(v) { return Math.max(0, Math.min(1, v)); }
-
-    /**
-     * WeakSet of section nodes already initialised. Elementor's frontend
-     * lifecycle re-fires `frontend/element_ready/built-for-life.default`
-     * on every preview re-render and (sometimes) twice on first load,
-     * which used to set up redundant scroll listeners on the same node.
-     */
     var initialised = (typeof WeakSet === 'function') ? new WeakSet() : null;
     function alreadyInitialised(node) {
         if (initialised && initialised.has(node)) return true;
@@ -69,130 +74,103 @@
         }
 
         var canvas = section.querySelector('.tw-bfl__canvas');
-        if (!canvas) {
-            clog('canvas missing — skipping', section);
+        var sticky = section.querySelector('.tw-bfl__sticky');
+        if (!canvas || !sticky) {
+            clog('markup missing — bailing', section);
             return;
         }
 
-        // Resolve breakpoint defensively. If data-bp is corrupt or missing,
-        // parseInt may return NaN — fall back to 800px.
+        // Resolve breakpoint defensively. Number.isFinite guards against
+        // a corrupt data-bp attribute slipping NaN into matchMedia.
         var bpRaw = parseInt(section.getAttribute('data-bp') || '800', 10);
         var bp    = Number.isFinite(bpRaw) ? bpRaw : 800;
 
-        // prefers-reduced-motion — bail before wiring scroll/resize.
-        // The CSS @media rule already pins --p:1, so we just don't
-        // attach the rAF loop. Saves a listener + work on every scroll.
-        var rmQuery = (typeof window.matchMedia === 'function')
-            ? window.matchMedia('(prefers-reduced-motion: reduce)')
-            : null;
-        if (rmQuery && rmQuery.matches) {
+        var g  = gsapLib();
+        var ST = STLib();
+
+        // Graceful degradation: no GSAP available → set --p:1 so the
+        // user sees the readable end-state. The CSS @media (prefers-
+        // reduced-motion) and <noscript> rules already handle this; the
+        // explicit JS set covers the case where GSAP failed to load
+        // mid-page (network error / blocked by adblocker / etc.).
+        if (!g || !ST) {
             canvas.style.setProperty('--p', '1');
-            clog('reduced-motion — skipping rAF loop', section);
+            clog('GSAP/ScrollTrigger missing — falling back to --p:1', section);
             return;
         }
 
-        // Cache layout reads. offsetHeight forces a reflow if read in
-        // every rAF tick alongside other layout-touching code; reading
-        // once + invalidating on resize/img-load keeps the hot path cheap.
-        var sectionHeight = section.offsetHeight;
-        var viewportH     = window.innerHeight;
+        // gsap.context() wraps every tween + ScrollTrigger + matchMedia
+        // we create. A single ctx.revert() on re-init cleans up the lot
+        // atomically — important because Elementor's preview lifecycle
+        // re-fires `frontend/element_ready` on every dirty render.
+        section.__tw_bfl_ctx = g.context(function () {
 
-        function recalc() {
-            sectionHeight = section.offsetHeight;
-            viewportH     = window.innerHeight;
-        }
+            // gsap.matchMedia branches the animation on viewport + motion
+            // preference. Each branch gets its own cleanup function.
+            var mm = g.matchMedia();
 
-        var ticking = false;
+            mm.add({
+                isDesktop: '(min-width: ' + (bp + 1) + 'px) and (prefers-reduced-motion: no-preference)',
+                isMobile:  '(max-width: ' + bp + 'px)',
+                isReduced: '(prefers-reduced-motion: reduce)',
+            }, function (ctx) {
 
-        function update() {
-            ticking = false;
-
-            // Mobile bypass: lock --p at 1. CSS @media handles the
-            // layout reset; we set --p so the JS state matches.
-            if (window.innerWidth <= bp) {
-                canvas.style.setProperty('--p', '1');
-                return;
-            }
-
-            var rect   = section.getBoundingClientRect();
-            var travel = sectionHeight - viewportH;
-            if (travel <= 0) {
-                canvas.style.setProperty('--p', '1');
-                return;
-            }
-
-            // -rect.top goes from 0 (section top hits viewport top) to
-            // travel (section bottom hits viewport bottom). Compress to
-            // 0..1 across the FIRST 70% of travel, then hold at 1 for
-            // the remaining 30% so the fullscreen state has a beat to
-            // read before the section unpins. Forma's exact ratios.
-            var raw   = clamp01(-rect.top / travel);
-            var p     = Math.min(1, raw / 0.7);
-            var eased = smoothstep(p);
-
-            canvas.style.setProperty('--p', eased.toFixed(4));
-        }
-
-        function onScroll() {
-            if (!ticking) {
-                ticking = true;
-                requestAnimationFrame(update);
-            }
-        }
-
-        // Debounced resize — 100ms is enough to coalesce the mid-resize
-        // burst on browsers that fire `resize` on every pixel. Recalc
-        // cached layout AND re-run update so --p reflects the new geometry.
-        var resizeTimer = null;
-        function onResize() {
-            if (resizeTimer) clearTimeout(resizeTimer);
-            resizeTimer = setTimeout(function () {
-                recalc();
-                update();
-            }, 100);
-        }
-
-        // Image load → invalidate cache (image height shift can move
-        // the section's offsetHeight).
-        var img = section.querySelector('.tw-bfl__media');
-        function onImgLoad() {
-            recalc();
-            update();
-        }
-
-        // Idempotent setup — clean up any prior listeners attached by a
-        // previous setupOne call (Elementor re-renders go through
-        // alreadyInitialised first, but defense in depth).
-        if (section.__tw_bfl_cleanup) {
-            try { section.__tw_bfl_cleanup(); } catch (e) {}
-            section.__tw_bfl_cleanup = null;
-        }
-
-        window.addEventListener('scroll', onScroll, { passive: true });
-        window.addEventListener('resize', onResize, { passive: true });
-        if (img && !img.complete) img.addEventListener('load', onImgLoad, { once: true });
-        update();
-
-        section.__tw_bfl_cleanup = function () {
-            window.removeEventListener('scroll', onScroll);
-            window.removeEventListener('resize', onResize);
-            if (img) img.removeEventListener('load', onImgLoad);
-            if (resizeTimer) clearTimeout(resizeTimer);
-        };
-
-        // React to OS-level reduce-motion toggle without a page reload.
-        if (rmQuery && typeof rmQuery.addEventListener === 'function') {
-            rmQuery.addEventListener('change', function (e) {
-                if (e.matches) {
+                // Mobile or reduced-motion → lock --p:1 (full text visible,
+                // image at scale 1, layout reset by CSS @media). No
+                // ScrollTrigger created, no scroll coupling.
+                if (ctx.conditions.isMobile || ctx.conditions.isReduced) {
                     canvas.style.setProperty('--p', '1');
-                    if (section.__tw_bfl_cleanup) section.__tw_bfl_cleanup();
-                } else {
-                    update();
+                    clog('mobile/reduced — locked at --p:1', section);
+                    return;
                 }
-            });
-        }
 
-        clog('ready', { section: section, bp: bp, sectionHeight: sectionHeight, travel: sectionHeight - viewportH });
+                if (!ctx.conditions.isDesktop) return;
+
+                // Build a scrubbed timeline. The timeline's progress
+                // 0 → 1 maps to scroll progress through the section.
+                //
+                // Phase 1 (timeline 0 → 0.7): --p 0 → 1
+                //   Card grows, image dezooms, text fades + rises.
+                // Phase 2 (timeline 0.7 → 1.0): empty hold tween
+                //   --p stays at 1, scroll continues to consume the
+                //   final 30% of the pin without further visual change.
+                //
+                // ease: 'none' is REQUIRED here (skill rule: "with
+                // scrub enabled, scroll-to-progress mapping must be 1:1
+                // or the animation feels detached from scroll").
+                var tl = g.timeline({
+                    scrollTrigger: {
+                        trigger:        section,
+                        start:          'top top',
+                        end:            'bottom bottom',
+                        scrub:          1,
+                        // Pin the inner sticky child rather than the
+                        // section itself. pinSpacing:false because the
+                        // section already has explicit height (sec_vh
+                        // inline) so layout doesn't collapse.
+                        pin:            sticky,
+                        pinSpacing:     false,
+                        invalidateOnRefresh: true,
+                        // Lower priority = refreshed earlier (skill
+                        // rule: top-to-bottom page order). The BFL
+                        // section is mid-page in Avero so a small
+                        // positive priority is fine.
+                        refreshPriority: 0,
+                    },
+                });
+
+                tl.fromTo(canvas,
+                    { '--p': 0 },
+                    { '--p': 1, duration: 0.7, ease: 'none' }
+                ).to({}, { duration: 0.3 }); // 30% hold for reading
+
+                clog('ready', { section: section, bp: bp, sec_vh: section.offsetHeight });
+
+                // matchMedia auto-reverts on breakpoint change. No
+                // explicit cleanup return needed.
+            });
+
+        }, section);
     }
 
     function bootAll() {
@@ -211,8 +189,8 @@
         bootAll();
     }
 
-    // Re-init on Elementor editor re-renders. The WeakSet dedup at the
-    // top of setupOne() short-circuits redundant calls.
+    // Re-init on Elementor editor re-renders. The WeakSet dedup in
+    // setupOne short-circuits redundant calls.
     if (window.elementorFrontend && window.elementorFrontend.hooks && window.elementorFrontend.hooks.addAction) {
         try {
             window.elementorFrontend.hooks.addAction('frontend/element_ready/built-for-life.default', function ($scope) {

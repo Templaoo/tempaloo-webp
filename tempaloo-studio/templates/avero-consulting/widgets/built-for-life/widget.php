@@ -89,23 +89,22 @@ class Built_For_Life extends Widget_Base {
             'label'   => esc_html__( 'Card width (vw)', 'tempaloo-studio' ),
             'type'    => Controls_Manager::NUMBER,
             'min'     => 50, 'max' => 100, 'step' => 1,
-            // 100 by default — image fills the viewport from the start.
-            // Drop to 88 (or any value < 100) to opt-in to the
-            // "card-grows-to-fullscreen" Forma effect; the visible bands
-            // around the card will inherit the section background.
-            'default' => 100,
+            // Forma's exact starting card size — 88vw × 80vh grows to
+            // fullscreen during scrub. Section background is transparent
+            // so the visible margins inherit the page bg cleanly.
+            'default' => 88,
         ] );
         $this->add_control( 'card_height_vh', [
             'label'   => esc_html__( 'Card height (vh)', 'tempaloo-studio' ),
             'type'    => Controls_Manager::NUMBER,
             'min'     => 40, 'max' => 100, 'step' => 1,
-            'default' => 100,
+            'default' => 80,
         ] );
         $this->add_control( 'card_radius', [
             'label'   => esc_html__( 'Card radius (px)', 'tempaloo-studio' ),
             'type'    => Controls_Manager::NUMBER,
             'min'     => 0, 'max' => 64, 'step' => 1,
-            'default' => 0,
+            'default' => 28,
         ] );
         $this->add_control( 'media_scale_from', [
             'label'   => esc_html__( 'Image dezoom from', 'tempaloo-studio' ),
@@ -117,8 +116,8 @@ class Built_For_Life extends Widget_Base {
             'label'   => esc_html__( 'Section height (vh)', 'tempaloo-studio' ),
             'type'    => Controls_Manager::NUMBER,
             'min'     => 150, 'max' => 400, 'step' => 10,
-            'default' => 200,
-            'description' => esc_html__( 'Total height of the section. 200 = 100vh sticky + 100vh of scroll for image dezoom + text reveal. Increase if the card-to-fullscreen mode (Card width < 100) is enabled.', 'tempaloo-studio' ),
+            'default' => 250,
+            'description' => esc_html__( 'Total height of the section (Forma uses 250vh = 100vh sticky + 150vh of scroll travel: ~70% for the unfurl, ~30% to read).', 'tempaloo-studio' ),
         ] );
         $this->add_control( 'mobile_breakpoint', [
             'label'   => esc_html__( 'Mobile breakpoint (px)', 'tempaloo-studio' ),
@@ -143,11 +142,11 @@ class Built_For_Life extends Widget_Base {
     protected function render(): void {
         $s = $this->get_settings_for_display();
 
-        $card_w = (int)   ( $s['card_width_vw']    ?? 100 ); if ( $card_w < 50 || $card_w > 100 )  $card_w = 100;
-        $card_h = (int)   ( $s['card_height_vh']   ?? 100 ); if ( $card_h < 40 || $card_h > 100 )  $card_h = 100;
-        $rad    = (int)   ( $s['card_radius']      ?? 0 );   if ( $rad < 0  || $rad > 64 )         $rad = 0;
+        $card_w = (int)   ( $s['card_width_vw']    ?? 88 );  if ( $card_w < 50 || $card_w > 100 )  $card_w = 88;
+        $card_h = (int)   ( $s['card_height_vh']   ?? 80 );  if ( $card_h < 40 || $card_h > 100 )  $card_h = 80;
+        $rad    = (int)   ( $s['card_radius']      ?? 28 );  if ( $rad < 0  || $rad > 64 )         $rad = 28;
         $scale  = (float) ( $s['media_scale_from'] ?? 1.15 );if ( $scale < 1 || $scale > 2 )       $scale = 1.15;
-        $sec_vh = (int)   ( $s['pin_duration_vh']  ?? 200 ); if ( $sec_vh < 150 || $sec_vh > 400 ) $sec_vh = 200;
+        $sec_vh = (int)   ( $s['pin_duration_vh']  ?? 250 ); if ( $sec_vh < 150 || $sec_vh > 400 ) $sec_vh = 250;
         $bp     = (int)   ( $s['mobile_breakpoint'] ?? 800 );if ( $bp < 400 || $bp > 1200 )        $bp = 800;
 
         $img_url = $s['image']['url'] ?? $this->mockup_image_url();
