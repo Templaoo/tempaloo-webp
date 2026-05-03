@@ -3,7 +3,6 @@ import type { AppState, TemplateFull } from '../types';
 import { api } from '../api';
 import { AnimationView } from './AnimationView';
 import { AnimateMode } from './AnimateMode';
-import { prefetchAnimationData } from './animationData';
 
 type PanelView = 'colors' | 'animation';
 const STORAGE_VIEW = 'tempaloo-fp-view';
@@ -194,13 +193,6 @@ export function FloatingPanel() {
     return v === 'animation' ? 'animation' : 'colors';
   });
   useEffect(() => { try { localStorage.setItem(STORAGE_VIEW, panelView); } catch {} }, [panelView]);
-  // Prefetch the animation library + state + profiles in the background
-  // as soon as the panel opens — by the time the user clicks the
-  // Animation tab, the data is already in memory and the wizard
-  // renders instantly. Cheap (3 cached HTTP requests) and idempotent.
-  useEffect(() => {
-    if (open) prefetchAnimationData().catch(() => { /* skeleton handles failure */ });
-  }, [open]);
   // Auto-grow the panel when entering the Animation view — the wizard
   // needs a minimum of 520×720 to render the 4-step strip + cards +
   // footer without horizontal overflow. Capped at 70% of the viewport

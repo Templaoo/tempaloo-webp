@@ -1328,30 +1328,6 @@
 }
 
 /* Mobile fallback */
-/* Skeleton shimmer — perception-of-speed pattern (Facebook/LinkedIn).
-   Pure CSS, no JS animation cost. Renders while the animation data
-   prefetch is in flight; replaced by real content once useAnimationData
-   resolves. ~140 ms on local, < 1s on slow networks. */
-.tsa-skel {
-  background:
-    linear-gradient(
-      100deg,
-      rgba(255, 255, 255, 0.04) 30%,
-      rgba(255, 255, 255, 0.10) 50%,
-      rgba(255, 255, 255, 0.04) 70%
-    );
-  background-size: 200% 100%;
-  animation: tsa-skel-shimmer 1.4s linear infinite;
-  border-radius: 4px;
-}
-@keyframes tsa-skel-shimmer {
-  0%   { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .tsa-skel { animation: none; background: rgba(255,255,255,0.06); }
-}
-
 /* Audit list — surfaces every active animation rule */
 .tsa-am-audit {
   border: 1px solid var(--tsa-border, rgba(245,244,239,0.12));
