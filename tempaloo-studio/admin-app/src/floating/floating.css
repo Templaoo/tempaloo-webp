@@ -1282,6 +1282,114 @@
 }
 
 /* Mobile fallback */
+/* View tabs (Colors / Animation) — step 1.5 */
+.tsa-fp__viewtabs {
+  display: flex;
+  gap: 0;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--tsa-border, #ddd);
+  background: var(--tsa-bg-soft, #f7f7f7);
+  flex-shrink: 0;
+}
+.tsa-fp__viewtab {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--tsa-text-soft, #555);
+  cursor: pointer;
+  transition: color 140ms ease, border-color 140ms ease;
+}
+.tsa-fp__viewtab:hover { color: var(--tsa-text, #111); }
+.tsa-fp__viewtab.is-active {
+  color: var(--tsa-accent, #3fb2a2);
+  border-bottom-color: var(--tsa-accent, #3fb2a2);
+}
+
+/* Animation view container inside the floating panel */
+.tsa-fp-anim {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+.tsa-fp-anim__loading {
+  font-size: 13px;
+  color: var(--tsa-text-muted, #888);
+  padding: 24px;
+  text-align: center;
+}
+.tsa-fp-anim__steps {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--tsa-border, #ddd);
+  padding-bottom: 8px;
+}
+.tsa-fp-anim__step {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--tsa-bg-soft, #f5f5f5);
+  border: 1px solid var(--tsa-border, #ddd);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--tsa-text-soft, #555);
+  transition: border-color 140ms ease;
+}
+.tsa-fp-anim__step:hover { color: var(--tsa-text, #111); }
+.tsa-fp-anim__step.is-active {
+  border-color: var(--tsa-accent, #3fb2a2);
+  color: var(--tsa-text, #111);
+  background: var(--tsa-bg-strong, #fff);
+}
+.tsa-fp-anim__step.is-past { color: var(--tsa-accent, #3fb2a2); }
+.tsa-fp-anim__stepnum {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--tsa-bg-strong, #fff);
+  font-weight: 700;
+  font-size: 11px;
+}
+.tsa-fp-anim__step.is-active .tsa-fp-anim__stepnum,
+.tsa-fp-anim__step.is-past   .tsa-fp-anim__stepnum {
+  background: var(--tsa-accent, #3fb2a2);
+  color: #fff;
+}
+.tsa-fp-anim__steplabel { font-weight: 600; }
+.tsa-fp-anim__body {
+  flex: 1 1 auto;
+  overflow: auto;
+  min-height: 0;
+}
+/* Inside the floating panel, the wizard cards render compactly. */
+.tsa-fp-anim__body .tsa-wizard-step {
+  border: none;
+  padding: 0;
+  background: transparent;
+}
+.tsa-fp-anim__body .tsa-wizard-step__head { margin-bottom: 12px; }
+.tsa-fp-anim__body .tsa-wizard-step__title { font-size: 16px; }
+.tsa-fp-anim__body .tsa-wizard-step__lead  { font-size: 12px; }
+.tsa-fp-anim__body .tsa-wizard-tune { grid-template-columns: 1fr; }
+.tsa-fp-anim__body .tsa-lp { position: static; }
+
 /* Animation profile picker (toolbar dropdown) */
 .tsa-fp-prof { position: relative; display: inline-block; }
 .tsa-fp-prof .tsa-fp__btn { white-space: nowrap; }

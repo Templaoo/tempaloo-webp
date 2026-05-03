@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AppState, TemplateFull } from '../types';
 import { api } from '../api';
-import { ProfilePicker } from './ProfilePicker';
+import { AnimationView } from './AnimationView';
+
+type PanelView = 'colors' | 'animation';
+const STORAGE_VIEW = 'tempaloo-fp-view';
 
 type Mode     = 'light' | 'dark';
 type ViewMode = Mode | 'dual';   // 'dual' = edit both modes side-by-side
@@ -180,6 +183,15 @@ export function FloatingPanel() {
   // Panel UI state — `open` is persisted so the user's last choice
   // survives a page refresh (default: open on first visit).
   const [open,       setOpen]       = useState<boolean>(() => readStored<boolean>(STORAGE_OPEN, true));
+  // View toggle: which face of the panel is active.
+  //   • 'colors'    — original color/token editor (existing UI)
+  //   • 'animation' — Animation Wizard (Style → Tune → Advanced)
+  // Step 1.5 of the migration — same panel, two work surfaces.
+  const [panelView, setPanelView]  = useState<PanelView>(() => {
+    const v = readStored<PanelView>(STORAGE_VIEW, 'colors');
+    return v === 'animation' ? 'animation' : 'colors';
+  });
+  useEffect(() => { try { localStorage.setItem(STORAGE_VIEW, panelView); } catch {} }, [panelView]);
   const [maximized,  setMaximized]  = useState(false);
   const [pos,        setPos]        = useState(() => readStored(STORAGE_POS, { x: -1, y: -1 }));
   const [size,       setSize]       = useState(() => readStored(STORAGE_SIZE, DEFAULT_SIZE));
@@ -1007,6 +1019,39 @@ export function FloatingPanel() {
         </button>
       </header>
 
+      {/* ── View tabs — Colors / Animation ─────────────── */}
+      <div className="tsa-fp__viewtabs" role="tablist" aria-label="Panel view">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={panelView === 'colors'}
+          className={'tsa-fp__viewtab' + (panelView === 'colors' ? ' is-active' : '')}
+          onClick={() => setPanelView('colors')}
+        >
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="8" cy="8" r="6" />
+            <path d="M8 2v12M2 8h12" />
+          </svg>
+          Colors
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={panelView === 'animation'}
+          className={'tsa-fp__viewtab' + (panelView === 'animation' ? ' is-active' : '')}
+          onClick={() => setPanelView('animation')}
+        >
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M2 12V4l5 4-5 4z" />
+            <circle cx="11" cy="8" r="3" />
+          </svg>
+          Animation
+        </button>
+      </div>
+
+      {panelView === 'animation' && <AnimationView />}
+
+      {panelView === 'colors' && (<>
       {/* ── Mode switcher row — Light · Dark · Dual ─────── */}
       <div className="tsa-fp__moderow">
         <div className="tsa-fp__modeswitch" role="tablist">
@@ -1075,7 +1120,8 @@ export function FloatingPanel() {
         >
           + Add color
         </button>
-        <ProfilePicker />
+        {/* ProfilePicker dropped in step 1.5 — replaced by the
+             dedicated Animation view tab above (full Wizard).         */}
         {inspectFilter && (
           <button type="button" className="tsa-fp__btn" onClick={() => { setInspectFilter(null); setInspectLabel(''); }}>
             Show all
@@ -1398,6 +1444,7 @@ export function FloatingPanel() {
           aria-hidden="true"
         />
       )}
+      </>)}
     </div>
   );
 }

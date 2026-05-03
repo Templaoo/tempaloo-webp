@@ -6,7 +6,6 @@ import { OverviewPage } from './pages/OverviewPage';
 import { TemplatesPage } from './pages/TemplatesPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { ComponentsPage } from './pages/ComponentsPage';
-import { AnimationPage } from './pages/AnimationPage';
 import { LicensePage } from './pages/LicensePage';
 import type { AppState, Tab, TemplateSummary } from './types';
 import { api } from './api';
@@ -49,7 +48,7 @@ export function App() {
         {tab === 'templates'  && <TemplatesPage state={state} templates={templates} loading={loading} onStateUpdate={setState} />}
         {tab === 'settings'   && <SettingsPage state={state} onStateUpdate={setState} />}
         {tab === 'components' && <ComponentsPage state={state} onStateUpdate={setState} />}
-        {tab === 'animation'  && <AnimationPage />}
+        {/* Animation moved to the floating panel (step 1.5). */}
         {tab === 'license'    && <LicensePage />}
       </main>
 
