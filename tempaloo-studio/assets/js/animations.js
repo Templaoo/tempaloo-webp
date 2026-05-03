@@ -656,9 +656,17 @@
      *      the animation logic works uniformly. Original bg-image is
      *      hidden during the effect and restored on revert.
      *
-     * Returns `{ inner, media, overlay, restore }` or `null` if no
-     * media source can be found anywhere inside rootEl. The `restore`
-     * callback undoes any DOM mutations on revert.
+     *   D. NO MEDIA — bare container with text / buttons (a CTA card,
+     *      a FAQ, any widget that's just elements). The container's
+     *      own visual presentation (background-color / gradient /
+     *      border / etc.) is transferred to a synthesized inner so
+     *      the unfurl-to-fullscreen effect carries the section's
+     *      look. The rootEl's bg is masked during the effect and
+     *      restored on revert.
+     *
+     * Returns `{ inner, media, overlay, restore }`. Media may be null
+     * (PATH D). The `restore` callback undoes any DOM mutations on
+     * revert. Returns `null` only if rootEl has no children at all.
      */
     function resolveWorldExpandsTargets(rootEl) {
         // PATH A — explicit BEM authored markup
@@ -689,51 +697,98 @@
                 var m  = bg && bg.match(/url\(["']?([^"')]+)["']?\)/);
                 if (m && m[1]) { bgHost = hosts[i]; bgUrl = m[1]; break; }
             }
-            if (!bgHost) return null;
-
-            // Inject a real <img> covering the host so the scale/dezoom
-            // logic in PATH B applies uniformly. Hide the original bg
-            // during the animation; restore on revert.
-            var imgEl = document.createElement('img');
-            imgEl.src = bgUrl;
-            imgEl.alt = '';
-            imgEl.setAttribute('aria-hidden', 'true');
-            imgEl.style.cssText = 'display:block;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none;';
-            var prevPos = bgHost.style.position;
-            var prevBg  = bgHost.style.backgroundImage;
-            if (window.getComputedStyle(bgHost).position === 'static') {
-                bgHost.style.position = 'relative';
+            if (bgHost) {
+                // Inject a real <img> covering the host so the scale/dezoom
+                // logic in PATH B applies uniformly. Hide the original bg
+                // during the animation; restore on revert.
+                var imgEl = document.createElement('img');
+                imgEl.src = bgUrl;
+                imgEl.alt = '';
+                imgEl.setAttribute('aria-hidden', 'true');
+                imgEl.style.cssText = 'display:block;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none;';
+                var prevPos = bgHost.style.position;
+                var prevBg  = bgHost.style.backgroundImage;
+                if (window.getComputedStyle(bgHost).position === 'static') {
+                    bgHost.style.position = 'relative';
+                }
+                bgHost.style.backgroundImage = 'none';
+                bgHost.insertBefore(imgEl, bgHost.firstChild);
+                media = imgEl;
+                pushRestore(function () {
+                    bgHost.style.position        = prevPos;
+                    bgHost.style.backgroundImage = prevBg;
+                    if (imgEl.parentNode) imgEl.parentNode.removeChild(imgEl);
+                });
             }
-            bgHost.style.backgroundImage = 'none';
-            bgHost.insertBefore(imgEl, bgHost.firstChild);
-            media = imgEl;
-            pushRestore(function () {
-                bgHost.style.position        = prevPos;
-                bgHost.style.backgroundImage = prevBg;
-                if (imgEl.parentNode) imgEl.parentNode.removeChild(imgEl);
-            });
+            // No bg-image either → fall through to PATH D below.
         }
 
-        // Resolve `inner` — walk up from media until just below rootEl.
-        // ScrollTrigger pins rootEl so we cannot animate width/height
-        // on the trigger itself; we need a separate inner.
-        var inner = media;
-        while (inner.parentElement && inner.parentElement !== rootEl) {
-            inner = inner.parentElement;
-        }
-        // If the media is a direct child of rootEl (so inner === media),
-        // wrap rootEl's children in a synthesized div.
-        if (inner === media || inner.parentElement !== rootEl) {
-            var wrap = document.createElement('div');
-            wrap.className = 'tw-world-expands__synth-inner';
-            wrap.style.cssText = 'position:relative;display:block;';
-            // Move all of rootEl's existing children into the wrapper.
-            while (rootEl.firstChild) wrap.appendChild(rootEl.firstChild);
-            rootEl.appendChild(wrap);
-            inner = wrap;
+        // Bail only if the rootEl is completely empty (no children at all
+        // and no media to work with). Otherwise we always have something.
+        if (!media && !rootEl.firstChild) return null;
+
+        // Resolve `inner`.
+        // - WITH media : walk up from media until just below rootEl.
+        //                If media is a direct child of rootEl, wrap.
+        // - WITHOUT media (PATH D): synthesize a wrapper around rootEl's
+        //                children so we have a separate element to grow
+        //                from card to fullscreen. Transfer the rootEl's
+        //                visual presentation (bg, border, color) so the
+        //                unfurl carries the section's look. Hide rootEl's
+        //                own bg during the effect; restore on revert.
+        var inner;
+        if (media) {
+            inner = media;
+            while (inner.parentElement && inner.parentElement !== rootEl) {
+                inner = inner.parentElement;
+            }
+            if (inner === media || inner.parentElement !== rootEl) {
+                var wrapM = document.createElement('div');
+                wrapM.className = 'tw-world-expands__synth-inner';
+                wrapM.style.cssText = 'position:relative;display:block;';
+                while (rootEl.firstChild) wrapM.appendChild(rootEl.firstChild);
+                rootEl.appendChild(wrapM);
+                inner = wrapM;
+                pushRestore(function () {
+                    while (wrapM.firstChild) rootEl.appendChild(wrapM.firstChild);
+                    if (wrapM.parentNode) wrapM.parentNode.removeChild(wrapM);
+                });
+            }
+        } else {
+            // PATH D — bare container, no visual media.
+            var rootCS = window.getComputedStyle(rootEl);
+            var wrapD = document.createElement('div');
+            wrapD.className = 'tw-world-expands__synth-inner';
+            // Transfer the visual presentation so the synthesized inner
+            // visually represents rootEl when it grows. Carry both bg
+            // layers (color + image/gradient) and border-radius so the
+            // card pre-state looks right.
+            wrapD.style.cssText = [
+                'position:relative',
+                'display:block',
+                'box-sizing:border-box',
+                'background-color:' + rootCS.backgroundColor,
+                'background-image:' + rootCS.backgroundImage,
+                'background-size:'  + rootCS.backgroundSize,
+                'background-position:' + rootCS.backgroundPosition,
+                'background-repeat:' + rootCS.backgroundRepeat,
+                'color:' + rootCS.color,
+            ].join(';');
+            while (rootEl.firstChild) wrapD.appendChild(rootEl.firstChild);
+            rootEl.appendChild(wrapD);
+            // Mask rootEl's own bg so we don't paint twice (once on rootEl
+            // statically, once on inner growing). Capture only what we
+            // override so revert is faithful.
+            var prevRootCol = rootEl.style.backgroundColor;
+            var prevRootImg = rootEl.style.backgroundImage;
+            rootEl.style.backgroundColor = 'transparent';
+            rootEl.style.backgroundImage = 'none';
+            inner = wrapD;
             pushRestore(function () {
-                while (wrap.firstChild) rootEl.appendChild(wrap.firstChild);
-                if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
+                while (wrapD.firstChild) rootEl.appendChild(wrapD.firstChild);
+                if (wrapD.parentNode) wrapD.parentNode.removeChild(wrapD);
+                rootEl.style.backgroundColor = prevRootCol;
+                rootEl.style.backgroundImage = prevRootImg;
             });
         }
 
@@ -1242,6 +1297,13 @@
          *     hides the original bg, and animates the injected image
          *     uniformly. Restored on revert.
          *
+         *   • A bare container with NO image at all (just text /
+         *     buttons / a CTA card) — the rootEl's own visual
+         *     presentation (background-color / gradient / border /
+         *     color) is transferred to a synthesized inner so the
+         *     unfurl-to-fullscreen effect carries the section's look.
+         *     The dezoom phase is skipped (no media to scale).
+         *
          * Mobile bypass: gsap.matchMedia drops the entire effect below
          * `mobileBreakpoint` (default 800px) — image stays as a static
          * card and the text is always visible (accessibility +
@@ -1269,7 +1331,7 @@
             // when the user's markup doesn't match the BEM contract.
             var resolved = resolveWorldExpandsTargets(rootEl);
             if (!resolved) {
-                warn('world-expands: no <img>, <picture>, <video>, or background-image found inside', rootEl);
+                warn('world-expands: rootEl has no children to animate —', rootEl);
                 return;
             }
             var inner   = resolved.inner;
@@ -1327,13 +1389,15 @@
                         position:     'relative',
                         willChange:   'width, height, border-radius',
                     });
-                    g.set(media, {
-                        scale:      scaleFr,
-                        width:      '100%',
-                        height:     '100%',
-                        objectFit:  'cover',
-                        willChange: 'transform',
-                    });
+                    if (media) {
+                        g.set(media, {
+                            scale:      scaleFr,
+                            width:      '100%',
+                            height:     '100%',
+                            objectFit:  'cover',
+                            willChange: 'transform',
+                        });
+                    }
                     if (overlay) {
                         g.set(overlay, {
                             opacity:    0,
@@ -1372,12 +1436,14 @@
                         borderRadius: 0,
                         duration:     0.7,
                         ease:         smoothstepFn,
-                    }, 0)
-                      .to(media, {
-                        scale:    1,
-                        duration: 0.7,
-                        ease:     smoothstepFn,
-                      }, 0);
+                    }, 0);
+                    if (media) {
+                        tl.to(media, {
+                            scale:    1,
+                            duration: 0.7,
+                            ease:     smoothstepFn,
+                        }, 0);
+                    }
 
                     // Phase 2 (0.4 → 0.7): text fades in + rises during the climax.
                     if (overlay) {
@@ -1414,7 +1480,7 @@
                         overflow:     'hidden',
                         position:     'relative',
                     });
-                    g.set(media, { scale: 1, width: '100%', height: 'auto' });
+                    if (media) g.set(media, { scale: 1, width: '100%', height: 'auto' });
                     if (overlay) g.set(overlay, { opacity: 1, y: 0 });
                     return function () {
                         try {
