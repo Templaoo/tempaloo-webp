@@ -201,6 +201,73 @@
         return report;
     }
 
+    /**
+     * Post-init forensic — runs AFTER ScrollTrigger has wired the pin
+     * and checks which `pinType` GSAP actually picked. If GSAP fell
+     * back to `'transform'` (the safe-but-slower mode), it means an
+     * ancestor has a transform that traps position:fixed. Walk up to
+     * find the culprit and log it. Run with delays because some
+     * plugins (Animation Addons for Elementor Pro, Elementor Motion
+     * Effects, certain themes) apply transforms LATE — on window.load
+     * or via MutationObserver — after the initial diagnose() pass.
+     */
+    function forensicCheckPinType(root) {
+        if (!DEBUG) return;
+        var ST = STLib();
+        if (!ST) return;
+        var sticky = root.querySelector(STICKY_SELECTOR);
+        if (!sticky) return;
+
+        var match = ST.getAll().filter(function (st) {
+            return st && st.pin === sticky;
+        })[0];
+        if (!match) {
+            clog('forensic — no ScrollTrigger found on the sticky');
+            return;
+        }
+        var pinType = match.pinType || (match.vars && match.vars.pinType) || '?';
+
+        if (pinType === 'transform') {
+            // Re-walk ancestors to find the late-applied transform.
+            var culprit = null;
+            var el = root.parentElement;
+            while (el) {
+                var cs = window.getComputedStyle(el);
+                if (cs.transform !== 'none' ||
+                    cs.filter !== 'none' ||
+                    cs.perspective !== 'none' ||
+                    /transform|filter|perspective/.test(cs.willChange)) {
+                    culprit = {
+                        element: el.tagName + (el.className ? '.' + String(el.className).split(' ').join('.') : ''),
+                        transform:   cs.transform   !== 'none' ? cs.transform   : null,
+                        filter:      cs.filter      !== 'none' ? cs.filter      : null,
+                        perspective: cs.perspective !== 'none' ? cs.perspective : null,
+                        willChange:  cs.willChange,
+                    };
+                    break;
+                }
+                el = el.parentElement;
+            }
+            try {
+                console.groupCollapsed('%c[bfl] FORENSIC — pinType fell back to transform',
+                    'background:#ff9800;color:#000;padding:2px 6px;border-radius:3px;font-weight:bold');
+                console.warn('GSAP could not use position:fixed (the preferred mode) and fell back to transform-based pinning. This still works visually but is slightly less smooth. Cause: an ancestor has transform / filter / perspective / will-change set, creating a containing block that traps position:fixed.');
+                if (culprit) {
+                    console.warn('Culprit ancestor:', culprit);
+                    console.warn('Fix options:');
+                    console.warn('  1. Remove the offending CSS rule from the ancestor');
+                    console.warn('  2. Disable the plugin that applies it (often: Animation Addons for Elementor Pro, Elementor Motion Effects)');
+                    console.warn('  3. Accept transform-mode pinning (current behaviour — works on most pages)');
+                } else {
+                    console.warn('Could not locate the culprit ancestor on a re-walk. The transform may be on document.documentElement, document.body, or an iframe boundary.');
+                }
+                console.groupEnd();
+            } catch (e) {}
+        } else {
+            clog('forensic — pinType=' + pinType + ' (good — fixed mode, smoothest pin)');
+        }
+    }
+
     function setupOne(root) {
         if (!root) {
             cwarn('setupOne called with null root — abort');
@@ -316,6 +383,21 @@
                 clog('ready', { root: root, bp: bp, inEditor: inEditor });
             });
         }, root);
+
+        // Forensic — staggered re-checks to catch transforms applied
+        // LATE by third-party plugins (Animation Addons for Elementor
+        // Pro, Elementor Motion Effects, Lenis, etc.). The initial
+        // diagnose() runs at setupOne() boot before ScrollTrigger
+        // exists; these later checks inspect the actual ScrollTrigger's
+        // pinType and identify the culprit ancestor if it auto-fell-back
+        // to 'transform' mode.
+        setTimeout(function () { forensicCheckPinType(root); }, 500);
+        setTimeout(function () { forensicCheckPinType(root); }, 2000);
+        if (window.addEventListener) {
+            window.addEventListener('load', function () {
+                setTimeout(function () { forensicCheckPinType(root); }, 100);
+            }, { once: true });
+        }
     }
 
     /** Find a `.tw-avero-built-for-life` inside an Elementor $scope. */
