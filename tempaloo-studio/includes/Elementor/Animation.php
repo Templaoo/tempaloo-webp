@@ -104,11 +104,53 @@ final class Animation {
     public static function config_v2(): array {
         $v2 = get_option( self::OPTION_V2, null );
         if ( is_array( $v2 ) && ! empty( $v2['__version'] ) ) {
-            return self::with_defaults( $v2 );
+            $v2 = self::with_defaults( $v2 );
+            // GC orphan selector overrides — when a preset is removed
+            // from the schema (e.g. `world-expands` retired in favour
+            // of a dedicated widget), any existing selectorOverride
+            // referencing it becomes a "ghost rule" that does nothing
+            // but also blocks Niveau 1 element rules from cascading.
+            // Runs lazily on read, persists once on the next save.
+            $v2 = self::gc_orphan_selector_overrides( $v2 );
+            return $v2;
         }
         $migrated = self::migrate_from_v1();
         update_option( self::OPTION_V2, $migrated );
         return $migrated;
+    }
+
+    /**
+     * Remove any selector override whose preset id is no longer in the
+     * schema. Idempotent: if the in-memory v2 already contains only
+     * valid presets, returns it unchanged. Persists to the option ONLY
+     * when at least one orphan was found, so we don't write on every
+     * read.
+     */
+    private static function gc_orphan_selector_overrides( array $v2 ): array {
+        if ( empty( $v2['selectorOverrides'] ) || ! is_array( $v2['selectorOverrides'] ) ) {
+            return $v2;
+        }
+        $valid_ids = Animation_Presets::preset_ids();
+        if ( ! is_array( $valid_ids ) || empty( $valid_ids ) ) return $v2;
+
+        $cleaned = [];
+        $removed = 0;
+        foreach ( $v2['selectorOverrides'] as $sel => $entry ) {
+            $preset = '';
+            if ( is_array( $entry ) && isset( $entry['rule']['preset'] ) ) {
+                $preset = (string) $entry['rule']['preset'];
+            }
+            if ( $preset !== '' && in_array( $preset, $valid_ids, true ) ) {
+                $cleaned[ $sel ] = $entry;
+            } else {
+                $removed++;
+            }
+        }
+        if ( $removed > 0 ) {
+            $v2['selectorOverrides'] = $cleaned;
+            update_option( self::OPTION_V2, $v2 );
+        }
+        return $v2;
     }
 
     /**
@@ -514,6 +556,20 @@ final class Animation {
            . "(function(){var h=function(){document.body&&(document.body.style.visibility='inherit');};"
            . "window.__tw_unhide=h;"
            . "setTimeout(h,2500);" // safety net — never leave user on blank page
+           // Scroll restoration — disable browser's automatic scroll-restore
+           // and force scrollTo(0,0) on reload. Without this, reloading a
+           // page mid-scroll lands the user where they were, but our
+           // anti-FOUC + scrub-tied animations boot expecting scrollY=0,
+           // which produces visible jumps and stale ScrollTrigger states.
+           // Runs as early as possible (in <head>) so the browser doesn't
+           // have time to restore.
+           . "if('scrollRestoration' in history){history.scrollRestoration='manual';}"
+           . "if(performance&&performance.getEntriesByType){"
+           .   "var navs=performance.getEntriesByType('navigation');"
+           .   "if(navs&&navs[0]&&(navs[0].type==='reload'||navs[0].type==='back_forward')){window.scrollTo(0,0);}"
+           . "}else if(performance&&performance.navigation&&performance.navigation.type===1){"
+           .   "window.scrollTo(0,0);"
+           . "}"
            . "})();"
            . "</script>"
            . "<noscript><style>body{visibility:inherit}</style></noscript>\n"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped

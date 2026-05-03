@@ -219,29 +219,6 @@
   ],
   "presets": [
     {
-      "id": "world-expands",
-      "label": "World expands (cinematic pin)",
-      "category": "text",
-      "compatibleWith": ["container", "img"],
-      "description": "Section starts as a rounded card (88vw × 80vh), then on scroll grows to fullscreen 100vw × 100vh while any inner image dezooms 1.15→1.0 and the title fades in + rises 40px. The section pins for one viewport so the user can read, then scroll continues. Auto-disabled below 800px. Works on ANY container — with a child <img>, with a CSS background-image, or with no image at all (the container's own background / gradient is carried by a synthesized inner). The runtime auto-detects the parts and synthesizes the missing wrapper(s) at apply time, restoring everything on revert.",
-      "requires": ["ScrollTrigger"],
-      "scrubOnly": true,
-      "params": {
-        "cardWidthVw":     { "type": "number",  "value": 88,    "min": 50,  "max": 100, "step": 1,    "unit": "vw", "label": "Card width" },
-        "cardHeightVh":    { "type": "number",  "value": 80,    "min": 40,  "max": 100, "step": 1,    "unit": "vh", "label": "Card height" },
-        "cardRadiusPx":    { "type": "number",  "value": 28,    "min": 0,   "max": 64,  "step": 1,    "unit": "px", "label": "Card radius" },
-        "mediaScaleFrom":  { "type": "number",  "value": 1.15,  "min": 1,   "max": 2,   "step": 0.05, "unit": "",   "label": "Image dezoom from" },
-        "textY":           { "type": "number",  "value": 40,    "min": 0,   "max": 120, "step": 4,    "unit": "px", "label": "Text Y travel" },
-        "pinDurationVh":   { "type": "number",  "value": 250,   "min": 100, "max": 400, "step": 10,   "unit": "%",  "label": "Pin scroll length", "tip": "% of viewport height — 250 = expand to fullscreen + ~1 viewport hold to read (matches Forma)." },
-        "overlayGradient": { "type": "boolean", "value": true,                                                       "label": "Dark overlay gradient", "tip": "Adds a subtle top→bottom gradient on the overlay so the title stays readable on busy images." },
-        "mobileBreakpoint":{ "type": "number",  "value": 800,   "min": 400, "max": 1200,"step": 10,   "unit": "px", "label": "Mobile breakpoint" }
-      },
-      "scrollTrigger": {
-        "start": { "type": "enum",    "value": "top top", "enum": "TRIGGER_START", "label": "Start" },
-        "scrub": { "type": "boolean", "value": true,    "locked": true, "label": "Scrub (locked — cinematic effect)" }
-      }
-    },
-    {
       "id": "none",
       "label": "None",
       "category": "element",
