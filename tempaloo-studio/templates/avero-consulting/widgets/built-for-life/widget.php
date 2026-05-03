@@ -89,19 +89,23 @@ class Built_For_Life extends Widget_Base {
             'label'   => esc_html__( 'Card width (vw)', 'tempaloo-studio' ),
             'type'    => Controls_Manager::NUMBER,
             'min'     => 50, 'max' => 100, 'step' => 1,
-            'default' => 88,
+            // 100 by default — image fills the viewport from the start.
+            // Drop to 88 (or any value < 100) to opt-in to the
+            // "card-grows-to-fullscreen" Forma effect; the visible bands
+            // around the card will inherit the section background.
+            'default' => 100,
         ] );
         $this->add_control( 'card_height_vh', [
             'label'   => esc_html__( 'Card height (vh)', 'tempaloo-studio' ),
             'type'    => Controls_Manager::NUMBER,
             'min'     => 40, 'max' => 100, 'step' => 1,
-            'default' => 80,
+            'default' => 100,
         ] );
         $this->add_control( 'card_radius', [
             'label'   => esc_html__( 'Card radius (px)', 'tempaloo-studio' ),
             'type'    => Controls_Manager::NUMBER,
             'min'     => 0, 'max' => 64, 'step' => 1,
-            'default' => 28,
+            'default' => 0,
         ] );
         $this->add_control( 'media_scale_from', [
             'label'   => esc_html__( 'Image dezoom from', 'tempaloo-studio' ),
@@ -113,8 +117,8 @@ class Built_For_Life extends Widget_Base {
             'label'   => esc_html__( 'Section height (vh)', 'tempaloo-studio' ),
             'type'    => Controls_Manager::NUMBER,
             'min'     => 150, 'max' => 400, 'step' => 10,
-            'default' => 250,
-            'description' => esc_html__( 'Total height of the section (Forma uses 250vh = 100vh sticky + 150vh of scroll travel, with the unfurl compressed into the first 70%).', 'tempaloo-studio' ),
+            'default' => 200,
+            'description' => esc_html__( 'Total height of the section. 200 = 100vh sticky + 100vh of scroll for image dezoom + text reveal. Increase if the card-to-fullscreen mode (Card width < 100) is enabled.', 'tempaloo-studio' ),
         ] );
         $this->add_control( 'mobile_breakpoint', [
             'label'   => esc_html__( 'Mobile breakpoint (px)', 'tempaloo-studio' ),
@@ -139,11 +143,11 @@ class Built_For_Life extends Widget_Base {
     protected function render(): void {
         $s = $this->get_settings_for_display();
 
-        $card_w = (int)   ( $s['card_width_vw']    ?? 88 );  if ( $card_w < 50 || $card_w > 100 )  $card_w = 88;
-        $card_h = (int)   ( $s['card_height_vh']   ?? 80 );  if ( $card_h < 40 || $card_h > 100 )  $card_h = 80;
-        $rad    = (int)   ( $s['card_radius']      ?? 28 );  if ( $rad < 0  || $rad > 64 )         $rad = 28;
+        $card_w = (int)   ( $s['card_width_vw']    ?? 100 ); if ( $card_w < 50 || $card_w > 100 )  $card_w = 100;
+        $card_h = (int)   ( $s['card_height_vh']   ?? 100 ); if ( $card_h < 40 || $card_h > 100 )  $card_h = 100;
+        $rad    = (int)   ( $s['card_radius']      ?? 0 );   if ( $rad < 0  || $rad > 64 )         $rad = 0;
         $scale  = (float) ( $s['media_scale_from'] ?? 1.15 );if ( $scale < 1 || $scale > 2 )       $scale = 1.15;
-        $sec_vh = (int)   ( $s['pin_duration_vh']  ?? 250 ); if ( $sec_vh < 150 || $sec_vh > 400 ) $sec_vh = 250;
+        $sec_vh = (int)   ( $s['pin_duration_vh']  ?? 200 ); if ( $sec_vh < 150 || $sec_vh > 400 ) $sec_vh = 200;
         $bp     = (int)   ( $s['mobile_breakpoint'] ?? 800 );if ( $bp < 400 || $bp > 1200 )        $bp = 800;
 
         $img_url = $s['image']['url'] ?? $this->mockup_image_url();
@@ -175,7 +179,12 @@ class Built_For_Life extends Widget_Base {
            yet (initial paint OR JS disabled), pin the canvas at p:1 so
            the section is at least readable. The script.js sets --p back
            to 0 only AFTER it has wired the scroll listener. */
-        .tw-bfl{position:relative;width:100%;background:var(--tw-avero-bg,#0c100f);height:<?php echo (int) $sec_vh; ?>vh;contain:layout paint;}
+        /* Section background is transparent so the body / parent
+           Elementor section color shows through any visible margins
+           when the card is configured smaller than 100vw/100vh. By
+           default the canvas fills the viewport so no margins are
+           visible at all. */
+        .tw-bfl{position:relative;width:100%;background:transparent;height:<?php echo (int) $sec_vh; ?>vh;contain:layout paint;}
         .tw-bfl__sticky{position:sticky;top:0;height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden;}
         .tw-bfl__canvas{
             --p:0;
@@ -201,11 +210,10 @@ class Built_For_Life extends Widget_Base {
             display:flex;flex-direction:column;justify-content:center;align-items:center;
             text-align:center;color:#fff;
             padding:clamp(24px,5vw,64px);
-            /* Gradient strengthened from rgba(0,0,0,0.10→0.55) to
-               rgba(0,0,0,0.40→0.75) so the yellow eyebrow stays readable
-               against bright Unsplash backgrounds even at low --p (audit
-               2026-05-03 P2: "eyebrow #E6FF55 nearly invisible at --p<0.7"). */
-            background:linear-gradient(180deg,rgba(0,0,0,0.40),rgba(0,0,0,0.75));
+            /* Gradient overlay removed — text-shadow on .tw-bfl__eyebrow
+               and .tw-bfl__title alone keeps the type legible against any
+               photo. Cleaner edit-mode preview, no dark wash on the image. */
+            background:transparent;
             opacity:var(--p);
             transform:translateY(calc(40px - 40px * var(--p)));
             pointer-events:none;
@@ -218,10 +226,10 @@ class Built_For_Life extends Widget_Base {
             font-weight:600;
             color:var(--tw-avero-accent,#E6FF55);
             margin-bottom:24px;
-            /* Shadow keeps the eyebrow legible against any image, even
-               busy/bright backgrounds where the gradient alone isn't
-               enough. Doesn't affect the perceived color. */
-            text-shadow:0 2px 12px rgba(0,0,0,0.65), 0 0 1px rgba(0,0,0,0.4);
+            /* Stronger shadow now that the gradient overlay is gone.
+               Two layers: a tight close shadow for edge definition and
+               a wider soft glow for ambient contrast against any photo. */
+            text-shadow:0 2px 4px rgba(0,0,0,0.85), 0 4px 24px rgba(0,0,0,0.55);
         }
         .tw-bfl__title{
             font-family:var(--tw-avero-font-heading,'Hedvig Letters Serif',serif);
@@ -230,10 +238,11 @@ class Built_For_Life extends Widget_Base {
             font-weight:500;
             color:#fff;
             max-width:1100px;margin:0;
-            /* Same readability defense as the eyebrow — soft shadow
-               anchors the text against bright Unsplash photos without
-               muddying the type. */
-            text-shadow:0 4px 24px rgba(0,0,0,0.55), 0 0 1px rgba(0,0,0,0.3);
+            /* Stronger shadow stack to compensate for the removed
+               gradient overlay. Tight + wide pair anchors the serif
+               italic against any photo, including bright backgrounds
+               where a single shadow alone gets washed out. */
+            text-shadow:0 2px 6px rgba(0,0,0,0.80), 0 8px 36px rgba(0,0,0,0.55);
         }
         .tw-bfl__title em{
             font-style:italic;
