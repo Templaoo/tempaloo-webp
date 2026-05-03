@@ -560,76 +560,135 @@
      *   targets — Array<HTMLElement>  (the elements to animate)
      *   opts    — { stagger, duration, scrollTrigger?, lvlFactor }
      */
+    /**
+     * Helpers — read schema-typed params with sensible fallbacks.
+     * The runtime now honours every param the React admin exposes
+     * (audit fix: y / x / scaleFrom / blurFrom / ease / useAutoAlpha
+     * were previously ignored — derived from lvlFactor only).
+     */
+    function pNum(opts, key, fallback) {
+        var v = opts && opts.params && opts.params[key];
+        return (typeof v === 'number') ? v : fallback;
+    }
+    function pStr(opts, key, fallback) {
+        var v = opts && opts.params && opts.params[key];
+        return (typeof v === 'string' && v) ? v : fallback;
+    }
+    function pBool(opts, key, fallback) {
+        var v = opts && opts.params && opts.params[key];
+        return (typeof v === 'boolean') ? v : fallback;
+    }
+    /** Use autoAlpha (which sets visibility:hidden too) when the rule
+     *  asks for it (gsap-core best practice). Falls back to plain opacity. */
+    function fadeKey(opts) { return pBool(opts, 'useAutoAlpha', false) ? 'autoAlpha' : 'opacity'; }
+
     var PRESETS = {
         'none': function () { /* no-op */ },
 
         'fade': function (targets, opts) {
-            scheduleAnim(targets,
-                { opacity: 0 },
-                { opacity: 1, duration: opts.duration || 0.45, ease: 'power1.out', stagger: opts.stagger || 0, clearProps: 'opacity' },
-                opts.scrollTrigger, opts.direction, opts.delay);
+            var k = fadeKey(opts);
+            var from = {}, to = {};
+            from[k] = 0; to[k] = 1;
+            to.duration = pNum(opts, 'duration', 0.45);
+            to.ease     = pStr(opts, 'ease', 'power1.out');
+            to.stagger  = pNum(opts, 'stagger', 0);
+            to.clearProps = k === 'autoAlpha' ? 'opacity,visibility' : 'opacity';
+            scheduleAnim(targets, from, to, opts.scrollTrigger, opts.direction, opts.delay);
         },
 
         'fade-up': function (targets, opts) {
-            var y = 24 * (opts.lvlFactor || 1);
-            scheduleAnim(targets,
-                { opacity: 0, y: y },
-                { opacity: 1, y: 0, duration: opts.duration || 0.7, ease: 'power3.out', stagger: opts.stagger || 0, clearProps: 'opacity,transform' },
-                opts.scrollTrigger, opts.direction, opts.delay);
+            // Schema y wins. lvlFactor still scales it (subtle = 0
+            // collapses transforms; bold = 1.4 amplifies).
+            var y = pNum(opts, 'y', 24) * (opts.lvlFactor != null ? opts.lvlFactor : 1);
+            var k = fadeKey(opts);
+            var from = { y: y }, to = { y: 0 };
+            from[k] = 0; to[k] = 1;
+            to.duration = pNum(opts, 'duration', 0.7);
+            to.ease     = pStr(opts, 'ease', 'power3.out');
+            to.stagger  = pNum(opts, 'stagger', 0);
+            to.clearProps = (k === 'autoAlpha' ? 'opacity,visibility,' : 'opacity,') + 'transform';
+            scheduleAnim(targets, from, to, opts.scrollTrigger, opts.direction, opts.delay);
         },
 
         'fade-down': function (targets, opts) {
-            var y = -24 * (opts.lvlFactor || 1);
-            scheduleAnim(targets,
-                { opacity: 0, y: y },
-                { opacity: 1, y: 0, duration: opts.duration || 0.7, ease: 'power3.out', stagger: opts.stagger || 0, clearProps: 'opacity,transform' },
-                opts.scrollTrigger, opts.direction, opts.delay);
+            var y = -pNum(opts, 'y', 24) * (opts.lvlFactor != null ? opts.lvlFactor : 1);
+            var k = fadeKey(opts);
+            var from = { y: y }, to = { y: 0 };
+            from[k] = 0; to[k] = 1;
+            to.duration = pNum(opts, 'duration', 0.7);
+            to.ease     = pStr(opts, 'ease', 'power3.out');
+            to.stagger  = pNum(opts, 'stagger', 0);
+            to.clearProps = (k === 'autoAlpha' ? 'opacity,visibility,' : 'opacity,') + 'transform';
+            scheduleAnim(targets, from, to, opts.scrollTrigger, opts.direction, opts.delay);
         },
 
         'fade-left': function (targets, opts) {
-            var x = -32 * (opts.lvlFactor || 1);
-            scheduleAnim(targets,
-                { opacity: 0, x: x },
-                { opacity: 1, x: 0, duration: opts.duration || 0.7, ease: 'power3.out', stagger: opts.stagger || 0, clearProps: 'opacity,transform' },
-                opts.scrollTrigger, opts.direction, opts.delay);
+            var x = -pNum(opts, 'x', 32) * (opts.lvlFactor != null ? opts.lvlFactor : 1);
+            var k = fadeKey(opts);
+            var from = { x: x }, to = { x: 0 };
+            from[k] = 0; to[k] = 1;
+            to.duration = pNum(opts, 'duration', 0.7);
+            to.ease     = pStr(opts, 'ease', 'power3.out');
+            to.stagger  = pNum(opts, 'stagger', 0);
+            to.clearProps = (k === 'autoAlpha' ? 'opacity,visibility,' : 'opacity,') + 'transform';
+            scheduleAnim(targets, from, to, opts.scrollTrigger, opts.direction, opts.delay);
         },
 
         'fade-right': function (targets, opts) {
-            var x = 32 * (opts.lvlFactor || 1);
-            scheduleAnim(targets,
-                { opacity: 0, x: x },
-                { opacity: 1, x: 0, duration: opts.duration || 0.7, ease: 'power3.out', stagger: opts.stagger || 0, clearProps: 'opacity,transform' },
-                opts.scrollTrigger, opts.direction, opts.delay);
+            var x = pNum(opts, 'x', 32) * (opts.lvlFactor != null ? opts.lvlFactor : 1);
+            var k = fadeKey(opts);
+            var from = { x: x }, to = { x: 0 };
+            from[k] = 0; to[k] = 1;
+            to.duration = pNum(opts, 'duration', 0.7);
+            to.ease     = pStr(opts, 'ease', 'power3.out');
+            to.stagger  = pNum(opts, 'stagger', 0);
+            to.clearProps = (k === 'autoAlpha' ? 'opacity,visibility,' : 'opacity,') + 'transform';
+            scheduleAnim(targets, from, to, opts.scrollTrigger, opts.direction, opts.delay);
         },
 
         'scale-in': function (targets, opts) {
-            var f = opts.lvlFactor != null ? opts.lvlFactor : 1;
-            scheduleAnim(targets,
-                { opacity: 0, scale: 1 - 0.08 * f },
-                { opacity: 1, scale: 1, duration: opts.duration || 0.7, ease: 'back.out(1.4)', stagger: opts.stagger || 0, clearProps: 'opacity,transform' },
-                opts.scrollTrigger, opts.direction, opts.delay);
+            // scaleFrom from schema (0.5–1). Falls back to old
+            // lvlFactor-derived computation when the schema didn't
+            // provide one (legacy templates).
+            var scaleFrom = pNum(opts, 'scaleFrom', 1 - 0.08 * (opts.lvlFactor != null ? opts.lvlFactor : 1));
+            var k = fadeKey(opts);
+            var from = { scale: scaleFrom }, to = { scale: 1 };
+            from[k] = 0; to[k] = 1;
+            to.duration = pNum(opts, 'duration', 0.7);
+            to.ease     = pStr(opts, 'ease', 'back.out(1.4)');
+            to.stagger  = pNum(opts, 'stagger', 0);
+            to.clearProps = (k === 'autoAlpha' ? 'opacity,visibility,' : 'opacity,') + 'transform';
+            scheduleAnim(targets, from, to, opts.scrollTrigger, opts.direction, opts.delay);
         },
 
         'blur-in': function (targets, opts) {
-            var f = opts.lvlFactor != null ? opts.lvlFactor : 1;
-            scheduleAnim(targets,
-                { opacity: 0, filter: 'blur(' + (20 * f) + 'px)', willChange: 'opacity, filter' },
-                { opacity: 1, filter: 'blur(0px)', duration: opts.duration || 0.85, ease: 'power3.out', stagger: opts.stagger || 0, clearProps: 'opacity,filter,willChange' },
-                opts.scrollTrigger, opts.direction, opts.delay);
+            // blurFrom from schema (0–50px). lvlFactor still modulates.
+            var blurFrom = pNum(opts, 'blurFrom', 20) * (opts.lvlFactor != null ? opts.lvlFactor : 1);
+            var k = fadeKey(opts);
+            var from = { filter: 'blur(' + blurFrom + 'px)', willChange: 'opacity, filter' };
+            var to   = { filter: 'blur(0px)' };
+            from[k] = 0; to[k] = 1;
+            to.duration = pNum(opts, 'duration', 0.85);
+            to.ease     = pStr(opts, 'ease', 'power3.out');
+            to.stagger  = pNum(opts, 'stagger', 0);
+            to.clearProps = (k === 'autoAlpha' ? 'opacity,visibility,' : 'opacity,') + 'filter,willChange';
+            scheduleAnim(targets, from, to, opts.scrollTrigger, opts.direction, opts.delay);
         },
 
         'mask-reveal': function (targets, opts) {
             var f = opts.lvlFactor != null ? opts.lvlFactor : 1;
+            // At "subtle" (lvlFactor 0), drop to opacity-only fade —
+            // clip-path on tiny elements often looks awkward.
             if (f === 0) {
                 scheduleAnim(targets,
                     { opacity: 0 },
-                    { opacity: 1, duration: opts.duration || 0.4, ease: 'power1.out', stagger: opts.stagger || 0, clearProps: 'opacity' },
+                    { opacity: 1, duration: pNum(opts, 'duration', 0.4), ease: pStr(opts, 'ease', 'power1.out'), stagger: pNum(opts, 'stagger', 0), clearProps: 'opacity' },
                     opts.scrollTrigger, opts.direction, opts.delay);
                 return;
             }
             scheduleAnim(targets,
                 { clipPath: 'inset(0 100% 0 0)' },
-                { clipPath: 'inset(0 0% 0 0)', duration: opts.duration || 0.8, ease: 'power3.out', stagger: opts.stagger || 0, clearProps: 'clipPath' },
+                { clipPath: 'inset(0 0% 0 0)', duration: pNum(opts, 'duration', 0.8), ease: pStr(opts, 'ease', 'power3.out'), stagger: pNum(opts, 'stagger', 0), clearProps: 'clipPath' },
                 opts.scrollTrigger, opts.direction, opts.delay);
         },
     };
@@ -761,21 +820,15 @@
 
         // 1. Word fade-up — DEFAULT for editorial headlines.
         'word-fade-up': function (el, opts) {
-            var words = splitWords(el, false);
-            var y = 16 * (opts.lvlFactor || 1);
+            var words   = splitWords(el, false);
+            var y       = pNum(opts, 'y', 16) * (opts.lvlFactor != null ? opts.lvlFactor : 1);
+            var dur     = pNum(opts, 'duration', 0.6);
+            var stag    = pNum(opts, 'stagger', 0.03);
+            var ease    = pStr(opts, 'ease', 'power3.out');
+            var sFrom   = pStr(opts, 'staggerFrom', 'start');
             withScroll(opts,
-                function () {
-                    gsap().to(words, {
-                        opacity: 1, y: 0, duration: 0.6, ease: 'power3.out',
-                        stagger: 0.03, overwrite: 'auto',
-                    });
-                },
-                function () {
-                    gsap().to(words, {
-                        opacity: 0, y: y, duration: 0.4, ease: 'power3.in',
-                        stagger: { each: 0.02, from: 'end' }, overwrite: 'auto',
-                    });
-                },
+                function () { gsap().to(words, { opacity: 1, y: 0, duration: dur, ease: ease, stagger: { each: stag, from: sFrom }, overwrite: 'auto' }); },
+                function () { gsap().to(words, { opacity: 0, y: y, duration: dur * 0.66, ease: 'power3.in', stagger: { each: stag * 0.66, from: 'end' }, overwrite: 'auto' }); },
                 function () { gsap().set(words, { opacity: 0, y: y }); }
             );
         },
@@ -783,42 +836,29 @@
         // 2. Word fade-blur — premium / editorial.
         'word-fade-blur': function (el, opts) {
             var words = splitWords(el, false);
+            var blur  = pNum(opts, 'blurFrom', 8);
+            var dur   = pNum(opts, 'duration', 0.7);
+            var stag  = pNum(opts, 'stagger', 0.04);
+            var ease  = pStr(opts, 'ease', 'power2.out');
+            var sFrom = pStr(opts, 'staggerFrom', 'start');
             withScroll(opts,
-                function () {
-                    gsap().to(words, {
-                        opacity: 1, filter: 'blur(0px)',
-                        duration: 0.7, ease: 'power2.out',
-                        stagger: 0.04, overwrite: 'auto',
-                    });
-                },
-                function () {
-                    gsap().to(words, {
-                        opacity: 0, filter: 'blur(8px)',
-                        duration: 0.45, ease: 'power2.in',
-                        stagger: { each: 0.02, from: 'end' }, overwrite: 'auto',
-                    });
-                },
-                function () { gsap().set(words, { opacity: 0, filter: 'blur(8px)' }); }
+                function () { gsap().to(words, { opacity: 1, filter: 'blur(0px)', duration: dur, ease: ease, stagger: { each: stag, from: sFrom }, overwrite: 'auto' }); },
+                function () { gsap().to(words, { opacity: 0, filter: 'blur(' + blur + 'px)', duration: dur * 0.65, ease: 'power2.in', stagger: { each: stag * 0.5, from: 'end' }, overwrite: 'auto' }); },
+                function () { gsap().set(words, { opacity: 0, filter: 'blur(' + blur + 'px)' }); }
             );
         },
 
         // 3. Word slide-up (overflow) — cinematic Stripe-style.
         'word-slide-up-overflow': function (el, opts) {
             var inners = splitWords(el, true);
+            var yp     = pNum(opts, 'yPercentFrom', 110);
+            var dur    = pNum(opts, 'duration', 0.7);
+            var stag   = pNum(opts, 'stagger', 0.04);
+            var ease   = pStr(opts, 'ease', 'power4.out');
             withScroll(opts,
-                function () {
-                    gsap().to(inners, {
-                        yPercent: 0, duration: 0.7, ease: 'power4.out',
-                        stagger: 0.04, overwrite: 'auto',
-                    });
-                },
-                function () {
-                    gsap().to(inners, {
-                        yPercent: 110, duration: 0.45, ease: 'power4.in',
-                        stagger: { each: 0.025, from: 'end' }, overwrite: 'auto',
-                    });
-                },
-                function () { gsap().set(inners, { yPercent: 110 }); }
+                function () { gsap().to(inners, { yPercent: 0, duration: dur, ease: ease, stagger: stag, overwrite: 'auto' }); },
+                function () { gsap().to(inners, { yPercent: yp, duration: dur * 0.65, ease: 'power4.in', stagger: { each: stag * 0.6, from: 'end' }, overwrite: 'auto' }); },
+                function () { gsap().set(inners, { yPercent: yp }); }
             );
         },
 
@@ -827,20 +867,13 @@
             var text = (el.textContent || '').trim();
             if (text.length > 60) return TEXT_PRESETS['word-fade-up'](el, opts);
             var chars = splitChars(el);
-            var y = 8 * (opts.lvlFactor || 1);
+            var y     = pNum(opts, 'y', 8) * (opts.lvlFactor != null ? opts.lvlFactor : 1);
+            var dur   = pNum(opts, 'duration', 0.5);
+            var stag  = pNum(opts, 'stagger', 0.018);
+            var ease  = pStr(opts, 'ease', 'power3.out');
             withScroll(opts,
-                function () {
-                    gsap().to(chars, {
-                        opacity: 1, y: 0, duration: 0.5, ease: 'power3.out',
-                        stagger: 0.018, overwrite: 'auto',
-                    });
-                },
-                function () {
-                    gsap().to(chars, {
-                        opacity: 0, y: y, duration: 0.35, ease: 'power3.in',
-                        stagger: { each: 0.012, from: 'end' }, overwrite: 'auto',
-                    });
-                },
+                function () { gsap().to(chars, { opacity: 1, y: 0, duration: dur, ease: ease, stagger: stag, overwrite: 'auto' }); },
+                function () { gsap().to(chars, { opacity: 0, y: y, duration: dur * 0.7, ease: 'power3.in', stagger: { each: stag * 0.66, from: 'end' }, overwrite: 'auto' }); },
                 function () { gsap().set(chars, { opacity: 0, y: y }); }
             );
         },
@@ -848,84 +881,51 @@
         // 5. Line fade-up stagger — multi-line headlines (split on <br>).
         'line-fade-up-stagger': function (el, opts) {
             var lines = splitLines(el);
-            var y = 24 * (opts.lvlFactor || 1);
+            var y     = pNum(opts, 'y', 24) * (opts.lvlFactor != null ? opts.lvlFactor : 1);
+            var dur   = pNum(opts, 'duration', 0.7);
+            var stag  = pNum(opts, 'stagger', 0.1);
+            var ease  = pStr(opts, 'ease', 'power3.out');
             withScroll(opts,
-                function () {
-                    gsap().to(lines, {
-                        opacity: 1, y: 0, duration: 0.7, ease: 'power3.out',
-                        stagger: 0.1, overwrite: 'auto',
-                    });
-                },
-                function () {
-                    gsap().to(lines, {
-                        opacity: 0, y: y, duration: 0.5, ease: 'power3.in',
-                        stagger: { each: 0.06, from: 'end' }, overwrite: 'auto',
-                    });
-                },
+                function () { gsap().to(lines, { opacity: 1, y: 0, duration: dur, ease: ease, stagger: stag, overwrite: 'auto' }); },
+                function () { gsap().to(lines, { opacity: 0, y: y, duration: dur * 0.7, ease: 'power3.in', stagger: { each: stag * 0.6, from: 'end' }, overwrite: 'auto' }); },
                 function () { gsap().set(lines, { opacity: 0, y: y }); }
             );
         },
 
         // 6. Text typing — typewriter chars instant-reveal sequentially.
         'text-typing': function (el, opts) {
-            var chars = splitChars(el);
-            var stagger = Math.min(0.045, chars.length > 0 ? 1.5 / chars.length : 0.045);
+            var chars   = splitChars(el);
+            // Honour totalDuration param: stagger = total / chars (capped 0.045/char).
+            var total   = pNum(opts, 'totalDuration', 1.5);
+            var stagger = chars.length > 0 ? Math.min(0.045, total / chars.length) : 0.045;
             withScroll(opts,
-                function () {
-                    gsap().to(chars, {
-                        opacity: 1, duration: 0.001, stagger: stagger, ease: 'none', overwrite: 'auto',
-                    });
-                },
-                function () {
-                    gsap().to(chars, {
-                        opacity: 0, duration: 0.001,
-                        stagger: { each: stagger, from: 'end' },
-                        ease: 'none', overwrite: 'auto',
-                    });
-                },
+                function () { gsap().to(chars, { opacity: 1, duration: 0.001, stagger: stagger, ease: 'none', overwrite: 'auto' }); },
+                function () { gsap().to(chars, { opacity: 0, duration: 0.001, stagger: { each: stagger, from: 'end' }, ease: 'none', overwrite: 'auto' }); },
                 function () { gsap().set(chars, { opacity: 0 }); }
             );
         },
 
         // 7. Text fill sweep — wave from dim to full opacity, char-by-char.
         'text-fill-sweep': function (el, opts) {
+            var dur     = pNum(opts, 'duration', 0.4);
+            var stag    = pNum(opts, 'stagger', 0.05);
+            var ease    = pStr(opts, 'ease', 'power2.out');
+            var opaFrom = pNum(opts, 'opacityFrom', 0.22);
             var text = (el.textContent || '').trim();
             if (text.length > 80) {
                 var words = splitWords(el, false);
                 withScroll(opts,
-                    function () {
-                        gsap().to(words, {
-                            opacity: 1, duration: 0.4, stagger: 0.05,
-                            ease: 'power2.out', overwrite: 'auto',
-                        });
-                    },
-                    function () {
-                        gsap().to(words, {
-                            opacity: 0.22, duration: 0.3,
-                            stagger: { each: 0.03, from: 'end' },
-                            ease: 'power2.in', overwrite: 'auto',
-                        });
-                    },
-                    function () { gsap().set(words, { opacity: 0.22 }); }
+                    function () { gsap().to(words, { opacity: 1, duration: dur, stagger: stag, ease: ease, overwrite: 'auto' }); },
+                    function () { gsap().to(words, { opacity: opaFrom, duration: dur * 0.75, stagger: { each: stag * 0.6, from: 'end' }, ease: 'power2.in', overwrite: 'auto' }); },
+                    function () { gsap().set(words, { opacity: opaFrom }); }
                 );
                 return;
             }
             var chars = splitChars(el);
             withScroll(opts,
-                function () {
-                    gsap().to(chars, {
-                        opacity: 1, duration: 0.3, stagger: 0.022,
-                        ease: 'power2.out', overwrite: 'auto',
-                    });
-                },
-                function () {
-                    gsap().to(chars, {
-                        opacity: 0.22, duration: 0.25,
-                        stagger: { each: 0.015, from: 'end' },
-                        ease: 'power2.in', overwrite: 'auto',
-                    });
-                },
-                function () { gsap().set(chars, { opacity: 0.22 }); }
+                function () { gsap().to(chars, { opacity: 1, duration: dur * 0.75, stagger: stag * 0.44, ease: ease, overwrite: 'auto' }); },
+                function () { gsap().to(chars, { opacity: opaFrom, duration: dur * 0.62, stagger: { each: stag * 0.3, from: 'end' }, ease: 'power2.in', overwrite: 'auto' }); },
+                function () { gsap().set(chars, { opacity: opaFrom }); }
             );
         },
 
@@ -1212,6 +1212,12 @@
             lvlFactor:     lvlF,
             scrollTrigger: stCfg,
             direction:     direction,
+            // Pass the FULL v2 params through so presets can read
+            // ease, y/x, scaleFrom, blurFrom, useAutoAlpha, etc.
+            // The legacy v1 stagger/duration above stay because
+            // applyEntrance is fed by the v1 shim payload — v2Params
+            // adds the rest.
+            params:        v2Params,
         };
 
         log('applyEntrance', { scope: scope, preset: preset, lvl: lvl, opts: opts });

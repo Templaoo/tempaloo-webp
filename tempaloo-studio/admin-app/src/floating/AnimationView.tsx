@@ -5,6 +5,7 @@ import type { AnimationLibrary, AnimationRule, AnimationStateV2 } from '../api';
 import { StepStyle } from '../pages/animation/StepStyle';
 import { StepTune } from '../pages/animation/StepTune';
 import { StepAdvanced } from '../pages/animation/StepAdvanced';
+import { AnimatedElementsList } from './AnimatedElementsList';
 
 type Step = 'style' | 'tune' | 'advanced';
 
@@ -148,6 +149,8 @@ export function AnimationView() {
 
       {!loading && lib && state && (
         <>
+          <AnimatedElementsList state={state} lib={lib} onChange={refreshState} />
+
           <nav className="tsa-fp-anim__steps" role="tablist">
             {STEPS.map((s, i) => {
               const isActive = s.id === step;
