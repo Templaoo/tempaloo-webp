@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, type AnimationLibrary, type AnimationRule } from '../api';
 import { toast } from '../components/Toast';
 import { RuleEditor } from '../pages/animation/RuleEditor';
@@ -29,6 +29,18 @@ export function AnimateMode({ active, onClose }: { active: boolean; onClose: () 
   const [lib, setLib]   = useState<AnimationLibrary | null>(null);
   const [rule, setRule] = useState<AnimationRule>(() => makeDefaultRule('fade-up'));
   const [saving, setSaving] = useState(false);
+
+  // Live preview support — apply the rule to the pinned element on
+  // every change (debounced) so the user sees the animation BEFORE
+  // saving. If they Cancel, we restore the original snapshot so the
+  // page is left exactly as it was before opening the popover.
+  const previewTimer  = useRef<number | null>(null);
+  const savedRef      = useRef(false);                  // set true when user clicks Save (skip revert)
+  const originalRule  = useRef<AnimationRule | null>(null); // pre-edit snapshot
+
+  // Drag offset for the popover header (free-move).
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const dragStart = useRef<{ mx: number; my: number; ox: number; oy: number } | null>(null);
 
   // Load library once when mode activates.
   useEffect(() => {
@@ -107,12 +119,24 @@ export function AnimateMode({ active, onClose }: { active: boolean; onClose: () 
       el.style.outline       = '2px solid #2563eb';
       el.style.outlineOffset = '-2px';
       // Try to read existing override for the generated selector.
+      // Snapshot whatever rule is in force right now (existing override
+      // or null = "no animation") so Cancel can revert cleanly.
       const sel = generateSelector(el);
+      savedRef.current = false;
+      setDragOffset({ x: 0, y: 0 });
       api.getAnimationV2().then((s) => {
         const existing = s.selectorOverrides?.[sel];
-        if (existing && existing.rule) setRule(existing.rule);
-        else setRule(makeDefaultRule(detectPreset(el)));
-      }).catch(() => { /* fall back to default */ });
+        if (existing && existing.rule) {
+          originalRule.current = existing.rule;
+          setRule(existing.rule);
+        } else {
+          originalRule.current = null;
+          setRule(makeDefaultRule(detectPreset(el)));
+        }
+      }).catch(() => {
+        originalRule.current = null;
+        setRule(makeDefaultRule(detectPreset(el)));
+      });
     };
 
     const onKey = (e: KeyboardEvent) => {
@@ -149,6 +173,22 @@ export function AnimateMode({ active, onClose }: { active: boolean; onClose: () 
     };
   }, [pinned]);
 
+  // Live preview — re-apply the rule to the pinned element whenever
+  // it changes. Debounced 200ms so dragging a slider doesn't replay
+  // the animation on every input event.
+  useEffect(() => {
+    if (!pinned || !rule.preset) return;
+    if (previewTimer.current) window.clearTimeout(previewTimer.current);
+    previewTimer.current = window.setTimeout(() => {
+      type Win = { tempaloo?: { studio?: { animations?: { applyRuleToElement?: (el: Element, r: AnimationRule) => void } } } };
+      const fn = (window as unknown as Win).tempaloo?.studio?.animations?.applyRuleToElement;
+      if (fn) fn(pinned, rule);
+    }, 200);
+    return () => {
+      if (previewTimer.current) window.clearTimeout(previewTimer.current);
+    };
+  }, [pinned, rule]);
+
   // When the popover closes, clear the pinned outline.
   useEffect(() => {
     if (pinned) return;
@@ -157,12 +197,29 @@ export function AnimateMode({ active, onClose }: { active: boolean; onClose: () 
   }, [pinned]);
 
   function closePopover() {
+    // If the user previewed but didn't save, revert to the original
+    // state so the page stays exactly as it was before they opened
+    // the popover. Either re-apply the previous saved override, or
+    // clear the gsap.context() entirely.
+    if (pinned && !savedRef.current) {
+      type Win = { tempaloo?: { studio?: { animations?: { applyRuleToElement?: (el: Element, r: AnimationRule) => void } } } };
+      const fn = (window as unknown as Win).tempaloo?.studio?.animations?.applyRuleToElement;
+      if (originalRule.current && fn) {
+        fn(pinned, originalRule.current);
+      } else {
+        const ctx = (pinned as unknown as { __tw_anim_ctx?: { revert: () => void } }).__tw_anim_ctx;
+        if (ctx && typeof ctx.revert === 'function') ctx.revert();
+      }
+    }
     if (pinned) {
       pinned.style.outline       = '';
       pinned.style.outlineOffset = '';
     }
     setPinned(null);
     setPinnedRect(null);
+    originalRule.current = null;
+    savedRef.current     = false;
+    setDragOffset({ x: 0, y: 0 });
   }
 
   const pinnedSelector = useMemo(() => (pinned ? generateSelector(pinned) : ''), [pinned]);
@@ -189,6 +246,7 @@ export function AnimateMode({ active, onClose }: { active: boolean; onClose: () 
         animV2.selectorOverrides = animV2.selectorOverrides || {};
         animV2.selectorOverrides[pinnedSelector] = { rule, label: label(pinned), savedAt: Date.now() };
       }
+      savedRef.current = true; // skip revert in closePopover
       toast.info(`Saved animation for ${pinnedSelector}`);
       closePopover();
     } catch (e) {
@@ -208,6 +266,7 @@ export function AnimateMode({ active, onClose }: { active: boolean; onClose: () 
       if (animV2 && animV2.selectorOverrides) delete animV2.selectorOverrides[pinnedSelector];
       const ctx = (pinned as unknown as { __tw_anim_ctx?: { revert: () => void } } | null)?.__tw_anim_ctx;
       if (ctx && typeof ctx.revert === 'function') ctx.revert();
+      savedRef.current = true; // intentional removal — don't revert
       toast.info(`Removed override for ${pinnedSelector}`);
       closePopover();
     } catch (e) {
@@ -217,21 +276,70 @@ export function AnimateMode({ active, onClose }: { active: boolean; onClose: () 
     }
   }
 
+  // ── Drag handlers (popover header is grabbable) ────────
+  function startDrag(e: React.PointerEvent) {
+    dragStart.current = {
+      mx: e.clientX, my: e.clientY,
+      ox: dragOffset.x, oy: dragOffset.y,
+    };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+  function moveDrag(e: React.PointerEvent) {
+    if (!dragStart.current) return;
+    const dx = e.clientX - dragStart.current.mx;
+    const dy = e.clientY - dragStart.current.my;
+    setDragOffset({ x: dragStart.current.ox + dx, y: dragStart.current.oy + dy });
+  }
+  function endDrag(e: React.PointerEvent) {
+    dragStart.current = null;
+    try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch {}
+  }
+
   return (
     <>
       {pinned && pinnedRect && lib && (
         <div
           className="tsa-am-popover"
-          style={popoverPosition(pinnedRect)}
+          style={popoverPosition(pinnedRect, dragOffset)}
           role="dialog"
           aria-label="Animate element"
         >
-          <header className="tsa-am-popover__head">
-            <strong>Animate · {tagDescriptor(pinned)}</strong>
-            <button type="button" className="tsa-am-popover__close" onClick={closePopover} aria-label="Close">×</button>
+          <header
+            className="tsa-am-popover__head"
+            onPointerDown={startDrag}
+            onPointerMove={moveDrag}
+            onPointerUp={endDrag}
+            onPointerCancel={endDrag}
+            style={{ cursor: dragStart.current ? 'grabbing' : 'grab' }}
+          >
+            <span className="tsa-am-popover__grip" aria-hidden="true">⋮⋮</span>
+            <strong className="tsa-am-popover__title">{tagDescriptor(pinned)}</strong>
+            <button
+              type="button"
+              className="tsa-am-popover__icon"
+              onClick={(e) => {
+                e.stopPropagation();
+                type Win = { tempaloo?: { studio?: { animations?: { applyRuleToElement?: (el: Element, r: AnimationRule) => void } } } };
+                const fn = (window as unknown as Win).tempaloo?.studio?.animations?.applyRuleToElement;
+                if (fn && pinned) fn(pinned, rule);
+              }}
+              title="Replay preview"
+              aria-label="Replay preview"
+            >↻</button>
+            <button
+              type="button"
+              className="tsa-am-popover__icon tsa-am-popover__icon--close"
+              onClick={(e) => { e.stopPropagation(); closePopover(); }}
+              aria-label="Close"
+              title="Cancel — revert preview"
+            >×</button>
           </header>
-          <div className="tsa-am-popover__sel">
-            Selector: <code>{pinnedSelector}</code>
+          <div className="tsa-am-popover__sel" title={pinnedSelector}>
+            <span className="tsa-am-popover__selpill">SELECTOR</span>
+            <code>{pinnedSelector}</code>
+          </div>
+          <div className="tsa-am-popover__livehint">
+            <span className="tsa-am-popover__livedot" /> Live preview — changes apply immediately
           </div>
           <div className="tsa-am-popover__body">
             <RuleEditor
@@ -242,10 +350,10 @@ export function AnimateMode({ active, onClose }: { active: boolean; onClose: () 
             />
           </div>
           <footer className="tsa-am-popover__foot">
-            <button type="button" className="tsa-btn-ghost" onClick={closePopover}>Cancel</button>
-            <button type="button" className="tsa-btn-ghost" onClick={remove} disabled={saving}>Remove</button>
+            <button type="button" className="tsa-btn-ghost tsa-am-popover__cancel" onClick={closePopover}>Cancel</button>
+            <button type="button" className="tsa-btn-ghost" onClick={remove} disabled={saving} title="Delete this selector override">Remove</button>
             <button type="button" className="tsa-btn-primary" onClick={save} disabled={saving || !rule.preset}>
-              {saving ? 'Saving…' : 'Save & apply'}
+              {saving ? 'Saving…' : 'Save'}
             </button>
           </footer>
         </div>
@@ -356,13 +464,15 @@ function makeDefaultRule(presetId: string): AnimationRule {
 
 /**
  * Place the popover next to the pinned element. Tries: right of element,
- * then left, then fallback to viewport corner.
+ * then left, then fallback to viewport corner. Adds the user's drag
+ * offset so the popover follows wherever they last moved it.
  */
-function popoverPosition(rect: DOMRect): React.CSSProperties {
-  const W = 380, H = 480;
-  const margin = 12;
+function popoverPosition(rect: DOMRect, offset: { x: number; y: number }): React.CSSProperties {
+  const W  = 340;
   const vw = window.innerWidth;
   const vh = window.innerHeight;
+  const H  = Math.min(540, vh - 48);
+  const margin = 12;
   let left = rect.right + margin;
   let top  = rect.top;
   if (left + W > vw - margin) left = rect.left - W - margin;
@@ -371,8 +481,8 @@ function popoverPosition(rect: DOMRect): React.CSSProperties {
   if (top < margin)           top  = margin;
   return {
     position: 'fixed',
-    top,
-    left,
+    top:    top  + offset.y,
+    left:   left + offset.x,
     width:  W,
     maxHeight: H,
   };
