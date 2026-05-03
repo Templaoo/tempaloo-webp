@@ -195,9 +195,15 @@ final class Assets {
             //   define( 'TEMPALOO_STUDIO_GSAP_CDN', true );
             //
             // GSAP version pinned: 3.12.5 (Free license — no Club plugins).
+            // Sprint 2 / point #3 — CDN toggle. Order of precedence:
+            //   1. PHP constant TEMPALOO_STUDIO_GSAP_CDN (devs / staging)
+            //   2. Animation::gsap_source() admin setting ('local'|'cdn')
+            //   3. Local files exist → local; otherwise auto-fallback CDN.
             $local_gsap = TEMPALOO_STUDIO_DIR . 'assets/vendor/gsap.min.js';
             $local_st   = TEMPALOO_STUDIO_DIR . 'assets/vendor/ScrollTrigger.min.js';
+            $admin_cdn  = ( Animation::gsap_source() === 'cdn' );
             $use_cdn    = ( defined( 'TEMPALOO_STUDIO_GSAP_CDN' ) && TEMPALOO_STUDIO_GSAP_CDN )
+                       || $admin_cdn
                        || ! file_exists( $local_gsap )
                        || ! file_exists( $local_st );
 
@@ -230,6 +236,51 @@ final class Assets {
                 wp_enqueue_script( 'tempaloo-studio-animations' );
             }
 
+            // Sprint 2 / point #7 — Custom Cursor (lazy: only enqueued
+            // when type !== 'off'). Standalone, no GSAP dep — reads
+            // window.tempaloo.studio.cursor at boot.
+            $cursor_cfg = Animation::cursor_settings();
+            $cursor_js  = TEMPALOO_STUDIO_DIR . 'assets/js/cursor.js';
+            if ( ( $cursor_cfg['type'] ?? 'off' ) !== 'off' && file_exists( $cursor_js ) ) {
+                wp_register_script(
+                    'tempaloo-studio-cursor',
+                    TEMPALOO_STUDIO_URL . 'assets/js/cursor.js',
+                    [ 'tempaloo-studio-runtime' ],
+                    TEMPALOO_STUDIO_VERSION . '-' . filemtime( $cursor_js ),
+                    true
+                );
+                wp_enqueue_script( 'tempaloo-studio-cursor' );
+            }
+
+            // Sprint 2 / point #8 — Lenis smooth-scroll. Vendored as
+            // assets/vendor/lenis.min.js (loaded only when engine='lenis'
+            // AND current post isn't excluded). MIT-licensed, ~8 KB gzipped.
+            // The boot snippet creates the Lenis instance + raf loop.
+            $post_id = self::current_post_id();
+            if ( Animation::lenis_enabled_for_post( $post_id ) ) {
+                $lenis_js  = TEMPALOO_STUDIO_DIR . 'assets/vendor/lenis.min.js';
+                $lenis_src = file_exists( $lenis_js )
+                    ? TEMPALOO_STUDIO_URL . 'assets/vendor/lenis.min.js'
+                    : 'https://cdn.jsdelivr.net/npm/lenis@1.3.4/dist/lenis.min.js';
+                if ( true ) {
+                    wp_register_script(
+                        'tempaloo-studio-lenis',
+                        $lenis_src,
+                        [],
+                        '1.3.4',
+                        true
+                    );
+                    wp_enqueue_script( 'tempaloo-studio-lenis' );
+                    $scroll = Animation::scroll_settings();
+                    $boot = sprintf(
+                        'addEventListener("DOMContentLoaded",function(){if(!window.Lenis)return;var l=new Lenis({duration:%F,wheelMultiplier:%F,smoothWheel:true});function raf(t){l.raf(t);requestAnimationFrame(raf)}requestAnimationFrame(raf);window._tw_lenis=l;if(window.ScrollTrigger){l.on("scroll",window.ScrollTrigger.update);}});',
+                        (float) $scroll['duration'],
+                        (float) $scroll['wheelMultiplier']
+                    );
+                    wp_add_inline_script( 'tempaloo-studio-lenis', $boot, 'after' );
+                }
+            }
+
             wp_register_script(
                 'tempaloo-studio-' . $slug . '-global',
                 $url . $global_js,
@@ -239,6 +290,7 @@ final class Assets {
             );
         }
 
+        // … (per-widget scripts below)
         // Per-widget scripts. Convention: widgets/{widget}/script.js
         // gets registered as tempaloo-studio-{widget-slug} so the
         // widget class can return that handle from get_script_depends().
@@ -256,5 +308,20 @@ final class Assets {
                 );
             }
         }
+    }
+
+    /** Reliable current-post-id resolver across the WP query lifecycle. */
+    private static function current_post_id(): int {
+        if ( function_exists( 'is_singular' ) && is_singular() ) {
+            return (int) get_queried_object_id();
+        }
+        if ( function_exists( 'is_front_page' ) && is_front_page() ) {
+            return (int) get_option( 'page_on_front', 0 );
+        }
+        if ( function_exists( 'get_the_ID' ) ) {
+            $id = (int) get_the_ID();
+            if ( $id ) return $id;
+        }
+        return 0;
     }
 }

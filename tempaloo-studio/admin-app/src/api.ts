@@ -89,6 +89,16 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ selector }),
     }),
+  setCursor: (patch: Partial<CursorSettings>) =>
+    call<AnimationStateV2>('/animation/v2/cursor', {
+      method: 'POST',
+      body: JSON.stringify({ patch }),
+    }),
+  setScroll: (patch: Partial<ScrollSettings>) =>
+    call<AnimationStateV2>('/animation/v2/scroll', {
+      method: 'POST',
+      body: JSON.stringify({ patch }),
+    }),
 
   // ── Plan B — profiles ──────────────────────────────────
   listProfiles:    () => call<{ profiles: AnimationProfile[]; active: string }>('/animation/profiles'),
@@ -169,6 +179,25 @@ export interface AnimationRule {
   direction?:    string;
 }
 
+export interface CursorSettings {
+  type:         'off' | 'basic' | 'outline' | 'tooltip' | 'text' | 'media';
+  smooth:       number;   // 0–0.95
+  accent:       string;   // CSS color
+  bg:           string;
+  size:         number;   // 4–64 px
+  mixBlendMode: 'normal' | 'difference' | 'exclusion' | 'multiply' | 'screen' | 'overlay';
+  hover:        { scale: number };
+}
+
+export interface ScrollSettings {
+  engine:          'none' | 'lenis';
+  duration:        number;   // 0.2–4 s
+  lerp:            number;   // 0.01–1
+  wheelMultiplier: number;   // 0.1–5
+  excludePages:    string;   // CSV of post IDs
+  gsapSource:      'local' | 'cdn';
+}
+
 export interface AnimationStateV2 {
   version:         string;
   globals: {
@@ -179,6 +208,8 @@ export interface AnimationStateV2 {
   elementRules:      Record<string, AnimationRule>;
   widgetOverrides:   Record<string, AnimationRule>;
   selectorOverrides?: Record<string, { rule: AnimationRule; label?: string; savedAt?: number }>;
+  cursor?:         CursorSettings;
+  scroll?:         ScrollSettings;
   templateSlug:    string;
   widgets:         string[];
   activeProfile?:  string;
@@ -188,6 +219,9 @@ export interface AnimationStateV2 {
     reduceMotion: string[];
     elementTypes: string[];
     presets:      string[];
+    cursorTypes?: string[];
+    scrollEngines?: string[];
+    gsapSources?: string[];
   };
 }
 

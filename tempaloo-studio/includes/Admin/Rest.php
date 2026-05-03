@@ -215,6 +215,32 @@ final class Rest {
             ],
         ] );
 
+        // ── Sprint 2 — cursor + scroll site-wide settings ───────────
+        register_rest_route( self::NS, '/animation/v2/cursor', [
+            'methods'             => 'POST',
+            'callback'            => [ $this, 'set_cursor' ],
+            'permission_callback' => [ $this, 'can_manage' ],
+            'args'                => [
+                'patch' => [
+                    'required'    => true,
+                    'type'        => 'object',
+                    'description' => '{ type, smooth, accent, bg, size, mixBlendMode, hover.scale }',
+                ],
+            ],
+        ] );
+        register_rest_route( self::NS, '/animation/v2/scroll', [
+            'methods'             => 'POST',
+            'callback'            => [ $this, 'set_scroll' ],
+            'permission_callback' => [ $this, 'can_manage' ],
+            'args'                => [
+                'patch' => [
+                    'required'    => true,
+                    'type'        => 'object',
+                    'description' => '{ engine, duration, lerp, wheelMultiplier, excludePages, gsapSource }',
+                ],
+            ],
+        ] );
+
         // ── Niveau 4 — selector-targeted overrides (Animate Mode) ──
         register_rest_route( self::NS, '/animation/v2/selector-override', [
             'methods'             => 'POST',
@@ -524,6 +550,8 @@ final class Rest {
             'elementRules'      => $v2['elementRules'],
             'widgetOverrides'   => (object) $widget_overrides_resolved,
             'selectorOverrides' => (object) Animation::selector_overrides(),
+            'cursor'            => Animation::cursor_settings(),
+            'scroll'            => Animation::scroll_settings(),
             'templateSlug'      => $slug,
             'widgets'           => $widget_list,
             'activeProfile'     => Animation_Profiles::active_id(),
@@ -533,6 +561,9 @@ final class Rest {
                 'reduceMotion' => Animation::REDUCE_MOTION,
                 'elementTypes' => Animation_Presets::element_type_ids(),
                 'presets'      => Animation_Presets::preset_ids(),
+                'cursorTypes'  => Animation::CURSOR_TYPES,
+                'scrollEngines'=> Animation::SCROLL_ENGINES,
+                'gsapSources'  => Animation::GSAP_SOURCES,
             ],
         ] );
     }
@@ -602,6 +633,28 @@ final class Rest {
         $animation = new Animation( $this->templates );
         if ( ! $animation->set_widget_override( $slug, $widget, $rule ) ) {
             return new \WP_Error( 'bad_widget', 'Invalid template / widget slug', [ 'status' => 400 ] );
+        }
+        return $this->get_animation_v2();
+    }
+
+    /* ─────────────────────────────────────────────────────────────
+     * Sprint 2 — Cursor / Scroll / GSAP source
+     * ──────────────────────────────────────────────────────────── */
+
+    public function set_cursor( \WP_REST_Request $req ) {
+        $patch = $req->get_param( 'patch' );
+        if ( ! is_array( $patch ) ) return new \WP_Error( 'bad_patch', 'patch must be an object', [ 'status' => 400 ] );
+        if ( ! Animation::set_cursor_settings( $patch ) ) {
+            return new \WP_Error( 'bad_cursor', 'Invalid cursor settings', [ 'status' => 400 ] );
+        }
+        return $this->get_animation_v2();
+    }
+
+    public function set_scroll( \WP_REST_Request $req ) {
+        $patch = $req->get_param( 'patch' );
+        if ( ! is_array( $patch ) ) return new \WP_Error( 'bad_patch', 'patch must be an object', [ 'status' => 400 ] );
+        if ( ! Animation::set_scroll_settings( $patch ) ) {
+            return new \WP_Error( 'bad_scroll', 'Invalid scroll settings', [ 'status' => 400 ] );
         }
         return $this->get_animation_v2();
     }

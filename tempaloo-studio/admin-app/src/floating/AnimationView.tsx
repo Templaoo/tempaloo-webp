@@ -5,14 +5,16 @@ import type { AnimationLibrary, AnimationRule, AnimationStateV2 } from '../api';
 import { StepStyle } from '../pages/animation/StepStyle';
 import { StepTune } from '../pages/animation/StepTune';
 import { StepAdvanced } from '../pages/animation/StepAdvanced';
+import { StepSite } from '../pages/animation/StepSite';
 import { AnimatedElementsList } from './AnimatedElementsList';
 
-type Step = 'style' | 'tune' | 'advanced';
+type Step = 'style' | 'tune' | 'advanced' | 'site';
 
 const STEPS: Array<{ id: Step; label: string }> = [
   { id: 'style',    label: 'Style' },
   { id: 'tune',     label: 'Tune' },
   { id: 'advanced', label: 'Advanced' },
+  { id: 'site',     label: 'Site' },
 ];
 
 /**
@@ -206,6 +208,14 @@ export function AnimationView() {
                 onSaveWidget={saveWidgetOverride}
                 onBack={() => setStep('tune')}
                 onDone={() => toast.info('Advanced overrides saved.')}
+              />
+            )}
+            {step === 'site' && (
+              <StepSite
+                state={state}
+                onChange={setState}
+                onBack={() => setStep('advanced')}
+                onDone={() => toast.info('Site settings saved.')}
               />
             )}
           </div>

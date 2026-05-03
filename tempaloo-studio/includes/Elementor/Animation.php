@@ -40,6 +40,19 @@ final class Animation {
     // v2 option — single hashmap that holds the entire animation surface.
     const OPTION_V2 = 'tempaloo_studio_animation_v2';
 
+    // Sprint 2 — cursor + smooth-scroll site-wide settings.
+    const OPTION_CURSOR = 'tempaloo_studio_cursor';
+    const OPTION_SCROLL = 'tempaloo_studio_scroll';
+
+    /** Cursor types — runtime maps to assets/js/cursor.js implementations. */
+    const CURSOR_TYPES = [ 'off', 'basic', 'outline', 'tooltip', 'text', 'media' ];
+
+    /** Smooth-scroll engines. None = native scroll. */
+    const SCROLL_ENGINES = [ 'none', 'lenis' ];
+
+    /** GSAP source — local bundle (default) or jsDelivr CDN. */
+    const GSAP_SOURCES = [ 'local', 'cdn' ];
+
     const DEFAULT_         = 'medium';
     const ALLOWED          = [ 'off', 'subtle', 'medium', 'bold' ];
 
@@ -260,6 +273,103 @@ final class Animation {
         $v2['globals']['reduceMotion'] = $value;
         self::save_v2( $v2 );
         return true;
+    }
+
+    /* ─────────────────────────────────────────────────────────────
+     * Sprint 2 — Cursor / Scroll / GSAP source settings
+     * ──────────────────────────────────────────────────────────── */
+
+    public static function cursor_settings(): array {
+        $stored = get_option( self::OPTION_CURSOR, [] );
+        if ( ! is_array( $stored ) ) $stored = [];
+        return array_merge( [
+            'type'         => 'off',
+            'smooth'       => 0.18,
+            'accent'       => '#10b981',
+            'bg'           => 'rgba(15, 23, 42, 0.92)',
+            'size'         => 14,
+            'mixBlendMode' => 'normal',
+            'hover'        => [ 'scale' => 2.4 ],
+        ], $stored );
+    }
+
+    public static function set_cursor_settings( array $patch ): bool {
+        $current = self::cursor_settings();
+        if ( isset( $patch['type'] ) ) {
+            $t = (string) $patch['type'];
+            if ( ! in_array( $t, self::CURSOR_TYPES, true ) ) return false;
+            $current['type'] = $t;
+        }
+        if ( isset( $patch['smooth'] ) )       $current['smooth']       = max( 0, min( 0.95, (float) $patch['smooth'] ) );
+        if ( isset( $patch['accent'] ) )       $current['accent']       = self::sanitize_color( (string) $patch['accent'] );
+        if ( isset( $patch['bg'] ) )           $current['bg']           = self::sanitize_color( (string) $patch['bg'] );
+        if ( isset( $patch['size'] ) )         $current['size']         = max( 4, min( 64, (int) $patch['size'] ) );
+        if ( isset( $patch['mixBlendMode'] ) ) {
+            $allowed = [ 'normal', 'difference', 'exclusion', 'multiply', 'screen', 'overlay' ];
+            $m = (string) $patch['mixBlendMode'];
+            if ( in_array( $m, $allowed, true ) ) $current['mixBlendMode'] = $m;
+        }
+        if ( isset( $patch['hover']['scale'] ) ) {
+            $current['hover']['scale'] = max( 1, min( 6, (float) $patch['hover']['scale'] ) );
+        }
+        update_option( self::OPTION_CURSOR, $current );
+        return true;
+    }
+
+    public static function scroll_settings(): array {
+        $stored = get_option( self::OPTION_SCROLL, [] );
+        if ( ! is_array( $stored ) ) $stored = [];
+        return array_merge( [
+            'engine'        => 'none',
+            'duration'      => 1.2,    // Lenis duration (seconds for the smoothing curve)
+            'lerp'          => 0.1,    // alternative to duration
+            'wheelMultiplier' => 1.0,
+            'excludePages'  => '',     // comma-separated post IDs
+            'gsapSource'    => 'local',
+        ], $stored );
+    }
+
+    public static function set_scroll_settings( array $patch ): bool {
+        $current = self::scroll_settings();
+        if ( isset( $patch['engine'] ) ) {
+            $e = (string) $patch['engine'];
+            if ( ! in_array( $e, self::SCROLL_ENGINES, true ) ) return false;
+            $current['engine'] = $e;
+        }
+        if ( isset( $patch['duration'] ) )        $current['duration']        = max( 0.2, min( 4, (float) $patch['duration'] ) );
+        if ( isset( $patch['lerp'] ) )            $current['lerp']            = max( 0.01, min( 1, (float) $patch['lerp'] ) );
+        if ( isset( $patch['wheelMultiplier'] ) ) $current['wheelMultiplier'] = max( 0.1, min( 5, (float) $patch['wheelMultiplier'] ) );
+        if ( isset( $patch['excludePages'] ) )    $current['excludePages']    = preg_replace( '/[^0-9, ]/', '', (string) $patch['excludePages'] );
+        if ( isset( $patch['gsapSource'] ) ) {
+            $g = (string) $patch['gsapSource'];
+            if ( in_array( $g, self::GSAP_SOURCES, true ) ) $current['gsapSource'] = $g;
+        }
+        update_option( self::OPTION_SCROLL, $current );
+        return true;
+    }
+
+    /** Lenis is enabled? Used by Frontend\Assets to lazy-load lenis.min.js. */
+    public static function lenis_enabled_for_post( int $post_id = 0 ): bool {
+        $s = self::scroll_settings();
+        if ( $s['engine'] !== 'lenis' ) return false;
+        $excludes = array_filter( array_map( 'intval', explode( ',', (string) $s['excludePages'] ) ) );
+        if ( $post_id > 0 && in_array( $post_id, $excludes, true ) ) return false;
+        return true;
+    }
+
+    /** Public — Frontend\Assets reads this to decide between local and CDN. */
+    public static function gsap_source(): string {
+        $s = self::scroll_settings();
+        return ( $s['gsapSource'] === 'cdn' ) ? 'cdn' : 'local';
+    }
+
+    private static function sanitize_color( string $v ): string {
+        $v = trim( $v );
+        // Accept #RGB / #RRGGBB / #RRGGBBAA / rgb(...) / rgba(...) / hsl(...) / hsla(...) / named.
+        if ( preg_match( '/^#([a-fA-F0-9]{3,4}|[a-fA-F0-9]{6}|[a-fA-F0-9]{8})$/', $v ) ) return $v;
+        if ( preg_match( '/^(rgb|rgba|hsl|hsla)\([0-9.,%\s\/]+\)$/', $v ) ) return $v;
+        if ( preg_match( '/^[a-zA-Z]+$/', $v ) )  return $v;
+        return '#10b981';
     }
 
     /* ─────────────────────────────────────────────────────────────
@@ -623,6 +733,7 @@ final class Animation {
         $payload_legacy = wp_json_encode( [
             'intensity' => $intensity,
             'direction' => self::direction(),
+            'cursor'    => self::cursor_settings(),
         ] );
         $payload_anims = wp_json_encode( (object) $anims );
 
@@ -643,12 +754,19 @@ final class Animation {
 
         if ( ! is_string( $payload_legacy ) || ! is_string( $payload_anims ) || ! is_string( $payload_v2 ) ) return;
 
+        $cursor_payload = wp_json_encode( self::cursor_settings() );
+        $scroll_payload = wp_json_encode( self::scroll_settings() );
+        if ( ! is_string( $cursor_payload ) ) $cursor_payload = '{}';
+        if ( ! is_string( $scroll_payload ) ) $scroll_payload = '{}';
+
         echo "\n<script id=\"tempaloo-studio-animation-config\">"
             . "window.tempaloo=window.tempaloo||{};"
             . "window.tempaloo.studio=window.tempaloo.studio||{};"
             . "window.tempaloo.studio.animation=" . $payload_legacy . ";"
             . "window.tempaloo.studio.anims="     . $payload_anims  . ";"
             . "window.tempaloo.studio.animV2="    . $payload_v2     . ";"
+            . "window.tempaloo.studio.cursor="    . $cursor_payload . ";"
+            . "window.tempaloo.studio.scroll="    . $scroll_payload . ";"
             . "</script>\n"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
     }
 }
