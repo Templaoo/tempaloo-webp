@@ -1118,6 +1118,18 @@
          * `mobileBreakpoint` (default 800px) — image stays as a static
          * card and the text is always visible (accessibility +
          * performance: phones don't pay for the pin).
+         *
+         * How to use (Avero "Built for life" section example):
+         *   1. Add an Elementor section with a single image + heading
+         *      + lead inside a column. Give the heading the class
+         *      `tw-anim-world-expands__title` (or just leave bare h2).
+         *   2. Open the floating panel → Animate Mode → click the
+         *      section's outer container.
+         *   3. Set preset = "World expands (cinematic pin)". The
+         *      runtime auto-detects the inner div / img / overlay.
+         *   4. Add ~250vh of scroll-room above the next section so the
+         *      pin can resolve (set the section's CSS `min-height: 250vh`
+         *      OR rely on the preset which sets it on inner).
          */
         'world-expands': function (rootEl, opts) {
             var g = gsap();
@@ -1135,11 +1147,21 @@
             // Read params with sensible fallbacks.
             var cardW    = pNum(opts, 'cardWidthVw', 88);
             var cardH    = pNum(opts, 'cardHeightVh', 80);
-            var radiusPx = pNum(opts, 'cardRadiusPx', 16);
+            var radiusPx = pNum(opts, 'cardRadiusPx', 28);
             var scaleFr  = pNum(opts, 'mediaScaleFrom', 1.15);
             var textY    = pNum(opts, 'textY', 40);
-            var pinVh    = pNum(opts, 'pinDurationVh', 200);
+            var pinVh    = pNum(opts, 'pinDurationVh', 250);
             var bp       = pNum(opts, 'mobileBreakpoint', 800);
+            var grad     = pBool(opts, 'overlayGradient', true);
+
+            // Smoothstep ease — `p*p*(3 - 2p)`. Standard cubic Hermite
+            // interpolation, organic feel without overshoot. Forma uses
+            // this exact curve; it sits between `power1.inOut` (too soft)
+            // and `power2.inOut` (slightly too aggressive at the edges).
+            var smoothstep = (typeof CustomEase !== 'undefined' && CustomEase && CustomEase.create)
+                ? null  // CustomEase not registered in free GSAP — use the function form below.
+                : null;
+            var smoothstepFn = function (p) { return p * p * (3 - 2 * p); };
 
             // Section needs to clear room for the pin — set min-height
             // so layout reserves the pin's scroll length above the
@@ -1180,10 +1202,22 @@
                         willChange: 'transform',
                     });
                     if (overlay) {
-                        g.set(overlay, { opacity: 0, y: textY });
+                        g.set(overlay, {
+                            opacity:    0,
+                            y:          textY,
+                            position:   overlay.style.position || 'absolute',
+                            // Optional dark gradient — keeps the title readable
+                            // when the underlying image is busy. Matches Forma's
+                            // default styling.
+                            background: grad
+                                ? 'linear-gradient(180deg, rgba(0,0,0,0.10), rgba(0,0,0,0.55))'
+                                : overlay.style.background,
+                        });
                     }
 
-                    // Build the scrubbed timeline.
+                    // Build the scrubbed timeline. Smoothstep ease — same
+                    // curve Forma uses (`p*p*(3 - 2p)`), more organic than
+                    // power2.inOut at start/end.
                     var tl = g.timeline({
                         scrollTrigger: {
                             trigger:        rootEl,
@@ -1196,24 +1230,28 @@
                         },
                     });
 
-                    // Phase 1 (0 → 0.6): card grows to fullscreen + image dezooms.
+                    // Phase 1 (0 → 0.7): card grows to fullscreen + image dezooms.
+                    // Forma compresses the visual change into the first 70% of
+                    // travel, then holds — `t.to(..., {... }, 0).to({}, { duration: 0.3 }, 0.7)`.
                     tl.to(inner, {
                         width:        '100vw',
                         height:       '100vh',
                         borderRadius: 0,
-                        ease:         'power2.inOut',
+                        duration:     0.7,
+                        ease:         smoothstepFn,
                     }, 0)
                       .to(media, {
-                        scale: 1,
-                        ease:  'power2.inOut',
+                        scale:    1,
+                        duration: 0.7,
+                        ease:     smoothstepFn,
                       }, 0);
 
                     // Phase 2 (0.4 → 0.7): text fades in + rises during the climax.
                     if (overlay) {
                         tl.to(overlay, {
-                            opacity: 1,
-                            y:       0,
-                            ease:    'power2.out',
+                            opacity:  1,
+                            y:        0,
+                            ease:     smoothstepFn,
                             duration: 0.3,
                         }, 0.4);
                     }
