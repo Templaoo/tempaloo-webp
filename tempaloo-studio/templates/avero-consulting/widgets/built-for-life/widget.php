@@ -183,8 +183,38 @@ class Built_For_Life extends Widget_Base {
            when the card is configured smaller than 100vw/100vh. By
            default the canvas fills the viewport so no margins are
            visible at all. */
-        .tw-avero-built-for-life{position:relative;width:100%;background:transparent;height:<?php echo (int) $sec_vh; ?>vh;contain:layout paint;}
-        .tw-avero-built-for-life__sticky{position:sticky;top:0;height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+        /* Full-bleed escape from .elementor-container max-width.
+           Without this, the section inherits the 1140px container
+           limit. When GSAP pins .__sticky, the inline position:fixed
+           freezes the element at width:1140px / left:36px → user sees
+           36px white margins on each side instead of a true fullscreen
+           pin. The `width:100vw + margin-left:calc(50% - 50vw)` pattern
+           is the canonical CSS escape — section's box now matches the
+           viewport edges regardless of any wrapper's max-width. */
+        .tw-avero-built-for-life{
+            position:relative;
+            width:100vw;
+            max-width:100vw;
+            margin-left:calc(50% - 50vw);
+            margin-right:calc(50% - 50vw);
+            box-sizing:border-box;
+            background:transparent;
+            height:<?php echo (int) $sec_vh; ?>vh;
+            contain:layout paint;
+        }
+        /* Sticky child gets full viewport width — when GSAP pin engages,
+           the inline position:fixed freezes it at width:100vw / left:0. */
+        .tw-avero-built-for-life__sticky{
+            position:sticky;
+            top:0;
+            left:0;
+            width:100vw;
+            height:100vh;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            overflow:hidden;
+        }
         .tw-avero-built-for-life__canvas{
             --p:0;
             position:relative;overflow:hidden;
