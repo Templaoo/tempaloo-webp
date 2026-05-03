@@ -1466,7 +1466,16 @@
                 var blockedByScope = {};
                 var blockedBySelectorOverride = 0;
                 nodes = nodes.filter(function (el) {
-                    if (el.hasAttribute && el.hasAttribute('data-tw-anim-skip')) return false;
+                    // `data-tw-anim-skip` opts ANY descendant out of the
+                    // element-rule sweep. Setting it on a widget root
+                    // (e.g. `<section class="tw-bfl" data-tw-anim-skip>`)
+                    // excludes every child h1/h2/p/img from the global
+                    // pass — the widget controls itself end-to-end via
+                    // its own CSS / scroll handler. Walking up rather
+                    // than checking just the node means authors don't
+                    // have to repeat the attribute on every animated
+                    // child element.
+                    if (el.closest && el.closest('[data-tw-anim-skip]')) return false;
 
                     // Niveau 4 wins — skip if el itself matches any
                     // selectorOverride OR is a descendant of a node that does.

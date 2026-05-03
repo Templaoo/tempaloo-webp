@@ -155,8 +155,27 @@ class Built_For_Life extends Widget_Base {
         // are CSS calc() interpolations driven by a single var(--p).
         // Mobile fallback inside the same <style>: --p:1 + static layout.
         ?>
+        <?php
+        // Build a responsive srcset from the Unsplash URL (or any URL
+        // with a `w=` query param). Fallback to a plain src if the URL
+        // shape doesn't match.
+        $srcset_attr = '';
+        if ( preg_match( '#\bw=\d+#i', $img_url ) ) {
+            $widths = [ 800, 1200, 1600, 2000 ];
+            $parts  = [];
+            foreach ( $widths as $w ) {
+                $u = preg_replace( '#\bw=\d+#i', 'w=' . $w, $img_url );
+                $parts[] = esc_url( $u ) . ' ' . $w . 'w';
+            }
+            $srcset_attr = implode( ', ', $parts );
+        }
+        ?>
         <style id="tw-bfl-css">
-        .tw-bfl{position:relative;width:100%;background:var(--tw-avero-bg,#0c100f);height:<?php echo (int) $sec_vh; ?>vh;}
+        /* No-JS / pre-script fallback — when --p hasn't been driven by JS
+           yet (initial paint OR JS disabled), pin the canvas at p:1 so
+           the section is at least readable. The script.js sets --p back
+           to 0 only AFTER it has wired the scroll listener. */
+        .tw-bfl{position:relative;width:100%;background:var(--tw-avero-bg,#0c100f);height:<?php echo (int) $sec_vh; ?>vh;contain:layout paint;}
         .tw-bfl__sticky{position:sticky;top:0;height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden;}
         .tw-bfl__canvas{
             --p:0;
@@ -167,12 +186,15 @@ class Built_For_Life extends Widget_Base {
             border-radius:calc(<?php echo (int) $rad; ?>px - <?php echo (int) $rad; ?>px * var(--p));
             box-shadow:0 60px 160px rgba(0,0,0,calc(0.5 - 0.5 * var(--p)));
             transition:none;
+            will-change:width,height,border-radius;
         }
         .tw-bfl__media{
             display:block;width:100%;height:100%;object-fit:cover;
             transform:scale(calc(<?php echo number_format( $scale, 4, '.', '' ); ?> - <?php echo number_format( $scale_delta, 4, '.', '' ); ?> * var(--p)));
             transform-origin:center center;
             transition:none;
+            will-change:transform;
+            backface-visibility:hidden;
         }
         .tw-bfl__text{
             position:absolute;inset:0;
@@ -183,6 +205,7 @@ class Built_For_Life extends Widget_Base {
             opacity:var(--p);
             transform:translateY(calc(40px - 40px * var(--p)));
             pointer-events:none;
+            will-change:opacity,transform;
         }
         .tw-bfl__eyebrow{
             font-family:var(--tw-avero-font-body,'Inter',sans-serif);
@@ -204,6 +227,14 @@ class Built_For_Life extends Widget_Base {
             font-style:italic;
             color:var(--tw-avero-accent,#E6FF55);
         }
+        /* prefers-reduced-motion — pin --p at 1 site-wide so users with
+           vestibular sensitivity see the section in its readable end-state
+           with no scroll-coupled motion. */
+        @media (prefers-reduced-motion:reduce){
+            .tw-bfl__canvas{--p:1 !important;}
+            .tw-bfl__media{transform:scale(1) !important;}
+            .tw-bfl__text{opacity:1 !important;transform:none !important;}
+        }
         @media (max-width:<?php echo (int) $bp; ?>px){
             /* Disable the pin entirely on mobile: section reverts to its
                natural height, sticky becomes static, the canvas locks at
@@ -223,13 +254,31 @@ class Built_For_Life extends Widget_Base {
         }
         </style>
 
-        <section class="tw-bfl" data-tw-anim-scope="built_for_life" data-bp="<?php echo esc_attr( (string) $bp ); ?>">
+        <noscript>
+            <style>
+            /* JS disabled — show the section in its end-state. The script
+               below would otherwise leave --p at 0, hiding the text
+               entirely and stranding the user with an invisible card. */
+            .tw-bfl__canvas{--p:1 !important;}
+            .tw-bfl__media{transform:scale(1) !important;}
+            .tw-bfl__text{opacity:1 !important;transform:none !important;}
+            </style>
+        </noscript>
+
+        <section class="tw-bfl"
+            data-tw-anim-scope="built_for_life"
+            data-tw-anim-skip
+            data-bp="<?php echo esc_attr( (string) $bp ); ?>">
             <div class="tw-bfl__sticky">
                 <div class="tw-bfl__canvas">
                     <img class="tw-bfl__media"
                          src="<?php echo esc_url( $img_url ); ?>"
-                         alt="<?php echo esc_attr( $img_alt ); ?>"
-                         loading="lazy" />
+                         <?php if ( $srcset_attr !== '' ) : ?>srcset="<?php echo $srcset_attr; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped — pre-escaped above ?>"<?php endif; ?>
+                         sizes="100vw"
+                         alt=""
+                         loading="eager"
+                         fetchpriority="high"
+                         decoding="async" />
                     <div class="tw-bfl__text">
                         <?php if ( ! empty( $s['eyebrow'] ) ) : ?>
                             <div class="tw-bfl__eyebrow"><?php echo esc_html( $s['eyebrow'] ); ?></div>

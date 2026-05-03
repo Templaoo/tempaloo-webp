@@ -595,7 +595,7 @@ final class Animation {
            . "<script id=\"tempaloo-studio-fouc-clear\">"
            . "(function(){var h=function(){document.body&&(document.body.style.visibility='inherit');};"
            . "window.__tw_unhide=h;"
-           . "setTimeout(h,2500);" // safety net — never leave user on blank page
+           . "setTimeout(h,1500);" // safety net — release after 1.5s max even if GSAP boot is delayed (audit 2026-05-03)
            // Scroll restoration — disable browser's automatic scroll-restore
            // and force scrollTo(0,0) on reload. Without this, reloading a
            // page mid-scroll lands the user where they were, but our
