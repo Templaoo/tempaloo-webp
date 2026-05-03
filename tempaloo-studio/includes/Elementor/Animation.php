@@ -112,11 +112,51 @@ final class Animation {
             // but also blocks Niveau 1 element rules from cascading.
             // Runs lazily on read, persists once on the next save.
             $v2 = self::gc_orphan_selector_overrides( $v2 );
+            // One-time programmatic cleanup of selectors the user asked
+            // to remove (Avero ↔ Built-for-Life refactor). Idempotent
+            // via a wp_options flag; runs once then never again.
+            $v2 = self::run_one_time_cleanup_avero_v1( $v2 );
             return $v2;
         }
         $migrated = self::migrate_from_v1();
         update_option( self::OPTION_V2, $migrated );
         return $migrated;
+    }
+
+    /**
+     * One-time cleanup of orphan selectorOverrides explicitly retired
+     * during the Avero ↔ Built-for-Life refactor. The presets these
+     * selectors reference are still valid (blur-in / mask-reveal /
+     * word-fade-blur), so the generic gc_orphan_selector_overrides
+     * doesn't catch them — they were live rules the user asked to
+     * scrap by name. Runs once, gated by a wp_options flag.
+     */
+    private static function run_one_time_cleanup_avero_v1( array $v2 ): array {
+        if ( get_option( 'tempaloo_studio_cleanup_avero_v1_done', 0 ) ) {
+            return $v2;
+        }
+        $remove = [
+            '.tw-avero-cta__title',
+            '.tw-avero-services',
+            '.tw-avero-how-it-works__title',
+            'div.tw-avero-hero__content',
+            // Built-for-Life takeover — no longer applied via selectorOverride
+            '.tw-avero-hero__title',
+            '.tw-avero-services__card',
+            'span.tw-char',
+        ];
+        if ( ! empty( $v2['selectorOverrides'] ) && is_array( $v2['selectorOverrides'] ) ) {
+            $changed = false;
+            foreach ( $remove as $sel ) {
+                if ( isset( $v2['selectorOverrides'][ $sel ] ) ) {
+                    unset( $v2['selectorOverrides'][ $sel ] );
+                    $changed = true;
+                }
+            }
+            if ( $changed ) update_option( self::OPTION_V2, $v2 );
+        }
+        update_option( 'tempaloo_studio_cleanup_avero_v1_done', 1 );
+        return $v2;
     }
 
     /**
