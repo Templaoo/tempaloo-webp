@@ -28,11 +28,36 @@
     var ts = (window.tempaloo && window.tempaloo.studio) || null;
     if (!ts) return;
 
+    // Tracer — gated by ?fp_debug=1 OR localStorage('fp_debug', '1').
+    // Same flag the floating panel uses, so a single switch surfaces
+    // every layer's diagnostics in one console session.
+    var DEBUG = (function () {
+        try {
+            var qs = location.search.match(/[?&]fp_debug=([^&]*)/);
+            if (qs && (qs[1] === '1' || qs[1] === 'true'))  { localStorage.setItem('fp_debug', '1'); return true; }
+            if (qs && (qs[1] === '0' || qs[1] === 'false')) { localStorage.removeItem('fp_debug');   return false; }
+            return localStorage.getItem('fp_debug') === '1';
+        } catch (e) { return false; }
+    })();
+    function clog() {
+        if (!DEBUG || !window.console) return;
+        var args = Array.prototype.slice.call(arguments);
+        args.unshift('%c[cursor]', 'color:#10b981;font-weight:bold');
+        try { console.log.apply(console, args); } catch (e) {}
+    }
+
     var cfg = (window.tempaloo && window.tempaloo.studio && window.tempaloo.studio.cursor) || null;
-    if (!cfg || cfg.type === 'off' || !cfg.type) return;
+    clog('boot — cfg=', cfg);
+    if (!cfg || cfg.type === 'off' || !cfg.type) {
+        clog('skipped — type is off or unset');
+        return;
+    }
 
     // Touch-only devices: no custom cursor (would feel broken).
-    if ('ontouchstart' in window || (navigator.maxTouchPoints || 0) > 0) return;
+    if ('ontouchstart' in window || (navigator.maxTouchPoints || 0) > 0) {
+        clog('skipped — touch device');
+        return;
+    }
 
     var TYPE   = String(cfg.type || 'basic');
     var SMOOTH = clamp01(cfg.smooth, 0.18);
@@ -54,8 +79,16 @@
         'position:fixed', 'top:0', 'left:0', 'pointer-events:none',
         'z-index:2147483646', 'mix-blend-mode:' + BLEND,
         'will-change:transform', 'transform:translate3d(-100px,-100px,0)',
+        // Force visible — the anti-FOUC pattern hides body until DCL,
+        // and tw-cursor-root is a body descendant that would inherit
+        // visibility:hidden until then. Explicit !important wins so
+        // the user's pointer stays visible during the FOUC window.
+        'visibility:visible !important',
     ].join(';');
-    document.body.appendChild(root);
+    // Append to documentElement (html) instead of body — body might be
+    // hidden by the anti-FOUC pattern. html is never hidden.
+    (document.documentElement || document.body).appendChild(root);
+    clog('root appended', root);
 
     // The visual cursor element (shape varies by type).
     var dot = document.createElement('div');

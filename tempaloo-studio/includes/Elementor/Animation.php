@@ -691,8 +691,19 @@ final class Animation {
         if ( function_exists( 'is_admin' ) && is_admin() ) return;
         if ( class_exists( '\Elementor\Plugin' ) && \Elementor\Plugin::$instance->preview->is_preview_mode() ) return;
 
+        // We DON'T unhide body on DCL anymore — that caused a brief
+        // flash where un-animated content showed before GSAP applied
+        // its fromState. The unhide trigger now lives in animations.js
+        // (after first applyElementRules + applySelectorOverrides
+        // pass). Safety net: unhide after 2.5s no matter what so the
+        // user is never stuck on a blank page if the runtime fails.
         echo "\n<style id=\"tempaloo-studio-fouc\">body{visibility:hidden}</style>"
-           . "<script id=\"tempaloo-studio-fouc-clear\">document.addEventListener('DOMContentLoaded',function(){document.body.style.visibility='inherit'});</script>"
+           . "<script id=\"tempaloo-studio-fouc-clear\">"
+           . "(function(){var h=function(){document.body&&(document.body.style.visibility='inherit');};"
+           . "window.__tw_unhide=h;"
+           . "setTimeout(h,2500);" // safety net — never leave user on blank page
+           . "})();"
+           . "</script>"
            . "<noscript><style>body{visibility:inherit}</style></noscript>\n"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
     }
 

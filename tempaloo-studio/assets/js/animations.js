@@ -45,13 +45,21 @@
      */
     var DEBUG = (function () {
         try {
-            var qs = location.search.match(/[?&]tw_debug=([^&]*)/);
-            if (qs) {
-                var v = qs[1];
+            // Honor BOTH ?tw_debug=1 (animations runtime) and ?fp_debug=1
+            // (floating panel) — flipping either one turns on tracing
+            // across the whole stack so the user has a single switch.
+            var qs1 = location.search.match(/[?&]tw_debug=([^&]*)/);
+            var qs2 = location.search.match(/[?&]fp_debug=([^&]*)/);
+            if (qs1) {
+                var v = qs1[1];
                 if (v === '1' || v === 'true') { localStorage.setItem('tw_debug', '1'); return true; }
                 if (v === '0' || v === 'false') { localStorage.removeItem('tw_debug'); return false; }
             }
-            return localStorage.getItem('tw_debug') === '1';
+            if (qs2 && (qs2[1] === '1' || qs2[1] === 'true')) {
+                localStorage.setItem('tw_debug', '1');
+                return true;
+            }
+            return localStorage.getItem('tw_debug') === '1' || localStorage.getItem('fp_debug') === '1';
         } catch (e) { return false; }
     })();
 
@@ -1779,12 +1787,28 @@
     // been processed (next tick), so the in-scope exclusion check
     // works against fully-mounted scope nodes. Selector overrides run
     // last so they win over Element Rules.
-    if (document.readyState === 'complete') {
-        setTimeout(function () { applyElementRules(); applySelectorOverrides(); }, 0);
-    } else {
-        window.addEventListener('load', function () {
-            setTimeout(function () { applyElementRules(); applySelectorOverrides(); }, 0);
+    //
+    // Anti-FOUC: window.__tw_unhide() is set by the head snippet that
+    // hides body until our runtime runs. Call it AFTER the first apply
+    // pass so the user sees the page with fromStates already applied —
+    // no flash of un-animated content.
+    function bootApplyAndUnhide() {
+        try { applyElementRules();      } catch (e) { warn('applyElementRules failed', e); }
+        try { applySelectorOverrides(); } catch (e) { warn('applySelectorOverrides failed', e); }
+        // Unhide on next animation frame so the browser paints the
+        // fromState before becoming visible — kills the flash.
+        requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+                if (typeof window.__tw_unhide === 'function') {
+                    try { window.__tw_unhide(); log('FOUC unhide triggered'); } catch (e) {}
+                }
+            });
         });
+    }
+    if (document.readyState === 'complete') {
+        setTimeout(bootApplyAndUnhide, 0);
+    } else {
+        window.addEventListener('load', function () { setTimeout(bootApplyAndUnhide, 0); });
     }
 
     // Behaviors can also live on top-level elements outside any scope.
