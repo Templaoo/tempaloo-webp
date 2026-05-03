@@ -193,7 +193,7 @@ export function AnimationView({ onClose }: { onClose?: () => void } = {}) {
                 lib={lib}
                 profileId={activeProfile}
                 onChange={saveGlobals}
-                onContinue={() => { toast.info('Saved. Reload pages to see the change.'); if (onClose) onClose(); }}
+                onContinue={() => { toast.info('Saved — reload pages to see the change.'); if (onClose) setTimeout(onClose, 1400); }}
                 onBack={() => setStep('style')}
                 onAdvanced={() => setStep('advanced')}
               />
@@ -207,7 +207,7 @@ export function AnimationView({ onClose }: { onClose?: () => void } = {}) {
                 onResetElement={resetElementRule}
                 onSaveWidget={saveWidgetOverride}
                 onBack={() => setStep('tune')}
-                onDone={() => { toast.info('Advanced overrides saved.'); if (onClose) onClose(); }}
+                onDone={() => { toast.info('Advanced overrides saved — reload to see them in motion.'); if (onClose) setTimeout(onClose, 1400); }}
               />
             )}
             {step === 'site' && (
@@ -215,7 +215,7 @@ export function AnimationView({ onClose }: { onClose?: () => void } = {}) {
                 state={state}
                 onChange={setState}
                 onBack={() => setStep('advanced')}
-                onDone={() => { toast.info('Site settings saved.'); if (onClose) onClose(); }}
+                onDone={() => { toast.info('Site settings saved — reload to apply.'); if (onClose) setTimeout(onClose, 1400); }}
               />
             )}
           </div>

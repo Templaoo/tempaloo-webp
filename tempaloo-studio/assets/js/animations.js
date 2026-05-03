@@ -1080,6 +1080,167 @@
                 }
             );
         },
+
+        /* ─────────────────────────────────────────────────────
+         * world-expands — cinematic pin preset.
+         *
+         * Hero section starts as a rounded card (88vw × 80vh), grows
+         * to fullscreen (100vw × 100vh) on scroll while the inner
+         * <img> dezooms 1.15 → 1.0 for a "the world expands" feel.
+         * Title + lead fade in + rise 40px during the climax. Section
+         * pins one viewport so the user can read, then scroll continues.
+         *
+         * Markup expected (or auto-injected from a single <img>):
+         *   <section ...>
+         *     <div class="tw-anim-world-expands__inner">
+         *       <img class="tw-anim-world-expands__media" src="..." />
+         *       <div class="tw-anim-world-expands__overlay">
+         *         <h2 class="tw-anim-world-expands__title">…</h2>
+         *         <p  class="tw-anim-world-expands__lead">…</p>
+         *       </div>
+         *     </div>
+         *   </section>
+         *
+         * If the user hasn't authored the BEM markup, we auto-detect:
+         *   • inner: first child div
+         *   • media: first <img> / <picture> / <video>
+         *   • overlay: any sibling that contains text
+         *
+         * Mobile bypass: gsap.matchMedia drops the entire effect below
+         * `mobileBreakpoint` (default 800px) — image stays as a static
+         * card and the text is always visible (accessibility +
+         * performance: phones don't pay for the pin).
+         */
+        'world-expands': function (rootEl, opts) {
+            var g = gsap();
+            if (!g || !hasST()) return;
+
+            // Resolve markup parts (BEM if present, auto-detect otherwise).
+            var inner   = rootEl.querySelector('.tw-anim-world-expands__inner')   || rootEl.querySelector(':scope > div, :scope > figure');
+            var media   = rootEl.querySelector('.tw-anim-world-expands__media')   || rootEl.querySelector('img, picture, video');
+            var overlay = rootEl.querySelector('.tw-anim-world-expands__overlay') || rootEl.querySelector('h1, h2, h3, [data-tw-anim-target]');
+            if (!inner || !media) {
+                warn('world-expands: missing required markup (inner + media) on', rootEl);
+                return;
+            }
+
+            // Read params with sensible fallbacks.
+            var cardW    = pNum(opts, 'cardWidthVw', 88);
+            var cardH    = pNum(opts, 'cardHeightVh', 80);
+            var radiusPx = pNum(opts, 'cardRadiusPx', 16);
+            var scaleFr  = pNum(opts, 'mediaScaleFrom', 1.15);
+            var textY    = pNum(opts, 'textY', 40);
+            var pinVh    = pNum(opts, 'pinDurationVh', 200);
+            var bp       = pNum(opts, 'mobileBreakpoint', 800);
+
+            // Section needs to clear room for the pin — set min-height
+            // so layout reserves the pin's scroll length above the
+            // fullscreen viewport. Without this, the pinned section
+            // overlaps the next one.
+            try {
+                rootEl.style.position = rootEl.style.position || 'relative';
+            } catch (e) {}
+
+            // gsap.matchMedia — desktop runs the effect, mobile bypasses
+            // and renders a static card. The mobile branch sets only
+            // the visible static layout (no scrub, no pin).
+            var mm = g.matchMedia();
+            var queryDesktop = '(min-width: ' + (bp + 1) + 'px)';
+            var queryMobile  = '(max-width: ' + bp + 'px)';
+
+            mm.add({
+                isDesktop: queryDesktop,
+                isMobile:  queryMobile,
+            }, function (ctx) {
+                // ── DESKTOP — full cinematic effect ─────────────
+                if (ctx.conditions.isDesktop) {
+                    // Initial state — rounded card centered.
+                    g.set(inner, {
+                        width:        cardW + 'vw',
+                        height:       cardH + 'vh',
+                        borderRadius: radiusPx + 'px',
+                        margin:       '0 auto',
+                        overflow:     'hidden',
+                        position:     'relative',
+                        willChange:   'width, height, border-radius',
+                    });
+                    g.set(media, {
+                        scale:      scaleFr,
+                        width:      '100%',
+                        height:     '100%',
+                        objectFit:  'cover',
+                        willChange: 'transform',
+                    });
+                    if (overlay) {
+                        g.set(overlay, { opacity: 0, y: textY });
+                    }
+
+                    // Build the scrubbed timeline.
+                    var tl = g.timeline({
+                        scrollTrigger: {
+                            trigger:        rootEl,
+                            start:          'top top',
+                            end:            '+=' + pinVh + '%',
+                            scrub:          1,
+                            pin:            true,
+                            anticipatePin:  1,
+                            invalidateOnRefresh: true,
+                        },
+                    });
+
+                    // Phase 1 (0 → 0.6): card grows to fullscreen + image dezooms.
+                    tl.to(inner, {
+                        width:        '100vw',
+                        height:       '100vh',
+                        borderRadius: 0,
+                        ease:         'power2.inOut',
+                    }, 0)
+                      .to(media, {
+                        scale: 1,
+                        ease:  'power2.inOut',
+                      }, 0);
+
+                    // Phase 2 (0.4 → 0.7): text fades in + rises during the climax.
+                    if (overlay) {
+                        tl.to(overlay, {
+                            opacity: 1,
+                            y:       0,
+                            ease:    'power2.out',
+                            duration: 0.3,
+                        }, 0.4);
+                    }
+
+                    // Phase 3 (0.7 → 1.0): hold for reading. Empty tween
+                    // to consume scroll without further visual change.
+                    tl.to({}, { duration: 0.3 }, 0.7);
+
+                    // Cleanup on revert (matchMedia handles this for free).
+                    return function () {
+                        try {
+                            g.set([inner, media, overlay].filter(Boolean), { clearProps: 'all' });
+                        } catch (e) {}
+                    };
+                }
+
+                // ── MOBILE — static card, text visible ─────────
+                if (ctx.conditions.isMobile) {
+                    g.set(inner, {
+                        width:        '100%',
+                        height:       'auto',
+                        borderRadius: radiusPx + 'px',
+                        overflow:     'hidden',
+                        position:     'relative',
+                    });
+                    g.set(media, { scale: 1, width: '100%', height: 'auto' });
+                    if (overlay) g.set(overlay, { opacity: 1, y: 0 });
+                    return function () {
+                        try {
+                            g.set([inner, media, overlay].filter(Boolean), { clearProps: 'all' });
+                        } catch (e) {}
+                    };
+                }
+            });
+        },
     };
 
     /* ── Behavioral animations (data-tw-anim attribute) ─────── */

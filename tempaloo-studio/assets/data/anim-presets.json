@@ -219,6 +219,28 @@
   ],
   "presets": [
     {
+      "id": "world-expands",
+      "label": "World expands (cinematic pin)",
+      "category": "text",
+      "compatibleWith": ["container"],
+      "description": "Hero section starts as a rounded card (88vw × 80vh), then on scroll grows to fullscreen 100vw × 100vh while the inner image dezooms 1.15→1.0 and the title fades in + rises 40px. The section pins for one viewport so the user can read, then scroll continues. Auto-disabled below 800px (mobile = static layout). Markup expected: section > .tw-anim-world-expands__inner > .tw-anim-world-expands__media + .tw-anim-world-expands__overlay (with title / lead inside).",
+      "requires": ["ScrollTrigger"],
+      "scrubOnly": true,
+      "params": {
+        "cardWidthVw":     { "type": "number", "value": 88,    "min": 50,  "max": 100, "step": 1,    "unit": "vw", "label": "Card width" },
+        "cardHeightVh":    { "type": "number", "value": 80,    "min": 40,  "max": 100, "step": 1,    "unit": "vh", "label": "Card height" },
+        "cardRadiusPx":    { "type": "number", "value": 16,    "min": 0,   "max": 64,  "step": 1,    "unit": "px", "label": "Card radius" },
+        "mediaScaleFrom":  { "type": "number", "value": 1.15,  "min": 1,   "max": 2,   "step": 0.05, "unit": "",   "label": "Image dezoom from" },
+        "textY":           { "type": "number", "value": 40,    "min": 0,   "max": 120, "step": 4,    "unit": "px", "label": "Text Y travel" },
+        "pinDurationVh":   { "type": "number", "value": 200,   "min": 100, "max": 400, "step": 10,   "unit": "%",  "label": "Pin scroll length", "tip": "% of viewport height — 200 = expand + 1 viewport hold." },
+        "mobileBreakpoint":{ "type": "number", "value": 800,   "min": 400, "max": 1200,"step": 10,   "unit": "px", "label": "Mobile breakpoint" }
+      },
+      "scrollTrigger": {
+        "start": { "type": "enum",    "value": "top top", "enum": "TRIGGER_START", "label": "Start" },
+        "scrub": { "type": "boolean", "value": true,    "locked": true, "label": "Scrub (locked — cinematic effect)" }
+      }
+    },
+    {
       "id": "none",
       "label": "None",
       "category": "element",
