@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
-import { api, type AnimationProfile } from '../api';
+import { useRef, useState } from 'react';
+import { api } from '../api';
 import { toast } from '../components/Toast';
-import type { AnimationLibrary, AnimationRule, AnimationStateV2 } from '../api';
+import type { AnimationRule, AnimationStateV2 } from '../api';
 import { StepStyle } from '../pages/animation/StepStyle';
 import { StepTune } from '../pages/animation/StepTune';
 import { StepAdvanced } from '../pages/animation/StepAdvanced';
 import { StepSite } from '../pages/animation/StepSite';
 import { AnimatedElementsList } from './AnimatedElementsList';
+import { useAnimationData, setCachedAnimationData } from './animationData';
+import { AnimationViewSkeleton } from './Skeleton';
 
 type Step = 'style' | 'tune' | 'advanced' | 'site';
 
@@ -32,32 +34,32 @@ const STEPS: Array<{ id: Step; label: string }> = [
  */
 export function AnimationView({ onClose }: { onClose?: () => void } = {}) {
   const [step, setStep] = useState<Step>('style');
-  const [lib, setLib]   = useState<AnimationLibrary | null>(null);
-  const [state, setState] = useState<AnimationStateV2 | null>(null);
-  const [profiles, setProfiles] = useState<AnimationProfile[]>([]);
-  const [activeProfile, setActiveProfile] = useState<string>('');
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving]   = useState<string | null>(null);
+  // Subscribed to the shared cache prefetched on panel mount — when
+  // it returns null we render the skeleton (instant feel, no spinner).
+  const data = useAnimationData();
+  const [saving, setSaving] = useState<string | null>(null);
   const debounce = useRef<Record<string, number>>({});
 
-  useEffect(() => {
-    Promise.all([api.getAnimationLibrary(), api.getAnimationV2(), api.listProfiles()])
-      .then(([l, s, ps]) => {
-        setLib(l);
-        setState(s);
-        setProfiles(ps.profiles);
-        setActiveProfile(ps.active);
-      })
-      .catch((e) => toast.error(`Failed to load: ${(e as Error).message}`))
-      .finally(() => setLoading(false));
-  }, []);
+  // Local mirrors so the consumer can update without waiting on the
+  // cache to round-trip. Each save handler updates BOTH local state
+  // and the shared cache so any other subscriber stays in sync.
+  const lib   = data?.lib   ?? null;
+  const state = data?.state ?? null;
+  const profiles      = data?.profiles      ?? [];
+  const activeProfile = data?.activeProfile ?? '';
+
+  function setState(next: AnimationStateV2) {
+    setCachedAnimationData({ state: next });
+  }
 
   async function refreshState() {
     try {
       const [s, ps] = await Promise.all([api.getAnimationV2(), api.listProfiles()]);
-      setState(s);
-      setProfiles(ps.profiles);
-      setActiveProfile(ps.active);
+      setCachedAnimationData({
+        state:         s,
+        profiles:      ps.profiles,
+        activeProfile: ps.active,
+      });
     } catch (e) {
       toast.error(`Reload failed: ${(e as Error).message}`);
     }
@@ -143,11 +145,11 @@ export function AnimationView({ onClose }: { onClose?: () => void } = {}) {
     }, 350);
   }
 
+  const loading = !lib || !state;
+
   return (
     <div className="tsa-fp-anim">
-      {loading && (
-        <div className="tsa-fp-anim__loading">Loading animation library…</div>
-      )}
+      {loading && <AnimationViewSkeleton />}
 
       {!loading && lib && state && (
         <>
