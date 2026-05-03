@@ -1480,6 +1480,86 @@
         }
     }
 
+    /* ── Niveau 4 — Selector overrides (Animate Mode) ────────
+     *
+     * Reads window.tempaloo.studio.animV2.selectorOverrides — a flat map
+     * { "<css selector>": { rule, label, savedAt } } — and applies the
+     * rule to every matching element. Wins over Element Rules because
+     * we run AFTER applyElementRules; the per-element gsap.context() is
+     * reverted before re-applying so the new rule starts from a clean
+     * slate (no double-trigger / no leftover inline styles).
+     *
+     * Used by: Animate Mode in the floating panel — when the user
+     * picks a preset for an inspected element, we POST a selector
+     * override and call this function to refresh the live page.
+     */
+    function applySelectorOverrides() {
+        var g = gsap();
+        if (!g) return;
+        var v2 = (window.tempaloo && window.tempaloo.studio && window.tempaloo.studio.animV2) || null;
+        if (!v2 || !v2.selectorOverrides) return;
+        var map = v2.selectorOverrides;
+        if (typeof map !== 'object') return;
+
+        Object.keys(map).forEach(function (sel) {
+            var entry = map[sel];
+            if (!entry || !entry.rule || !entry.rule.preset) return;
+            var nodes;
+            try { nodes = document.querySelectorAll(sel); }
+            catch (e) { warn('selectorOverride: invalid selector', sel, e); return; }
+            if (!nodes.length) return;
+            Array.prototype.forEach.call(nodes, function (el) {
+                applyRuleToElement(el, entry.rule);
+            });
+            log('Selector override "' + sel + '" → "' + entry.rule.preset + '" applied to', nodes.length, 'nodes');
+        });
+    }
+
+    /**
+     * Apply a v2 rule object to a single element, ON DEMAND. Public
+     * helper so the floating panel popover can preview a rule live
+     * without a page reload. Reverts any prior gsap.context() on the
+     * element first to guarantee a clean re-render.
+     */
+    function applyRuleToElement(el, rule) {
+        if (!el || !rule || !rule.preset) return;
+        var g = gsap();
+        if (!g) return;
+        if (el.__tw_anim_ctx) {
+            try { el.__tw_anim_ctx.revert(); } catch (e) {}
+            el.__tw_anim_ctx = null;
+        }
+        var preset = rule.preset;
+        var fn = TEXT_PRESETS[preset] || PRESETS[preset];
+        if (!fn) { warn('applyRuleToElement: unknown preset', preset); return; }
+
+        var params = rule.params || {};
+        var st     = rule.scrollTrigger || {};
+        var direction = (rule.direction || defaultDirection()).toLowerCase();
+        if (direction !== 'once' && direction !== 'replay' &&
+            direction !== 'bidirectional' && direction !== 'scrub') {
+            direction = 'bidirectional';
+        }
+        var stCfg = (hasST() && st.start && st.start !== 'none')
+                        ? { trigger: el, start: st.start }
+                        : null;
+        if (ts.editAware) stCfg = ts.editAware(stCfg);
+
+        var opts = {
+            delay:         (typeof params.delay   === 'number' ? params.delay   : 0),
+            stagger:       (typeof params.stagger === 'number' ? params.stagger : 0),
+            duration:      (typeof params.duration === 'number' ? params.duration : 0.7),
+            lvlFactor:     intensityFactor(level()),
+            scrollTrigger: stCfg,
+            direction:     direction,
+            params:        params,
+        };
+        el.__tw_anim_ctx = g.context(function () {
+            try { fn(el, opts); }
+            catch (e) { warn('applyRuleToElement preset "' + preset + '" threw on', el, e); restoreVisibility(el); }
+        }, el);
+    }
+
     /* ── Boot — runs for every scoped widget on the page ────── */
 
     ts.onReady('[data-tw-anim-scope]', function (rootEl) {
@@ -1489,11 +1569,14 @@
 
     // v2 Element Rules — runs ONCE per page load, after scopes have
     // been processed (next tick), so the in-scope exclusion check
-    // works against fully-mounted scope nodes.
+    // works against fully-mounted scope nodes. Selector overrides run
+    // last so they win over Element Rules.
     if (document.readyState === 'complete') {
-        setTimeout(applyElementRules, 0);
+        setTimeout(function () { applyElementRules(); applySelectorOverrides(); }, 0);
     } else {
-        window.addEventListener('load', function () { setTimeout(applyElementRules, 0); });
+        window.addEventListener('load', function () {
+            setTimeout(function () { applyElementRules(); applySelectorOverrides(); }, 0);
+        });
     }
 
     // Behaviors can also live on top-level elements outside any scope.
@@ -1509,18 +1592,20 @@
     /* ── Public API for power users ─────────────────────────── */
 
     ts.animations = {
-        presets:           PRESETS,
-        textPresets:       TEXT_PRESETS,
-        behaviors:         BEHAVIORS,
-        register:          function (name, fn) { PRESETS[name] = fn; },
-        registerText:      function (name, fn) { TEXT_PRESETS[name] = fn; },
-        registerBehavior:  function (name, fn) { BEHAVIORS[name] = fn; },
-        apply:             applyEntrance,
-        applyText:         applyStandaloneTextReveal,
-        applyElementRules: applyElementRules,
-        level:             level,
-        splitWords:        splitWords,
-        splitChars:        splitChars,
-        splitLines:        splitLines,
+        presets:                 PRESETS,
+        textPresets:             TEXT_PRESETS,
+        behaviors:               BEHAVIORS,
+        register:                function (name, fn) { PRESETS[name] = fn; },
+        registerText:            function (name, fn) { TEXT_PRESETS[name] = fn; },
+        registerBehavior:        function (name, fn) { BEHAVIORS[name] = fn; },
+        apply:                   applyEntrance,
+        applyText:               applyStandaloneTextReveal,
+        applyElementRules:       applyElementRules,
+        applySelectorOverrides:  applySelectorOverrides,
+        applyRuleToElement:      applyRuleToElement,   // public — used by Animate Mode popover
+        level:                   level,
+        splitWords:              splitWords,
+        splitChars:              splitChars,
+        splitLines:              splitLines,
     };
 })();
