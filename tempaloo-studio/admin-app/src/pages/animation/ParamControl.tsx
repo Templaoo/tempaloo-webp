@@ -1,22 +1,25 @@
-import type { AnimationLibrary, ParamSpec } from './types';
+import type { AnimationLibrary, ParamSpec } from '../../api';
 
 /**
  * Auto-generated control for a single GSAP parameter spec.
- * Renders the right input (slider / select / toggle) based on the
- * spec's `type` and bounds — impossible to set values outside the
- * preset's documented range.
+ * Renders the right input (slider / select / toggle / text) based on
+ * the spec type and bounds — impossible to set values outside the
+ * preset's documented range. Honors a `disabled` flag so callers can
+ * grey out groups of params (e.g. when preset is "none" or scrub is on).
  */
 export function ParamControl({
-  name, spec, value, lib, onChange,
+  name, spec, value, lib, disabled, onChange,
 }: {
-  name:     string;
-  spec:     ParamSpec;
-  value:    number | string | boolean | undefined;
-  lib:      AnimationLibrary;
-  onChange: (v: number | string | boolean) => void;
+  name:      string;
+  spec:      ParamSpec;
+  value:     number | string | boolean | undefined;
+  lib:       AnimationLibrary;
+  disabled?: boolean;
+  onChange:  (v: number | string | boolean) => void;
 }) {
-  const label = spec.label || name;
-  const tip   = spec.tip;
+  const label  = spec.label || name;
+  const tip    = spec.tip;
+  const isOff  = !!disabled || !!spec.locked;
 
   if (spec.type === 'number') {
     const v   = typeof value === 'number' ? value : (spec.value as number);
@@ -24,7 +27,7 @@ export function ParamControl({
     const max = spec.max ?? 100;
     const step = spec.step ?? 1;
     return (
-      <label className="tsa-anim-row__field" title={tip}>
+      <label className={'tsa-anim-row__field' + (isOff ? ' is-off' : '')} title={tip}>
         <span className="tsa-anim-row__label">
           {label}
           {tip && <span className="tsa-anim-row__tip" title={tip}>?</span>}
@@ -34,7 +37,7 @@ export function ParamControl({
             type="range"
             min={min} max={max} step={step}
             value={v}
-            disabled={!!spec.locked}
+            disabled={isOff}
             onChange={(e) => onChange(parseFloat(e.target.value))}
           />
           <span className="tsa-anim-row__num">{v}{spec.unit ?? ''}</span>
@@ -47,7 +50,7 @@ export function ParamControl({
     const v       = typeof value === 'string' ? value : (spec.value as string);
     const options = lib.enums[spec.enum] ?? [];
     return (
-      <label className="tsa-anim-row__field" title={tip}>
+      <label className={'tsa-anim-row__field' + (isOff ? ' is-off' : '')} title={tip}>
         <span className="tsa-anim-row__label">
           {label}
           {tip && <span className="tsa-anim-row__tip" title={tip}>?</span>}
@@ -55,7 +58,7 @@ export function ParamControl({
         <select
           className="tsa-tk-select"
           value={v}
-          disabled={!!spec.locked}
+          disabled={isOff}
           onChange={(e) => onChange(e.target.value)}
         >
           {options.map((o) => (
@@ -69,11 +72,11 @@ export function ParamControl({
   if (spec.type === 'boolean') {
     const v = typeof value === 'boolean' ? value : (spec.value as boolean);
     return (
-      <label className="tsa-anim-row__field tsa-anim-row__field--check" title={tip}>
+      <label className={'tsa-anim-row__field tsa-anim-row__field--check' + (isOff ? ' is-off' : '')} title={tip}>
         <input
           type="checkbox"
           checked={v}
-          disabled={!!spec.locked}
+          disabled={isOff}
           onChange={(e) => onChange(e.target.checked)}
         />
         <span>{label}</span>
@@ -85,13 +88,13 @@ export function ParamControl({
   // string fallback
   const v = typeof value === 'string' ? value : (spec.value as string);
   return (
-    <label className="tsa-anim-row__field" title={tip}>
+    <label className={'tsa-anim-row__field' + (isOff ? ' is-off' : '')} title={tip}>
       <span className="tsa-anim-row__label">{label}</span>
       <input
         type="text"
         className="tsa-tk-input"
         value={v}
-        disabled={!!spec.locked}
+        disabled={isOff}
         onChange={(e) => onChange(e.target.value)}
       />
     </label>

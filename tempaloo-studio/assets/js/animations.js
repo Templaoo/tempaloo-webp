@@ -290,7 +290,7 @@
      * ScrollTrigger's current progress. Critical for page-reload-past-
      * trigger cases: without this, the user sees a flash of fromState
      * (e.g. opacity:0) before ScrollTrigger fires onEnter — looks like
-     * the heading "perd l'éclairage" on reload.
+     * the heading "loses its highlight" on reload.
      *
      * Wire via the trigger's per-instance onRefresh callback (gsap docs:
      * "Use refreshPriority and per-trigger onRefresh"), NOT the global
@@ -383,7 +383,7 @@
             // computed) and again on every layout change. We use it to
             // snap timeline progress AND lazily apply fromState only when
             // scroll is before start. On reload past start, fromState is
-            // never rendered → no flash of opacity:0 ("éclairage perdu").
+            // never rendered → no flash of opacity:0 ("lost highlight").
             onRefresh: buildSync(tl, applyFromState),
         };
 
@@ -464,7 +464,7 @@
             invalidateOnRefresh: true,
             // CRITICAL — defer fromState until ScrollTrigger has computed
             // positions. If reload lands past start, fromState is never
-            // applied → no flash of hidden text ("éclairage perdu").
+            // applied → no flash of hidden text ("lost highlight").
             onRefresh: function (self) {
                 var p = typeof self.progress === 'number' ? self.progress : 0;
                 if (p > 0.01) {
@@ -1095,7 +1095,7 @@
         // killing the old triggers. Result: stacked ScrollTriggers
         // fire onEnter / onLeaveBack repeatedly for the same chars,
         // gsap.to calls race each other, and the user sees flicker
-        // ("bug lorsque je monte et descend" reported by user).
+        // (flicker bug on scroll up/down reported by user).
         //
         // gsap.context.revert() kills every tween + ScrollTrigger
         // created inside the ctx AND reverts their inline styles, so

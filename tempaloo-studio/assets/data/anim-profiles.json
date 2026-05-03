@@ -1,12 +1,12 @@
 {
   "version": "1.0.0",
-  "comment": "Animation profiles — bundles complets (globals + element rules) appliquables en 1 clic. Réutilisables entre tous les templates installés. Un template peut référencer un profil par défaut via template.json::animations.profile, ou l'utilisateur peut en appliquer un manuellement depuis l'admin React. Chaque profil partage la même structure que la config v2 — il s'agit littéralement de presets de presets.",
+  "comment": "Animation profiles — full bundles (globals + element rules) applied in one click. Reusable across every installed template. A template can reference a default profile via template.json::animations.profile, or the user can apply one manually from the React admin. Each profile shares the same shape as the v2 config — literally presets of presets.",
 
   "profiles": [
     {
       "id": "editorial",
       "label": "Editorial",
-      "description": "Éditorial premium — fade + blur sur titres, fade-up subtil sur le reste. Style éditorial / luxe.",
+      "description": "Premium editorial — fade + blur on titles, subtle fade-up elsewhere. Editorial / luxury feel.",
       "preview": "editorial",
       "globals": {
         "intensity":    "medium",
@@ -68,7 +68,7 @@
     {
       "id": "cinematic",
       "label": "Cinematic",
-      "description": "Cinématique Stripe/Linear — slide-up overflow sur titres, blur fort sur images. Pour landing pages dramatiques.",
+      "description": "Stripe / Linear cinematic — slide-up overflow on titles, strong blur on images. For dramatic landing pages.",
       "preview": "cinematic",
       "globals": {
         "intensity":    "bold",
@@ -130,7 +130,7 @@
     {
       "id": "minimal",
       "label": "Minimal",
-      "description": "Discret et accessible — fades opacité partout, durées courtes. Idéal sites informationnels, blogs, docs.",
+      "description": "Discreet and accessible — opacity fades everywhere, short durations. Ideal for informational sites, blogs, docs.",
       "preview": "minimal",
       "globals": {
         "intensity":    "subtle",
@@ -192,7 +192,7 @@
     {
       "id": "bold",
       "label": "Bold",
-      "description": "Très expressif — char-up titres, mask-reveal sur images, scale-in fort sur CTAs. Pour campagnes marketing.",
+      "description": "Highly expressive — char-up titles, mask-reveal on images, strong scale-in on CTAs. For marketing campaigns.",
       "preview": "bold",
       "globals": {
         "intensity":    "bold",
