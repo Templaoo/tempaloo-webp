@@ -1295,39 +1295,14 @@
   font-weight: 600;
 }
 .tsa-fp__animatebtn.is-active {
-  background: var(--tsa-accent, #3fb2a2);
+  background: #10b981;
   color: #fff;
+  border-color: #10b981;
 }
 
-/* Hover/pinned outline drawn over the inspected element (absolute,
-   anchored to scroll position so it tracks correctly). */
-.tsa-am-overlay {
-  position: absolute;
-  pointer-events: none;
-  z-index: 999998;
-  border: 2px dashed #3fb2a2;
-  border-radius: 2px;
-  background: rgba(63, 178, 162, 0.08);
-  transition: top 80ms ease, left 80ms ease, width 80ms ease, height 80ms ease;
-}
-.tsa-am-overlay--pinned {
-  border-style: solid;
-  border-color: #2563eb;
-  background: rgba(37, 99, 235, 0.06);
-}
-.tsa-am-overlay__label {
-  position: absolute;
-  top: -22px;
-  left: 0;
-  background: #3fb2a2;
-  color: #fff;
-  padding: 2px 6px;
-  font-size: 11px;
-  font-weight: 600;
-  font-family: ui-monospace, SF Mono, Menlo, monospace;
-  border-radius: 2px;
-  white-space: nowrap;
-}
+/* AnimateMode uses inline outline on the hovered element itself
+   (set via JS in AnimateMode.tsx) — no overlay div needed. The
+   small floating tooltip near the cursor is also created in JS. */
 
 /* Floating popover anchored next to the pinned element. */
 .tsa-am-popover {
@@ -1382,14 +1357,15 @@
 }
 .tsa-am-popover__foot .tsa-btn-ghost:nth-child(2) { margin-right: auto; }
 
-/* Top-of-viewport hint banner. */
+/* Top-of-viewport hint banner — green theme to differentiate from
+   Inspect's blue. */
 .tsa-am-hint {
   position: fixed;
   top: 12px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 999998;
-  background: rgba(15, 23, 42, 0.92);
+  background: rgba(15, 23, 42, 0.94);
   color: #fff;
   padding: 8px 14px;
   border-radius: 999px;
@@ -1397,6 +1373,20 @@
   font-family: var(--tsa-font-body, system-ui, sans-serif);
   display: flex; align-items: center; gap: 12px;
   box-shadow: 0 12px 32px -8px rgba(0,0,0,0.4);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+.tsa-am-hint__dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #10b981;
+  margin-right: 4px;
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2);
+  animation: tsa-am-pulse 1.6s ease-in-out infinite;
+}
+@keyframes tsa-am-pulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2); }
+  50%      { box-shadow: 0 0 0 7px rgba(16, 185, 129, 0.05); }
 }
 .tsa-am-hint kbd {
   background: rgba(255,255,255,0.15);
