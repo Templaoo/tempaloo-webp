@@ -69,19 +69,22 @@ function mountFloatingInShadow(host: HTMLElement) {
     shadow.appendChild(link);
   }
 
-  // Inherit useful CSS custom properties from :root so widget tokens
-  // are still readable inside the panel (font stacks, colors, etc.).
-  // Custom properties cross shadow boundaries by default — this
-  // explicit anchor element guarantees a consistent inherit baseline.
-  const themeAnchor = document.createElement('div');
-  themeAnchor.setAttribute('data-tsa-theme', host.getAttribute('data-tsa-theme') || 'dark');
-  themeAnchor.style.cssText = 'all:initial;display:contents';
-  shadow.appendChild(themeAnchor);
-
-  // Mount React inside the anchor.
+  // Mount React on a container with the SAME id as the host. IDs don't
+  // clash across shadow boundaries, and reusing the id means every
+  // existing rule `#tempaloo-studio-floating-root .tsa-fp ...` in
+  // floating.css matches both the document-level (admin page) and
+  // shadow-level (frontend panel) mounts. No CSS rewrite needed.
+  //
+  // CRITICAL — do NOT use `all: initial` on this container. That
+  // resets EVERY property including the inheritance of CSS custom
+  // properties (--tsa-text, --tsa-accent etc.), so var() lookups
+  // would resolve to their initial values (`color: canvastext` =
+  // black on dark = invisible titles, the bug the user reported).
+  // Custom-property inheritance crosses shadow boundaries naturally.
   const reactRoot = document.createElement('div');
-  reactRoot.id = 'tempaloo-studio-floating-shadow-root';
-  themeAnchor.appendChild(reactRoot);
+  reactRoot.id = 'tempaloo-studio-floating-root';
+  reactRoot.setAttribute('data-tsa-theme', host.getAttribute('data-tsa-theme') || 'dark');
+  shadow.appendChild(reactRoot);
 
   createRoot(reactRoot).render(<StrictMode><FloatingPanel /></StrictMode>);
 }
