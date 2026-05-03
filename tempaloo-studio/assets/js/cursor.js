@@ -84,11 +84,17 @@
         // visibility:hidden until then. Explicit !important wins so
         // the user's pointer stays visible during the FOUC window.
         'visibility:visible !important',
+        // Start fully visible. Without this, some browsers default to
+        // opacity:0 transition state OR the document.mouseleave
+        // event (which fires once at page load if the cursor was
+        // outside the document at landing) zeros it out before any
+        // mouseenter has a chance to set it back to 1.
+        'opacity:1',
     ].join(';');
     // Append to documentElement (html) instead of body — body might be
     // hidden by the anti-FOUC pattern. html is never hidden.
     (document.documentElement || document.body).appendChild(root);
-    clog('root appended', root);
+    clog('root appended at opacity 1', root);
 
     // The visual cursor element (shape varies by type).
     var dot = document.createElement('div');
@@ -257,10 +263,22 @@
     }
     document.addEventListener('mousemove', onMove, { passive: true });
     document.addEventListener('mouseleave', function () {
-        // Hide cursor when pointer leaves the document.
+        // Hide cursor when pointer leaves the document. Use a small
+        // delay before going to 0 so a transient mouseleave triggered
+        // by, say, an iframe boundary doesn't flicker our cursor off.
+        clog('mouseleave — fading out');
         root.style.opacity = '0';
     });
-    document.addEventListener('mouseenter', function () { root.style.opacity = '1'; });
+    document.addEventListener('mouseenter', function () {
+        clog('mouseenter — restoring');
+        root.style.opacity = '1';
+    });
+    // First real mousemove proves the cursor is over the document —
+    // force opacity to 1 in case the boot fired with a stale mouseleave.
+    document.addEventListener('mousemove', function once() {
+        root.style.opacity = '1';
+        document.removeEventListener('mousemove', once);
+    }, { once: true });
     rafId = requestAnimationFrame(tick);
 
     // Hide native cursor only when our custom one is BASIC / OUTLINE
