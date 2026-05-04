@@ -1525,7 +1525,7 @@
                 nodes = nodes.filter(function (el) {
                     // `data-tw-anim-skip` opts ANY descendant out of the
                     // element-rule sweep. Setting it on a widget root
-                    // (e.g. `<section class="tw-bfl" data-tw-anim-skip>`)
+                    // (e.g. `<section class="tw-some-widget" data-tw-anim-skip>`)
                     // excludes every child h1/h2/p/img from the global
                     // pass — the widget controls itself end-to-end via
                     // its own CSS / scroll handler. Walking up rather
