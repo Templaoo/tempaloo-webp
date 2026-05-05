@@ -155,6 +155,40 @@ final class Rest {
             ],
         ] );
 
+        // Bulk delete — accepts an array of selector strings, kills them
+        // all in a single round-trip. Used by the floating panel's
+        // "Delete selected (N)" action.
+        register_rest_route( self::NS, '/animation/v2/selector-override/delete-bulk', [
+            'methods'             => 'POST',
+            'callback'            => [ $this, 'delete_selector_overrides_bulk' ],
+            'permission_callback' => [ $this, 'can_manage' ],
+            'args'                => [
+                'selectors' => [
+                    'required' => true,
+                    'type'     => 'array',
+                    'items'    => [ 'type' => 'string' ],
+                ],
+            ],
+        ] );
+
+        // Master enable/disable — toggles `globals.intensity`. Setting
+        // intensity to "off" disables every animation site-wide
+        // (Animation::has_active_rules() returns false → GSAP no-ops
+        // every preset). Restoring to "medium" / "bold" / etc. brings
+        // the active profile's animations back without reapplying.
+        register_rest_route( self::NS, '/animation/v2/intensity', [
+            'methods'             => 'POST',
+            'callback'            => [ $this, 'set_intensity' ],
+            'permission_callback' => [ $this, 'can_manage' ],
+            'args'                => [
+                'intensity' => [
+                    'required' => true,
+                    'type'     => 'string',
+                    'enum'     => Animation::ALLOWED,
+                ],
+            ],
+        ] );
+
         // ── Plan B — profiles ───────────────────────────────────
         register_rest_route( self::NS, '/animation/profiles', [
             'methods'             => 'GET',
@@ -397,6 +431,44 @@ final class Rest {
         $selector = (string) $req->get_param( 'selector' );
         if ( ! Animation::delete_selector_override( $selector ) ) {
             return new \WP_Error( 'not_found', 'Selector override not found', [ 'status' => 404 ] );
+        }
+        return $this->get_animation_v2();
+    }
+
+    /**
+     * Bulk-delete selector overrides — best-effort: each selector that
+     * fails to delete is reported in `failed[]` but doesn't abort the
+     * batch. Useful for the floating panel's multi-select bulk delete.
+     */
+    public function delete_selector_overrides_bulk( \WP_REST_Request $req ) {
+        $selectors = (array) $req->get_param( 'selectors' );
+        $deleted   = [];
+        $failed    = [];
+        foreach ( $selectors as $sel ) {
+            $sel = (string) $sel;
+            if ( $sel === '' ) continue;
+            if ( Animation::delete_selector_override( $sel ) ) {
+                $deleted[] = $sel;
+            } else {
+                $failed[] = $sel;
+            }
+        }
+        $state = $this->get_animation_v2()->get_data();
+        $state['_bulk'] = [ 'deleted' => $deleted, 'failed' => $failed ];
+        return rest_ensure_response( $state );
+    }
+
+    /**
+     * POST /animation/v2/intensity — toggle the global animation
+     * intensity. Setting to "off" disables every animation on the
+     * site (has_active_rules → false, GSAP enqueue gates skip the
+     * scripts entirely). Setting to "medium" / "subtle" / "bold"
+     * brings them back instantly — no profile re-apply needed.
+     */
+    public function set_intensity( \WP_REST_Request $req ) {
+        $intensity = (string) $req->get_param( 'intensity' );
+        if ( ! Animation::set_intensity( $intensity ) ) {
+            return new \WP_Error( 'bad_intensity', 'Invalid intensity value', [ 'status' => 400 ] );
         }
         return $this->get_animation_v2();
     }

@@ -57,6 +57,19 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ selector }),
     }),
+  deleteSelectorOverridesBulk: (selectors: string[]) =>
+    call<AnimationStateV2 & { _bulk?: { deleted: string[]; failed: string[] } }>(
+      '/animation/v2/selector-override/delete-bulk',
+      {
+        method: 'POST',
+        body: JSON.stringify({ selectors }),
+      }
+    ),
+  setIntensity: (intensity: string) =>
+    call<AnimationStateV2>('/animation/v2/intensity', {
+      method: 'POST',
+      body: JSON.stringify({ intensity }),
+    }),
 
   // ── Plan B — profiles ──────────────────────────────────
   listProfiles:    () => call<{ profiles: AnimationProfile[]; active: string }>('/animation/profiles'),
