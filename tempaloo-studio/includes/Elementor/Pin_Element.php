@@ -207,7 +207,7 @@ final class Pin_Element {
             'tw_pin_custom_pin_area',
             [
                 'label'              => esc_html__( 'Custom Pin Area', 'tempaloo-studio' ),
-                'description'        => esc_html__( 'Add the section class where the element will be pinned. Use the parent section or container class.', 'tempaloo-studio' ),
+                'description'        => esc_html__( 'Class of the parent section/container the element will be pinned to. Both `.my-class` and `my-class` work.', 'tempaloo-studio' ),
                 'type'               => Controls_Manager::TEXT,
                 'ai'                 => false,
                 'placeholder'        => esc_html__( '.pin_area', 'tempaloo-studio' ),

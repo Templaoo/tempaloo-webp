@@ -87,6 +87,47 @@
                 return this.getElementSettings( controlName );
             },
 
+            /* ── Lenient selector resolver ──
+             *
+             * The Pin extension has 3 text inputs that take CSS selectors:
+             * Custom Pin Area, Custom End Trigger, Custom Pin (when Pin =
+             * Custom). Many users forget the leading "." when typing a
+             * class name (e.g. they write `tw-pin-card` instead of
+             * `.tw-pin-card`). ScrollTrigger then treats the string as
+             * a tag name and logs "Element not found".
+             *
+             * This helper tolerates both forms:
+             *   • Already-selectors → "." / "#" / "[" / "*" / ":" / contains space → returned as-is.
+             *   • Bare tag that resolves natively (e.g. "section") → returned as-is.
+             *   • Otherwise → "." prepended (assumes class name).
+             *
+             * The Animation Addons reference does NOT do this — the user
+             * must type the dot. We're more forgiving as a UX win.
+             */
+            _resolveSelector: function ( value ) {
+                if ( ! value || typeof value !== 'string' ) return value;
+                var trimmed = value.trim();
+                if ( trimmed === '' ) return '';
+
+                // Already a CSS selector OR a compound selector (has space).
+                if ( /^[.#\[*:]/.test( trimmed ) ) return trimmed;
+                if ( trimmed.indexOf( ' ' ) !== -1 ) return trimmed;
+
+                // Try as-is (might be a valid tag name).
+                try {
+                    if ( document.querySelector( trimmed ) ) return trimmed;
+                } catch ( e ) {}
+
+                // Try with class prefix — most common case for typo'd class.
+                try {
+                    if ( document.querySelector( '.' + trimmed ) ) return '.' + trimmed;
+                } catch ( e ) {}
+
+                // Last resort — fall back to the original. ScrollTrigger
+                // will log a warning if it really doesn't resolve.
+                return trimmed;
+            },
+
             /* ── Lifecycle: bindEvents — Editor bail + feature dispatch */
             bindEvents: function bindEvents() {
                 if ( this.isEdit ) return;
@@ -121,6 +162,8 @@
                      pin_area[ 0 ].dataset.twPinEndTrigger !== '' ) {
                     end_trigger = pin_area[ 0 ].dataset.twPinEndTrigger;
                 }
+                // Tolerate user typing `my-class` instead of `.my-class`.
+                end_trigger = this._resolveSelector( end_trigger );
 
                 // Resolve custom values — Pin Spacing.
                 if ( 'custom' === wcf_pin_spacing ) {
@@ -131,7 +174,24 @@
 
                 // Resolve custom values — Pin status.
                 if ( 'custom' === pin_status ) {
-                    pin_status = this.getResponsiveSetting( 'tw_pin_pin_custom' );
+                    var customPinValue = this.getResponsiveSetting( 'tw_pin_pin_custom' );
+                    var resolvedSelector = this._resolveSelector( customPinValue );
+                    // ScrollTrigger expects a STRING selector OR an Element.
+                    // If our resolver matched something, query it now and
+                    // pass the actual node (more reliable than re-querying
+                    // inside ScrollTrigger which logs noisily on miss).
+                    var pinNode = null;
+                    try { pinNode = resolvedSelector ? document.querySelector( resolvedSelector ) : null; } catch ( e ) {}
+                    if ( pinNode ) {
+                        pin_status = pinNode;
+                    } else {
+                        if ( window.console ) console.warn(
+                            '[tw-pin] Custom Pin selector did not match anything:',
+                            customPinValue,
+                            '— falling back to pin: true on the trigger.'
+                        );
+                        pin_status = true;
+                    }
                 } else {
                     pin_status = pin_status === 'true' ? true : false;
                 }
@@ -153,11 +213,21 @@
                 }
 
                 // Custom Pin Area — pin a parent OR sibling element by selector.
+                // Tolerate `my-class` without leading dot.
                 if ( this.getResponsiveSetting( 'tw_pin_custom_pin_area' ) ) {
                     pin_area = this.getResponsiveSetting( 'tw_pin_custom_pin_area' );
                     if ( ! ( pin_area instanceof HTMLElement ) ) {
                         if ( typeof pin_area === 'string' && pin_area.trim() !== '' ) {
-                            pin_area = document.querySelector( pin_area );
+                            var resolvedArea = this._resolveSelector( pin_area );
+                            try {
+                                pin_area = document.querySelector( resolvedArea );
+                            } catch ( e ) { pin_area = null; }
+                            if ( ! pin_area ) {
+                                if ( window.console ) console.warn(
+                                    '[tw-pin] Custom Pin Area selector did not match — falling back to $element.'
+                                );
+                                pin_area = this.$element;
+                            }
                         }
                     }
                 }
@@ -263,7 +333,8 @@
                 var defaultTop      = 0;
                 var defaultDuration = duration || 0.3;
                 var item            = pin_area[ 0 ];
-                var endClass        = pin_area_end || '.tw-pin-footer-sticky-trigger';
+                // Tolerate `my-class` without leading dot for End Trigger.
+                var endClass        = this._resolveSelector( pin_area_end ) || '.tw-pin-footer-sticky-trigger';
                 var startPosition   = start_position;
                 var startPositionPx = this.convertToPixels( startPosition ) + 0;
 
