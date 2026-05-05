@@ -15,6 +15,7 @@ use Tempaloo\Studio\Elementor\Theme_Tokens;
 use Tempaloo\Studio\Elementor\Breakpoints;
 use Tempaloo\Studio\Elementor\Animation;
 use Tempaloo\Studio\Elementor\Page_Importer;
+use Tempaloo\Studio\Elementor\Pin_Element;
 use Tempaloo\Studio\Frontend\Assets;
 use Tempaloo\Studio\Frontend\Floating_Panel;
 use Tempaloo\Studio\Admin\Menu;
@@ -43,6 +44,13 @@ final class Plugin {
         ( new Breakpoints( $templates ) )->register();
         ( new Animation( $templates ) )->register();
         ( new Assets( $templates ) )->register();
+
+        // Pin / Sticky Element extension — adds `Sticky / Pin Element`
+        // and `Header Sticky` panels to the Advanced tab of every native
+        // Elementor section + container. Verbatim port of Animation
+        // Addons Pro's `wcf-pin-element` extension. Static class — calls
+        // its own `add_action` hooks at registration time.
+        Pin_Element::register();
 
         // Phase 3.0 — floating color editor for admins. Capability-gated
         // (manage_options) so visitors / editors never see it.

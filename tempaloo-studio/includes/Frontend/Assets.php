@@ -236,6 +236,28 @@ final class Assets {
                 wp_enqueue_script( 'tempaloo-studio-animations' );
             }
 
+            // ── Pin / Sticky element handler — port of Animation Addons Pro
+            //    sticky-pin.js. Registered only (NOT auto-enqueued); the
+            //    Pin_Element extension uses Elementor 3.27+'s
+            //    `assets => [scripts]` mechanism on its controls so this
+            //    script ONLY downloads on pages where at least one
+            //    section/container has `tw_pin_enable_pin_area === 'yes'`
+            //    OR `tw_hsticky_enable === 'yes'`. Force-enqueue in
+            //    editor preview so the user can test pins without reload.
+            $pin_js = TEMPALOO_STUDIO_DIR . 'assets/js/sticky-pin.js';
+            if ( file_exists( $pin_js ) ) {
+                wp_register_script(
+                    'tempaloo-studio-pin',
+                    TEMPALOO_STUDIO_URL . 'assets/js/sticky-pin.js',
+                    [ 'jquery', 'elementor-frontend-modules', 'tempaloo-studio-gsap', 'tempaloo-studio-scrolltrigger' ],
+                    TEMPALOO_STUDIO_VERSION . '-' . filemtime( $pin_js ),
+                    true
+                );
+                if ( isset( $_GET['elementor-preview'] ) ) {
+                    wp_enqueue_script( 'tempaloo-studio-pin' );
+                }
+            }
+
             // Sprint 2 / point #7 — Custom Cursor (lazy: only enqueued
             // when type !== 'off'). Standalone, no GSAP dep — reads
             // window.tempaloo.studio.cursor at boot.
